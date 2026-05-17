@@ -802,10 +802,21 @@
             text-align: center;
         }
 
+        .empty-state.compact {
+            margin-top: 10px;
+            border: 1px solid #2f2b25;
+            padding: 22px 16px;
+            background: #0d0c0b;
+        }
+
         .empty-title {
             color: #111827;
             font-size: 15px;
             font-weight: 900;
+        }
+
+        .empty-state.compact .empty-title {
+            color: #f2eee8;
         }
 
         .reelfarm-panel {
@@ -866,6 +877,53 @@
             grid-template-columns: minmax(0, 1fr) auto;
             gap: 10px;
             align-items: center;
+        }
+
+        .time-filter {
+            display: grid;
+            gap: 8px;
+            margin-top: 14px;
+        }
+
+        .time-filter-label {
+            color: #8f8b84;
+            font-size: 12px;
+            font-weight: 850;
+        }
+
+        .time-filter-options {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            overflow: hidden;
+            border: 1px solid #302d28;
+            border-radius: 0;
+            background: #090807;
+        }
+
+        .time-filter-btn {
+            min-height: 36px;
+            border: 0;
+            border-right: 1px solid #302d28;
+            border-radius: 0;
+            background: transparent;
+            color: #a9a199;
+            font-size: 12px;
+            font-weight: 900;
+            cursor: pointer;
+        }
+
+        .time-filter-btn:last-child {
+            border-right: 0;
+        }
+
+        .time-filter-btn:hover {
+            background: #1b1916;
+            color: #f2eee8;
+        }
+
+        .time-filter-btn.active {
+            background: #595ee7;
+            color: #fff;
         }
 
         .automation-prefix {

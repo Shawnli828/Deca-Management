@@ -3,6 +3,7 @@
     const API_DATABASE_URL = '/api/database';
     const API_REELFARM_CONFIG_URL = '/api/reelfarm/config';
     const API_REELFARM_MATCHES_URL = '/api/reelfarm/matches';
+    const REELFARM_WINDOW_KEY = 'management_table_reelfarm_window_days';
 
     const countryFlags = {
         'United States': '🇺🇸',
@@ -58,6 +59,8 @@
     let expandedTopics = {};
     let expandedReelFarmCards = {};
     let materialPageIndexes = {};
+    let reelFarmWindowDays = Number(localStorage.getItem(REELFARM_WINDOW_KEY)) || 30;
+    if (![7, 14, 30].includes(reelFarmWindowDays)) reelFarmWindowDays = 30;
 
     function generateId() {
         return Math.random().toString(36).slice(2, 11);
@@ -183,6 +186,25 @@
         }
 
         return value || 'no schedule';
+    }
+
+    function getPostTimestamp(post) {
+        const value = post?.published_at || '';
+        const timestamp = Date.parse(value);
+        return Number.isNaN(timestamp) ? null : timestamp;
+    }
+
+    function getPostWindowStart() {
+        return Date.now() - (Number(reelFarmWindowDays) || 30) * 24 * 60 * 60 * 1000;
+    }
+
+    function isPostInSelectedWindow(post) {
+        const timestamp = getPostTimestamp(post);
+        return timestamp !== null && timestamp >= getPostWindowStart();
+    }
+
+    function getWindowedPosts(card) {
+        return (card?.posts || []).filter(isPostInSelectedWindow);
     }
 
     function getSlideIndex(videoId) {
@@ -725,6 +747,7 @@
         const groups = getFormatGroups(concepts);
         const countrySyncKey = `country:${country.id}`;
         const isCountrySyncing = reelFarmLoadingPrefix === countrySyncKey;
+        const windowOptions = [7, 14, 30];
 
         context.innerHTML = `
             <div class="country-sidebar-head">
@@ -733,6 +756,14 @@
                     <button class="btn primary" type="button" onclick="syncCurrentCountryReelFarm()" ${isCountrySyncing ? 'disabled' : ''}>${isCountrySyncing ? '同步中...' : '同步当前区'}</button>
                 </div>
                 <div class="context-meta">${escapeHtml(product.name)} · ${groups.length} 个 Topic · ${concepts.length} 个 Format · ${total} 数量</div>
+                <div class="time-filter" role="group" aria-label="ReelFarm 时间维度">
+                    <span class="time-filter-label">观察窗口</span>
+                    <div class="time-filter-options">
+                        ${windowOptions.map(days => `
+                            <button class="time-filter-btn ${Number(reelFarmWindowDays) === days ? 'active' : ''}" type="button" onclick="setReelFarmWindow(${days})">${days}day</button>
+                        `).join('')}
+                    </div>
+                </div>
             </div>
             <div class="country-sidebar-fields">
                 <label>
@@ -830,6 +861,7 @@
         } else if (result?.error) {
             body = `<div class="empty-state"><div class="empty-title">同步失败</div><div>${escapeHtml(result.error)}</div></div>`;
         } else if (result?.cards?.length) {
+            const visibleCards = result.cards.filter(card => getWindowedPosts(card).length > 0);
             body = `
                 <div class="creator-table">
                     <div class="creator-table-head">
@@ -843,8 +875,11 @@
                         <div>% Engagement ↕</div>
                         <div></div>
                     </div>
-                    <div class="reelfarm-cards">${result.cards.map(renderReelFarmCard).join('')}</div>
-                </div>`;
+                    <div class="reelfarm-cards">${visibleCards.map(renderReelFarmCard).join('')}</div>
+                </div>
+                ${visibleCards.length
+                    ? ''
+                    : `<div class="empty-state compact"><div class="empty-title">最近 ${Number(reelFarmWindowDays) || 30} 天没有素材</div><div>这个 Format 有同步记录，但没有匹配当前观察窗口的 posted 素材。</div></div>`}`;
         } else if (result) {
             body = '<div class="empty-state"><div class="empty-title">没有找到匹配 automation</div><div>确认 ReelFarm 里 automation name 是否以这个 prefix 开头。</div></div>';
         } else {
@@ -866,8 +901,7 @@
             </section>`;
     }
 
-    function getMetricFromCard(card, key) {
-        const posts = card.posts || [];
+    function getMetricFromPosts(posts, key) {
         return posts.reduce((sum, post) => sum + (Number(post[key]) || 0), 0);
     }
 
@@ -883,12 +917,12 @@
         const avatar = account.account_image
             ? `<img src="${escapeHtml(account.account_image)}" alt="">`
             : escapeHtml(accountInitial);
-        const posts = card.posts || [];
+        const posts = getWindowedPosts(card);
         const videos = card.videos || [];
-        const views = getMetricFromCard(card, 'view_count');
-        const likes = getMetricFromCard(card, 'like_count');
-        const comments = getMetricFromCard(card, 'comment_count');
-        const shares = getMetricFromCard(card, 'share_count');
+        const views = getMetricFromPosts(posts, 'view_count');
+        const likes = getMetricFromPosts(posts, 'like_count');
+        const comments = getMetricFromPosts(posts, 'comment_count');
+        const shares = getMetricFromPosts(posts, 'share_count');
         const engagement = views > 0 ? ((likes + comments + shares) / views) * 100 : 0;
         const postsByVideo = new Map(posts.map(post => [String(post.video_id), post]));
         const slideshows = videos.filter(video => {
@@ -922,7 +956,7 @@
                                 <span class="creator-name">${escapeHtml(accountName)}</span>
                                 <span class="creator-chip">${escapeHtml(automation.status || 'unknown')}</span>
                             </span>
-                            <span class="creator-subline">${escapeHtml(displayAccount)} · ${escapeHtml(schedule)}</span>
+                            <span class="creator-subline">${escapeHtml(displayAccount)} · ${escapeHtml(schedule)} · 最近 ${Number(reelFarmWindowDays) || 30} 天</span>
                         </span>
                     </div>
                     ${statRows.map(([label, value]) => `
@@ -1218,6 +1252,17 @@
         country.reelFarmCode = nextValue;
         reelFarmResults = {};
         saveData();
+    };
+
+    window.setReelFarmWindow = function(days) {
+        const nextDays = Number(days);
+        if (![7, 14, 30].includes(nextDays)) return;
+        if (reelFarmWindowDays === nextDays) return;
+
+        reelFarmWindowDays = nextDays;
+        localStorage.setItem(REELFARM_WINDOW_KEY, String(nextDays));
+        materialPageIndexes = {};
+        renderFormats();
     };
 
     window.updateFormatName = function(conceptId, value) {
