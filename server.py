@@ -368,6 +368,7 @@ def compact_post(post):
     return {
         "post_id": post.get("post_id"),
         "video_id": post.get("video_id"),
+        "status": post.get("status") or post.get("post_status"),
         "title": post.get("title"),
         "account_username": post.get("account_username"),
         "published_at": post.get("published_at"),
@@ -447,16 +448,31 @@ def reelfarm_matches(prefix):
             videos_payload = videos_future.result()
             posts_payload = posts_future.result()
 
-        videos = [compact_video(video) for video in list_payload(videos_payload, "videos")[:50]]
+        posts = [compact_post(post) for post in list_payload(posts_payload, "posts")]
+        posted_video_ids = {
+            str(post.get("video_id"))
+            for post in posts
+            if post.get("video_id") and (post.get("post_id") or post.get("published_at"))
+        }
+        posted_videos = [
+            video
+            for video in list_payload(videos_payload, "videos")
+            if str(video.get("video_id") or video.get("id")) in posted_video_ids
+        ]
+        videos = [compact_video(video) for video in posted_videos[:50]]
+        automation_posted_video_ids = {str(video.get("video_id")) for video in videos if video.get("video_id")}
+        posts = [
+            post
+            for post in posts
+            if str(post.get("video_id")) in automation_posted_video_ids
+        ]
 
         return {
             "automation": compact_automation(details),
             "account": compact_account(account),
             "videos": videos,
-            "video_total": videos_payload.get("total", len(videos))
-            if isinstance(videos_payload, dict)
-            else len(videos),
-            "posts": [compact_post(post) for post in list_payload(posts_payload, "posts")],
+            "video_total": len(videos),
+            "posts": posts,
             "post_statistics": posts_payload.get("statistics", {})
             if isinstance(posts_payload, dict)
             else {},

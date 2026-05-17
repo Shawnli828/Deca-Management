@@ -868,12 +868,15 @@
         const views = getMetricFromCard(card, 'view_count');
         const likes = getMetricFromCard(card, 'like_count');
         const comments = getMetricFromCard(card, 'comment_count');
-        const slideshows = videos.filter(video => String(video.video_type || '').toLowerCase().includes('slideshow') || Array.isArray(video.slideshow_images));
         const postsByVideo = new Map(posts.map(post => [String(post.video_id), post]));
+        const slideshows = videos.filter(video => {
+            const isSlideshow = String(video.video_type || '').toLowerCase().includes('slideshow') || Array.isArray(video.slideshow_images);
+            return isSlideshow && postsByVideo.has(String(video.video_id));
+        });
         const title = automation.title || automation.automation_id || 'Untitled automation';
         const statRows = [
             ['Posts', posts.length],
-            ['Slides', card.video_total || videos.length],
+            ['Slides', slideshows.length],
             ['Views', views],
             ['Likes', likes],
             ['Comments', comments]
