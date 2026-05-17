@@ -19,7 +19,12 @@ from urllib.request import Request, urlopen
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "management_table.sqlite3"
-DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+DATABASE_URL = (
+    os.environ.get("DATABASE_URL", "")
+    or os.environ.get("POSTGRES_URL", "")
+    or os.environ.get("POSTGRES_PRISMA_URL", "")
+    or os.environ.get("POSTGRES_URL_NON_POOLING", "")
+).strip()
 STATE_KEY = "product_distribution"
 REELFARM_API_KEY = "reel_farm_api_key"
 REELFARM_BASE_URL = "https://reel.farm/api/v1"
