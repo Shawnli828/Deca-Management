@@ -36,6 +36,11 @@
             font-family: var(--font-sans);
         }
 
+        body.auth-active {
+            overflow: hidden;
+            background: #050505;
+        }
+
         button,
         input,
         select {
@@ -54,6 +59,10 @@
 
         .app.is-locked {
             display: none;
+        }
+
+        body.auth-active .app {
+            display: none !important;
         }
 
         .auth-overlay {
