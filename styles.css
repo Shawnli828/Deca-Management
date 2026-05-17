@@ -76,7 +76,7 @@
         .auth-card {
             display: grid;
             gap: 18px;
-            width: min(680px, 100%);
+            width: min(420px, 100%);
             border: 1px solid #302d28;
             border-radius: 0;
             padding: 28px;
@@ -86,8 +86,8 @@
 
         .auth-hero {
             display: grid;
-            grid-template-columns: minmax(0, 1fr) 132px;
-            gap: 20px;
+            grid-template-columns: minmax(0, 1fr) 78px;
+            gap: 12px;
             align-items: center;
         }
 
@@ -96,8 +96,8 @@
         }
 
         .auth-gif {
-            width: 132px;
-            height: 132px;
+            width: 78px;
+            height: 78px;
             align-self: center;
             justify-self: end;
             border: 1px solid #302d28;
@@ -176,13 +176,13 @@
             }
 
             .auth-hero {
-                grid-template-columns: minmax(0, 1fr) 84px;
-                gap: 12px;
+                grid-template-columns: minmax(0, 1fr) 64px;
+                gap: 10px;
             }
 
             .auth-gif {
-                width: 84px;
-                height: 84px;
+                width: 64px;
+                height: 64px;
             }
         }
 
