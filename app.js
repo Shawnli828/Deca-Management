@@ -168,6 +168,12 @@
         return number.toLocaleString();
     }
 
+    function formatPercent(value) {
+        const number = Number(value) || 0;
+        if (!number) return '0%';
+        return `${number.toFixed(1)}%`;
+    }
+
     function formatSchedule(value) {
         if (Array.isArray(value)) {
             return value
@@ -824,7 +830,21 @@
         } else if (result?.error) {
             body = `<div class="empty-state"><div class="empty-title">同步失败</div><div>${escapeHtml(result.error)}</div></div>`;
         } else if (result?.cards?.length) {
-            body = `<div class="reelfarm-cards">${result.cards.map(renderReelFarmCard).join('')}</div>`;
+            body = `
+                <div class="creator-table">
+                    <div class="creator-table-head">
+                        <div>Creator ↕</div>
+                        <div>Posts ↕</div>
+                        <div>Slides ↕</div>
+                        <div>Views ↕</div>
+                        <div>Likes ↕</div>
+                        <div>Comments ↕</div>
+                        <div>Shares ↕</div>
+                        <div>% Engagement ↕</div>
+                        <div></div>
+                    </div>
+                    <div class="reelfarm-cards">${result.cards.map(renderReelFarmCard).join('')}</div>
+                </div>`;
         } else if (result) {
             body = '<div class="empty-state"><div class="empty-title">没有找到匹配 automation</div><div>确认 ReelFarm 里 automation name 是否以这个 prefix 开头。</div></div>';
         } else {
@@ -868,6 +888,8 @@
         const views = getMetricFromCard(card, 'view_count');
         const likes = getMetricFromCard(card, 'like_count');
         const comments = getMetricFromCard(card, 'comment_count');
+        const shares = getMetricFromCard(card, 'share_count');
+        const engagement = views > 0 ? ((likes + comments + shares) / views) * 100 : 0;
         const postsByVideo = new Map(posts.map(post => [String(post.video_id), post]));
         const slideshows = videos.filter(video => {
             const isSlideshow = String(video.video_type || '').toLowerCase().includes('slideshow') || Array.isArray(video.slideshow_images);
@@ -875,11 +897,13 @@
         });
         const title = automation.title || automation.automation_id || 'Untitled automation';
         const statRows = [
-            ['Posts', posts.length],
-            ['Slides', slideshows.length],
-            ['Views', views],
-            ['Likes', likes],
-            ['Comments', comments]
+            ['Posts', formatNumber(posts.length)],
+            ['Slides', formatNumber(slideshows.length)],
+            ['Views', formatNumber(views)],
+            ['Likes', formatNumber(likes)],
+            ['Comments', formatNumber(comments)],
+            ['Shares', formatNumber(shares)],
+            ['Engagement', formatPercent(engagement)]
         ];
         const pageSize = 4;
         const totalPages = Math.max(1, Math.ceil(slideshows.length / pageSize));
@@ -901,16 +925,14 @@
                             <span class="creator-subline">${escapeHtml(displayAccount)} · ${escapeHtml(schedule)}</span>
                         </span>
                     </div>
-                    <div class="creator-tags">
-                        <span class="creator-chip green" title="${escapeHtml(title)}">Creative: ${escapeHtml(title)}</span>
-                    </div>
                     ${statRows.map(([label, value]) => `
                         <div class="creator-stat">
-                            <div class="creator-stat-value">${formatNumber(value)}</div>
-                            <div class="creator-stat-label">${label}</div>
+                            <div class="creator-stat-value">${escapeHtml(value)}</div>
+                            <div class="creator-stat-label">${escapeHtml(label)}</div>
                         </div>`).join('')}
                     <span class="creator-expand">›</span>
                 </div>
+                <div class="creator-row-subtitle">${escapeHtml(title)}</div>
                 ${isOpen ? `
                     <div class="creator-toolbar">
                         <div class="creator-toolbar-title">Posts by ${escapeHtml(displayAccount)}</div>

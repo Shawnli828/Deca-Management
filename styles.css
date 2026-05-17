@@ -886,25 +886,48 @@
         .reelfarm-cards {
             display: grid;
             grid-template-columns: 1fr;
-            gap: 14px;
+            gap: 0;
         }
 
         .reelfarm-card {
             display: grid;
             overflow: hidden;
-            border: 1px solid #35312c;
-            border-radius: var(--radius);
+            border: 0;
+            border-top: 1px solid #302d28;
+            border-radius: 0;
             background: #24221f;
             color: #f2eee8;
         }
 
-        .creator-header {
+        .creator-table {
+            overflow: hidden;
+            border: 1px solid #302d28;
+            border-radius: 0;
+            background: #050505;
+        }
+
+        .creator-table-head {
             display: grid;
-            grid-template-columns: minmax(220px, 1.2fr) minmax(210px, 1fr) repeat(5, minmax(58px, 0.32fr)) auto;
+            grid-template-columns: minmax(280px, 1.35fr) repeat(7, minmax(76px, 0.42fr)) 42px;
             gap: 12px;
             align-items: center;
-            padding: 12px 14px;
-            border-bottom: 1px solid #38342f;
+            min-height: 42px;
+            padding: 0 14px;
+            border-bottom: 1px solid #302d28;
+            background: #24221f;
+            color: #d8d2ca;
+            font-size: 13px;
+            font-weight: 850;
+        }
+
+        .creator-header {
+            display: grid;
+            grid-template-columns: minmax(280px, 1.35fr) repeat(7, minmax(76px, 0.42fr)) 42px;
+            gap: 12px;
+            align-items: center;
+            min-height: 72px;
+            padding: 10px 14px;
+            border-bottom: 0;
             background: #181714;
             cursor: pointer;
         }
@@ -997,6 +1020,15 @@
             text-overflow: ellipsis;
         }
 
+        .creator-row-subtitle {
+            display: none;
+            padding: 0 14px 10px;
+            background: #050505;
+            color: #8f8f98;
+            font-size: 11px;
+            font-weight: 800;
+        }
+
         .creator-subline {
             overflow: hidden;
             color: #bfb7ad;
@@ -1029,14 +1061,15 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 28px;
-            height: 28px;
+            width: 30px;
+            height: 30px;
             border: 1px solid #4a453e;
             border-radius: 50%;
             background: #0d0c0b;
             color: #f2eee8;
             font-size: 16px;
             font-weight: 900;
+            justify-self: end;
         }
 
         .reelfarm-card.is-open .creator-expand {
@@ -1433,12 +1466,29 @@
             }
 
             .creator-header {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
+                grid-template-columns: minmax(180px, 1fr) repeat(2, minmax(60px, 0.35fr)) 36px;
             }
 
             .creator-header .reelfarm-account,
-            .creator-tags {
+            .creator-row-subtitle {
                 grid-column: 1 / -1;
+            }
+
+            .creator-table-head {
+                grid-template-columns: minmax(180px, 1fr) repeat(2, minmax(60px, 0.35fr)) 36px;
+            }
+
+            .creator-table-head div:nth-child(4),
+            .creator-table-head div:nth-child(5),
+            .creator-table-head div:nth-child(6),
+            .creator-table-head div:nth-child(7),
+            .creator-table-head div:nth-child(8),
+            .creator-header .creator-stat:nth-of-type(n+4) {
+                display: none;
+            }
+
+            .creator-row-subtitle {
+                display: block;
             }
 
             .creator-expand {
