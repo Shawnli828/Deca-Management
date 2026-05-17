@@ -772,8 +772,8 @@
             gap: 8px;
             min-width: 0;
             border: 1px solid var(--line);
-            border-radius: var(--radius);
-            padding: 3px 8px;
+            border-radius: 0;
+            padding: 8px 12px;
             background: var(--surface-soft);
             white-space: nowrap;
         }
@@ -816,16 +816,16 @@
 
         .concept-group-title .concept-input {
             color: var(--muted);
-            font-size: 12px;
-            font-weight: 500;
+            font-size: 14px;
+            font-weight: 650;
             line-height: 1.35;
             min-width: 120px;
         }
 
         .concept-path {
             color: var(--muted);
-            font-size: 12px;
-            font-weight: 500;
+            font-size: 14px;
+            font-weight: 650;
             line-height: 1.35;
             flex: 0 0 auto;
             white-space: nowrap;
@@ -849,10 +849,10 @@
             grid-template-columns: 22px minmax(160px, 1fr) 96px auto;
             gap: 10px;
             align-items: center;
-            border: 1px solid transparent;
-            border-radius: var(--radius);
-            padding: 10px;
-            background: #f8fafb;
+            border: 0;
+            border-radius: 0;
+            padding: 8px 0;
+            background: transparent;
         }
 
         .format-toggle {
@@ -881,8 +881,7 @@
         }
 
         .concept-row:hover {
-            border-color: var(--line);
-            background: #fff;
+            background: transparent;
         }
 
         .concept-name-shell {
@@ -910,8 +909,8 @@
         }
 
         .concept-name-shell .concept-input {
-            font-size: 14px;
-            font-weight: 700;
+            font-size: 13px;
+            font-weight: 650;
             line-height: 1.35;
         }
 
@@ -1877,9 +1876,13 @@
         .concept-path,
         .concept-group-title .concept-input {
             color: var(--muted) !important;
-            font-size: 12px;
-            font-weight: 500;
             line-height: 1.35;
+        }
+
+        .concept-path,
+        .concept-group-title .concept-input {
+            font-size: 14px;
+            font-weight: 650;
         }
 
         .topic-chevron {
@@ -1895,8 +1898,8 @@
         }
 
         .concept-name-shell .concept-input {
-            font-size: 14px;
-            font-weight: 700;
+            font-size: 13px;
+            font-weight: 650;
             line-height: 1.35;
         }
 
@@ -2032,9 +2035,18 @@
 
         .concept-group-title {
             min-height: 44px;
+            border: 1px solid var(--line);
+            border-radius: 0;
+            background: #151310 !important;
+            padding: 8px 12px;
+        }
+
+        .concept-row,
+        .concept-row:hover {
             border: 0;
-            background: transparent !important;
-            padding: 0;
+            border-radius: 0;
+            background: transparent;
+            padding: 8px 0;
         }
 
         .concept-group-items {
