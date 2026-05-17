@@ -790,25 +790,27 @@
 
         .reelfarm-cards {
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 10px;
+            grid-template-columns: 1fr;
+            gap: 14px;
         }
 
         .reelfarm-card {
             display: grid;
-            gap: 10px;
-            border: 1px solid var(--line);
+            overflow: hidden;
+            border: 1px solid #35312c;
             border-radius: var(--radius);
-            padding: 12px;
-            background: #fbfcfd;
+            background: #24221f;
+            color: #f2eee8;
         }
 
-        .reelfarm-card-title {
-            color: #111827;
-            font-size: 14px;
-            font-weight: 900;
-            line-height: 1.35;
-            word-break: break-word;
+        .creator-header {
+            display: grid;
+            grid-template-columns: minmax(220px, 1.2fr) minmax(210px, 1fr) repeat(5, minmax(58px, 0.32fr));
+            gap: 12px;
+            align-items: center;
+            padding: 12px 14px;
+            border-bottom: 1px solid #38342f;
+            background: #181714;
         }
 
         .reelfarm-account {
@@ -819,13 +821,19 @@
         }
 
         .reelfarm-avatar {
-            width: 34px;
-            height: 34px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 38px;
+            height: 38px;
             overflow: hidden;
-            border: 1px solid var(--line);
+            border: 1px solid #4a453e;
             border-radius: 50%;
-            background: #fff;
-            flex: 0 0 34px;
+            background: #0d0c0b;
+            color: #d5cdc2;
+            flex: 0 0 38px;
+            font-size: 13px;
+            font-weight: 900;
         }
 
         .reelfarm-avatar img {
@@ -834,71 +842,203 @@
             object-fit: cover;
         }
 
-        .reelfarm-metrics {
+        .creator-meta {
             display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 6px;
+            gap: 4px;
+            min-width: 0;
         }
 
-        .reelfarm-mini-metric {
-            border: 1px solid var(--line);
-            border-radius: var(--radius);
-            padding: 8px;
-            background: #fff;
+        .creator-name-line {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+            min-width: 0;
         }
 
-        .reelfarm-mini-label {
-            color: var(--muted);
+        .creator-name {
+            overflow: hidden;
+            color: #f4f1ea;
+            font-size: 14px;
+            font-weight: 900;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .creator-chip {
+            display: inline-flex;
+            align-items: center;
+            min-height: 24px;
+            border-radius: 999px;
+            padding: 3px 9px;
+            background: #e8e2d8;
+            color: #2b2621;
             font-size: 11px;
-            font-weight: 800;
+            font-weight: 900;
+            white-space: nowrap;
         }
 
-        .reelfarm-mini-value {
-            margin-top: 3px;
-            color: #111827;
+        .creator-chip.green {
+            background: #91a88f;
+            color: #172016;
+        }
+
+        .creator-tags {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            min-width: 0;
+            overflow: hidden;
+        }
+
+        .creator-tags .creator-chip {
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .creator-subline {
+            overflow: hidden;
+            color: #bfb7ad;
+            font-size: 12px;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .creator-stat {
+            display: grid;
+            gap: 3px;
+            min-width: 0;
+            justify-items: center;
+        }
+
+        .creator-stat-value {
+            color: #f2eee8;
             font-size: 15px;
             font-weight: 900;
         }
 
+        .creator-stat-label {
+            color: #9f978d;
+            font-size: 10px;
+            font-weight: 850;
+            text-transform: uppercase;
+        }
+
+        .creator-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 12px 14px 0;
+            background: #2c2925;
+        }
+
+        .creator-toolbar-title {
+            color: #ebe6de;
+            font-size: 13px;
+            font-weight: 900;
+        }
+
+        .creator-toolbar-pill {
+            border: 1px solid #423c35;
+            border-radius: 8px;
+            padding: 7px 10px;
+            background: #171512;
+            color: #cfc7bc;
+            font-size: 12px;
+            font-weight: 850;
+        }
+
         .slideshow-list {
-            display: grid;
-            gap: 10px;
+            display: flex;
+            gap: 12px;
+            overflow-x: auto;
+            padding: 12px 14px 14px;
+            background: #2c2925;
+            scroll-snap-type: x proximity;
         }
 
         .slideshow-item {
             display: grid;
-            gap: 8px;
-            border: 1px solid var(--line);
+            flex: 0 0 186px;
+            max-width: 186px;
+            overflow: hidden;
+            border: 1px solid #3b3630;
             border-radius: var(--radius);
-            padding: 10px;
-            background: #fff;
-            color: inherit;
+            background: #070706;
+            color: #f3f0ea;
             text-decoration: none;
+            scroll-snap-align: start;
         }
 
         .slideshow-item:hover {
-            border-color: var(--line-strong);
+            border-color: #5c544b;
+        }
+
+        .slideshow-card-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            min-height: 34px;
+            padding: 7px 9px;
+            background: #171512;
+        }
+
+        .slideshow-card-account {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            min-width: 0;
+            color: #dcd6ce;
+            font-size: 11px;
+            font-weight: 850;
+        }
+
+        .slideshow-card-account .reelfarm-avatar {
+            width: 21px;
+            height: 21px;
+            flex-basis: 21px;
+            font-size: 9px;
+        }
+
+        .tiktok-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+            border-radius: 6px;
+            background: #211e1a;
+            color: #f3f0ea;
+            font-size: 11px;
+            font-weight: 900;
         }
 
         .slideshow-title {
-            color: #111827;
+            color: #f4f1ea;
             font-size: 12px;
             font-weight: 850;
             line-height: 1.45;
         }
 
         .slideshow-meta {
-            color: var(--muted);
+            color: #a8a098;
             font-size: 11px;
             line-height: 1.45;
+        }
+
+        .slideshow-body {
+            display: grid;
+            gap: 7px;
+            padding: 9px 10px 10px;
         }
 
         .material-preview {
             position: relative;
             overflow: hidden;
-            border: 1px solid var(--line);
-            border-radius: 7px;
-            background: #eef2f6;
+            background: #000;
         }
 
         .material-preview img {
@@ -914,21 +1054,21 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 30px;
-            height: 30px;
-            border: 1px solid rgba(15, 23, 42, 0.16);
+            width: 26px;
+            height: 26px;
+            border: 1px solid rgba(255, 255, 255, 0.22);
             border-radius: 50%;
-            background: rgba(255, 255, 255, 0.92);
-            color: #111827;
-            font-size: 18px;
+            background: rgba(7, 7, 6, 0.58);
+            color: #fff;
+            font-size: 17px;
             font-weight: 900;
             line-height: 1;
             transform: translateY(-50%);
-            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
+            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
         }
 
         .slide-nav:hover {
-            background: #fff;
+            background: rgba(255, 255, 255, 0.22);
         }
 
         .slide-nav.prev {
@@ -945,7 +1085,7 @@
             bottom: 8px;
             border-radius: 999px;
             padding: 4px 8px;
-            background: rgba(15, 23, 42, 0.72);
+            background: rgba(7, 7, 6, 0.72);
             color: #fff;
             font-size: 11px;
             font-weight: 850;
@@ -954,26 +1094,37 @@
         .material-data {
             display: grid;
             grid-template-columns: repeat(5, minmax(0, 1fr));
-            gap: 5px;
+            gap: 4px;
+        }
+
+        .slideshow-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            color: #a8a098;
+            font-size: 10px;
+            line-height: 1.35;
         }
 
         .material-data-cell {
-            border: 1px solid var(--line);
+            border: 1px solid #332e28;
             border-radius: 6px;
-            padding: 6px;
-            background: #f8fafb;
+            padding: 5px 4px;
+            background: #11100e;
+            text-align: center;
         }
 
         .material-data-label {
-            color: var(--muted);
-            font-size: 10px;
+            color: #998f83;
+            font-size: 9px;
             font-weight: 800;
         }
 
         .material-data-value {
             margin-top: 2px;
-            color: #111827;
-            font-size: 13px;
+            color: #eee8dd;
+            font-size: 12px;
             font-weight: 900;
         }
 
@@ -1131,6 +1282,15 @@
             .reelfarm-config {
                 align-items: stretch;
                 grid-template-columns: 1fr;
+            }
+
+            .creator-header {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .creator-header .reelfarm-account,
+            .creator-tags {
+                grid-column: 1 / -1;
             }
 
             .top-actions {
@@ -1987,61 +2147,74 @@
         const automation = card.automation || {};
         const account = card.account || {};
         const accountName = account.account_username || account.username || account.account_name || automation.tiktok_account_id || '未绑定账号';
+        const displayAccount = String(accountName).startsWith('@') ? accountName : `@${accountName}`;
+        const accountInitial = String(accountName || '?').replace('@', '').slice(0, 2).toUpperCase() || '?';
         const schedule = formatSchedule(automation.schedule);
         const avatar = account.account_image
             ? `<img src="${escapeHtml(account.account_image)}" alt="">`
-            : '';
+            : escapeHtml(accountInitial);
         const posts = card.posts || [];
         const videos = card.videos || [];
         const views = getMetricFromCard(card, 'view_count');
         const likes = getMetricFromCard(card, 'like_count');
         const comments = getMetricFromCard(card, 'comment_count');
-        const shares = getMetricFromCard(card, 'share_count');
         const slideshows = videos.filter(video => String(video.video_type || '').toLowerCase().includes('slideshow') || Array.isArray(video.slideshow_images));
         const postsByVideo = new Map(posts.map(post => [String(post.video_id), post]));
+        const title = automation.title || automation.automation_id || 'Untitled automation';
+        const statRows = [
+            ['Posts', posts.length],
+            ['Slides', card.video_total || videos.length],
+            ['Views', views],
+            ['Likes', likes],
+            ['Comments', comments]
+        ];
 
         return `
             <article class="reelfarm-card">
-                <div class="reelfarm-card-title">${escapeHtml(automation.title || automation.automation_id || 'Untitled automation')}</div>
-                <div class="reelfarm-account">
-                    <span class="reelfarm-avatar">${avatar}</span>
-                    <span class="item-main">
-                        <span class="item-name">@${escapeHtml(accountName)}</span>
-                        <span class="item-meta">${escapeHtml(automation.status || 'unknown')} · ${escapeHtml(schedule)}</span>
-                    </span>
-                </div>
-                <div class="reelfarm-metrics">
-                    ${[
-                        ['Views', views],
-                        ['Likes', likes],
-                        ['Comments', comments],
-                        ['Shares', shares]
-                    ].map(([label, value]) => `
-                        <div class="reelfarm-mini-metric">
-                            <div class="reelfarm-mini-label">${label}</div>
-                            <div class="reelfarm-mini-value">${formatNumber(value)}</div>
+                <div class="creator-header">
+                    <div class="reelfarm-account">
+                        <span class="reelfarm-avatar">${avatar}</span>
+                        <span class="creator-meta">
+                            <span class="creator-name-line">
+                                <span class="creator-name">${escapeHtml(accountName)}</span>
+                                <span class="creator-chip">${escapeHtml(automation.status || 'unknown')}</span>
+                            </span>
+                            <span class="creator-subline">${escapeHtml(displayAccount)} · ${escapeHtml(schedule)}</span>
+                        </span>
+                    </div>
+                    <div class="creator-tags">
+                        <span class="creator-chip green" title="${escapeHtml(title)}">Creative: ${escapeHtml(title)}</span>
+                    </div>
+                    ${statRows.map(([label, value]) => `
+                        <div class="creator-stat">
+                            <div class="creator-stat-value">${formatNumber(value)}</div>
+                            <div class="creator-stat-label">${label}</div>
                         </div>`).join('')}
+                </div>
+                <div class="creator-toolbar">
+                    <div class="creator-toolbar-title">Posts by ${escapeHtml(displayAccount)}</div>
+                    <div class="creator-toolbar-pill">Recently Published</div>
                 </div>
                 <div class="slideshow-list">
                     ${slideshows.length
-                        ? slideshows.map(video => renderMaterialItem(video, postsByVideo.get(String(video.video_id)))).join('')
-                        : '<div class="item-meta">暂无素材数据</div>'}
+                        ? slideshows.map(video => renderMaterialItem(video, postsByVideo.get(String(video.video_id)), accountName, avatar)).join('')
+                        : '<div class="item-meta" style="color:#bfb7ad;">暂无素材数据</div>'}
                 </div>
                 ${card.errors?.videos || card.errors?.posts
-                    ? `<div class="item-meta">${escapeHtml(card.errors.videos || card.errors.posts)}</div>`
+                    ? `<div class="item-meta" style="padding:0 14px 14px; color:#bfb7ad;">${escapeHtml(card.errors.videos || card.errors.posts)}</div>`
                     : ''}
             </article>`;
     }
 
-    function renderMaterialItem(video, post) {
+    function renderMaterialItem(video, post, accountName, avatarHtml) {
         const title = video.hook || post?.title || video.prompt_preview || video.video_id || video.id || 'Slideshow';
         const images = Array.isArray(video.slideshow_images) ? video.slideshow_images : [];
         const imageCount = video.slide_count || images.length;
         const meta = [
-            video.status || 'unknown',
             imageCount ? `${imageCount} slides` : '',
             video.finished_at || video.created_at || ''
         ].filter(Boolean).join(' · ');
+        const displayAccount = String(accountName || '').startsWith('@') ? accountName : `@${accountName || 'unknown'}`;
         const dataRows = [
             ['Views', post?.view_count],
             ['Likes', post?.like_count],
@@ -2051,19 +2224,31 @@
         ];
 
         const content = `
+            <div class="slideshow-card-head">
+                <div class="slideshow-card-account">
+                    <span class="reelfarm-avatar">${avatarHtml}</span>
+                    <span>${escapeHtml(displayAccount)}</span>
+                </div>
+                <span class="tiktok-pill">♪</span>
+            </div>
             <div class="material-preview">
                 ${renderSlideImage(video, images)}
             </div>
-            <div class="slideshow-title">${escapeHtml(title)}</div>
-            <div class="slideshow-meta">${escapeHtml(meta)}</div>
-            <div class="material-data">
-                ${dataRows.map(([label, value]) => `
-                    <div class="material-data-cell">
-                        <div class="material-data-label">${label}</div>
-                        <div class="material-data-value">${post ? formatNumber(value) : '—'}</div>
-                    </div>`).join('')}
-            </div>
-            ${post?.published_at ? `<div class="slideshow-meta">Published ${escapeHtml(post.published_at)}</div>` : '<div class="slideshow-meta">暂无 TikTok 发布数据</div>'}`;
+            <div class="slideshow-body">
+                <div class="slideshow-title">${escapeHtml(title)}</div>
+                <div class="slideshow-meta">${escapeHtml(meta || video.status || 'unknown')}</div>
+                <div class="material-data">
+                    ${dataRows.map(([label, value]) => `
+                        <div class="material-data-cell">
+                            <div class="material-data-label">${label}</div>
+                            <div class="material-data-value">${post ? formatNumber(value) : '—'}</div>
+                        </div>`).join('')}
+                </div>
+                <div class="slideshow-footer">
+                    <span>${post?.published_at ? `Published ${escapeHtml(post.published_at)}` : '暂无 TikTok 发布数据'}</span>
+                    <span>${escapeHtml(video.status || '')}</span>
+                </div>
+            </div>`;
 
         return `<div class="slideshow-item">${content}</div>`;
     }

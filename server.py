@@ -397,7 +397,7 @@ def reelfarm_matches(prefix):
             videos_payload = videos_future.result()
             posts_payload = posts_future.result()
 
-        videos = [compact_video(video) for video in list_payload(videos_payload, "videos")[:8]]
+        videos = [compact_video(video) for video in list_payload(videos_payload, "videos")[:50]]
 
         return {
             "automation": compact_automation(details),
