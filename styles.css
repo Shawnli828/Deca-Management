@@ -18,7 +18,7 @@
             --red: #c24135;
             --shadow: 0 20px 54px rgba(31, 41, 55, 0.12);
             --radius: 8px;
-            --font-sans: "Avenir Next", "Inter", "Helvetica Neue", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", Arial, sans-serif;
+            --font-sans: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", Arial, sans-serif;
         }
 
         * {
