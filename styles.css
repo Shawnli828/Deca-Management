@@ -725,13 +725,38 @@
 
         .concept-row {
             display: grid;
-            grid-template-columns: minmax(160px, 1fr) 96px auto;
+            grid-template-columns: 34px minmax(160px, 1fr) 96px auto;
             gap: 10px;
             align-items: center;
             border: 1px solid transparent;
             border-radius: var(--radius);
             padding: 10px;
             background: #f8fafb;
+        }
+
+        .format-toggle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 34px;
+            height: 34px;
+            border: 1px solid var(--line);
+            border-radius: 50%;
+            background: #fff;
+            color: var(--accent-strong);
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 900;
+        }
+
+        .format-chevron {
+            display: inline-block;
+            line-height: 1;
+            transition: transform 0.18s ease;
+        }
+
+        .format-block.is-open .format-chevron {
+            transform: rotate(90deg);
         }
 
         .concept-row:hover {
@@ -1725,6 +1750,12 @@
         }
 
         .topic-chevron {
+            border-color: var(--line-strong);
+            background: #0d0c0b;
+            color: var(--accent-strong);
+        }
+
+        .format-toggle {
             border-color: var(--line-strong);
             background: #0d0c0b;
             color: var(--accent-strong);

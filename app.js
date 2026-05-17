@@ -57,6 +57,7 @@
     let reelFarmLoadingPrefix = '';
     let materialSlideIndexes = {};
     let expandedTopics = {};
+    let expandedFormats = {};
     let expandedReelFarmCards = {};
     let materialPageIndexes = {};
     let reelFarmWindowDays = Number(localStorage.getItem(REELFARM_WINDOW_KEY)) || 30;
@@ -435,6 +436,10 @@
         } else {
             delete expandedTopics[key];
         }
+    }
+
+    function isFormatExpanded(conceptId) {
+        return Boolean(expandedFormats[conceptId]);
     }
 
     function renderApp() {
@@ -831,10 +836,14 @@
         const product = getSelectedProduct();
         const country = getSelectedCountry();
         const reelFarmHtml = product && country ? renderReelFarmFormat(product, country, concept) : '';
+        const isOpen = isFormatExpanded(concept.id);
 
         return `
-            <section class="format-block">
+            <section class="format-block ${isOpen ? 'is-open' : ''}">
                 <div class="concept-row">
+                    <button class="format-toggle" type="button" onclick="toggleFormat('${concept.id}')" title="${isOpen ? '收起 Format' : '展开 Format'}">
+                        <span class="format-chevron">›</span>
+                    </button>
                     <div class="concept-name-shell" style="border-color:${color}33; background:${color}0f;">
                         <span class="concept-dot" style="background:${color};"></span>
                         <input class="concept-input" value="${escapeHtml(concept.name || '')}"
@@ -846,7 +855,7 @@
                         onblur="updateFormatCount('${concept.id}', this.value)">
                     <button class="delete-btn" type="button" title="删除 Format" onclick="deleteFormat('${concept.id}')">删除</button>
                 </div>
-                ${reelFarmHtml}
+                ${isOpen ? reelFarmHtml : ''}
             </section>`;
     }
 
@@ -1102,6 +1111,15 @@
         if (!country) return;
 
         setTopicExpanded(country.id, groupName, !isTopicExpanded(country.id, groupName));
+        renderFormats();
+    };
+
+    window.toggleFormat = function(conceptId) {
+        if (expandedFormats[conceptId]) {
+            delete expandedFormats[conceptId];
+        } else {
+            expandedFormats[conceptId] = true;
+        }
         renderFormats();
     };
 
