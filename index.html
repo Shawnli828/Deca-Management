@@ -623,6 +623,11 @@
             padding-left: 10px;
         }
 
+        .format-block {
+            display: grid;
+            gap: 0;
+        }
+
         .concept-row {
             display: grid;
             grid-template-columns: minmax(160px, 1fr) 96px auto;
@@ -754,10 +759,11 @@
         .reelfarm-format {
             display: grid;
             gap: 10px;
-            border: 1px solid var(--line);
+            margin-top: 8px;
+            border: 1px solid #d8e7e4;
             border-radius: var(--radius);
             padding: 12px;
-            background: #fff;
+            background: #f6fbfa;
         }
 
         .reelfarm-format-head {
@@ -888,18 +894,61 @@
         }
 
         .material-preview {
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 5px;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid var(--line);
+            border-radius: 7px;
+            background: #eef2f6;
         }
 
         .material-preview img {
             width: 100%;
+            display: block;
             aspect-ratio: 4 / 5;
-            border: 1px solid var(--line);
-            border-radius: 6px;
             object-fit: cover;
-            background: #eef2f6;
+        }
+
+        .slide-nav {
+            position: absolute;
+            top: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 30px;
+            height: 30px;
+            border: 1px solid rgba(15, 23, 42, 0.16);
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.92);
+            color: #111827;
+            font-size: 18px;
+            font-weight: 900;
+            line-height: 1;
+            transform: translateY(-50%);
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
+        }
+
+        .slide-nav:hover {
+            background: #fff;
+        }
+
+        .slide-nav.prev {
+            left: 8px;
+        }
+
+        .slide-nav.next {
+            right: 8px;
+        }
+
+        .slide-counter {
+            position: absolute;
+            right: 8px;
+            bottom: 8px;
+            border-radius: 999px;
+            padding: 4px 8px;
+            background: rgba(15, 23, 42, 0.72);
+            color: #fff;
+            font-size: 11px;
+            font-weight: 850;
         }
 
         .material-data {
@@ -1100,10 +1149,6 @@
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
 
-            .material-preview {
-                grid-template-columns: repeat(3, minmax(0, 1fr));
-            }
-
             .detail-grid,
             .concept-group-header,
             .concept-row {
@@ -1225,6 +1270,7 @@
     let reelFarmConfigured = false;
     let reelFarmResults = {};
     let reelFarmLoadingPrefix = '';
+    let materialSlideIndexes = {};
 
     function generateId() {
         return Math.random().toString(36).slice(2, 11);
@@ -1344,6 +1390,10 @@
         }
 
         return value || 'no schedule';
+    }
+
+    function getSlideIndex(videoId) {
+        return Number(materialSlideIndexes[videoId]) || 0;
     }
 
     function setStatus(message, type = 'ok') {
@@ -1622,12 +1672,8 @@
             <section class="page-card">
                 <div id="conceptContext" class="context-line"></div>
                 <div id="conceptList" class="concept-area"></div>
-            </section>
-            <section class="page-card">
-                <div id="reelFarmPanel" class="reelfarm-panel"></div>
             </section>`;
         renderFormats();
-        renderReelFarmPanel();
     }
 
     function renderMetrics() {
@@ -1879,62 +1925,26 @@
 
     function renderFormatRow(concept) {
         const color = getTagColor(concept.name);
-
-        return `
-            <div class="concept-row">
-                <div class="concept-name-shell" style="border-color:${color}33; background:${color}0f;">
-                    <span class="concept-dot" style="background:${color};"></span>
-                    <input class="concept-input" value="${escapeHtml(concept.name || '')}"
-                        onchange="updateFormatName('${concept.id}', this.value)"
-                        onblur="updateFormatName('${concept.id}', this.value)">
-                </div>
-                <input class="number-input" type="number" min="0" value="${Number(concept.count) || 0}"
-                    onchange="updateFormatCount('${concept.id}', this.value)"
-                    onblur="updateFormatCount('${concept.id}', this.value)">
-                <button class="delete-btn" type="button" title="删除 Format" onclick="deleteFormat('${concept.id}')">删除</button>
-            </div>`;
-    }
-
-    function renderReelFarmPanel() {
-        const panel = document.getElementById('reelFarmPanel');
-        if (!panel) return;
-
         const product = getSelectedProduct();
         const country = getSelectedCountry();
-        if (!product || !country) {
-            panel.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-title">先选择产品和国家/地区</div>
-                </div>`;
-            return;
-        }
+        const reelFarmHtml = product && country ? renderReelFarmFormat(product, country, concept) : '';
 
-        const concepts = country.concepts || [];
-        const configHtml = reelFarmConfigured ? `
-            <div class="item-meta">ReelFarm API 已连接。下面会按 Format 同步 matching automations。</div>
-        ` : `
-            <div class="reelfarm-config">
-                <input id="reelFarmApiKeyInput" class="text-input" type="password" placeholder="粘贴 ReelFarm API Key，例如 rf_..." autocomplete="off">
-                <button class="btn primary" type="button" onclick="saveReelFarmApiKey()">连接 ReelFarm</button>
-            </div>`;
-
-        panel.innerHTML = `
-            <div class="reelfarm-header">
-                <div>
-                    <h2 class="reelfarm-title">ReelFarm 卡片视图</h2>
-                    <div class="reelfarm-subtitle">
-                        当前匹配格式：${escapeHtml(getCountryReelFarmCode(country))}-${escapeHtml(getProductReelFarmCode(product))}-Topic-Format。
-                        例如 Discipline + Solution 会抓取 ${escapeHtml(getCountryReelFarmCode(country))}-${escapeHtml(getProductReelFarmCode(product))}-Discipline-Solution、-1、-2 等 automation。
+        return `
+            <section class="format-block">
+                <div class="concept-row">
+                    <div class="concept-name-shell" style="border-color:${color}33; background:${color}0f;">
+                        <span class="concept-dot" style="background:${color};"></span>
+                        <input class="concept-input" value="${escapeHtml(concept.name || '')}"
+                            onchange="updateFormatName('${concept.id}', this.value)"
+                            onblur="updateFormatName('${concept.id}', this.value)">
                     </div>
+                    <input class="number-input" type="number" min="0" value="${Number(concept.count) || 0}"
+                        onchange="updateFormatCount('${concept.id}', this.value)"
+                        onblur="updateFormatCount('${concept.id}', this.value)">
+                    <button class="delete-btn" type="button" title="删除 Format" onclick="deleteFormat('${concept.id}')">删除</button>
                 </div>
-                <button class="btn ghost" type="button" onclick="refreshAllReelFarm()">同步当前页面</button>
-            </div>
-            ${configHtml}
-            <div class="reelfarm-list">
-                ${concepts.length === 0
-                    ? '<div class="empty-state"><div class="empty-title">还没有 Format 可以匹配 ReelFarm</div></div>'
-                    : concepts.map(concept => renderReelFarmFormat(product, country, concept)).join('')}
-            </div>`;
+                ${reelFarmHtml}
+            </section>`;
     }
 
     function renderReelFarmFormat(product, country, concept) {
@@ -1962,7 +1972,7 @@
                         <span class="automation-prefix">${escapeHtml(prefix)}</span>
                         <div class="item-meta">${escapeHtml(concept.group || '默认 Topic')} · ${escapeHtml(concept.name || 'Format')}</div>
                     </div>
-                    <button class="btn primary" type="button" onclick="syncReelFarmPrefix('${escapeHtml(prefix)}')">${isLoading ? '同步中...' : '同步'}</button>
+                    <button class="btn primary" type="button" onclick="syncReelFarmPrefix('${escapeHtml(prefix)}')">${isLoading ? '同步中...' : '同步 ReelFarm'}</button>
                 </div>
                 ${body}
             </section>`;
@@ -2014,7 +2024,7 @@
                 </div>
                 <div class="slideshow-list">
                     ${slideshows.length
-                        ? slideshows.slice(0, 6).map(video => renderMaterialItem(video, postsByVideo.get(String(video.video_id)))).join('')
+                        ? slideshows.map(video => renderMaterialItem(video, postsByVideo.get(String(video.video_id)))).join('')
                         : '<div class="item-meta">暂无素材数据</div>'}
                 </div>
                 ${card.errors?.videos || card.errors?.posts
@@ -2025,7 +2035,6 @@
 
     function renderMaterialItem(video, post) {
         const title = video.hook || post?.title || video.prompt_preview || video.video_id || video.id || 'Slideshow';
-        const href = video.video_url || '';
         const images = Array.isArray(video.slideshow_images) ? video.slideshow_images : [];
         const imageCount = video.slide_count || images.length;
         const meta = [
@@ -2043,7 +2052,7 @@
 
         const content = `
             <div class="material-preview">
-                ${images.slice(0, 4).map(image => `<img src="${escapeHtml(image.image_url)}" alt="">`).join('')}
+                ${renderSlideImage(video, images)}
             </div>
             <div class="slideshow-title">${escapeHtml(title)}</div>
             <div class="slideshow-meta">${escapeHtml(meta)}</div>
@@ -2056,11 +2065,26 @@
             </div>
             ${post?.published_at ? `<div class="slideshow-meta">Published ${escapeHtml(post.published_at)}</div>` : '<div class="slideshow-meta">暂无 TikTok 发布数据</div>'}`;
 
-        if (href) {
-            return `<a class="slideshow-item" href="${escapeHtml(href)}" target="_blank" rel="noreferrer">${content}</a>`;
+        return `<div class="slideshow-item">${content}</div>`;
+    }
+
+    function renderSlideImage(video, images) {
+        const videoId = String(video.video_id || video.id || generateId());
+        const slideIndex = Math.min(getSlideIndex(videoId), Math.max(0, images.length - 1));
+        const current = images[slideIndex];
+
+        if (!current?.image_url) {
+            return '<div class="empty-state" style="padding:32px 12px;"><div class="empty-title">暂无图片</div></div>';
         }
 
-        return `<div class="slideshow-item">${content}</div>`;
+        return `
+            <img src="${escapeHtml(current.image_url)}" alt="">
+            ${images.length > 1 ? `
+                <button class="slide-nav prev" type="button" onclick="moveMaterialSlide('${escapeHtml(videoId)}', -1, ${images.length})" title="上一张">‹</button>
+                <button class="slide-nav next" type="button" onclick="moveMaterialSlide('${escapeHtml(videoId)}', 1, ${images.length})" title="下一张">›</button>
+                <span class="slide-counter">${slideIndex + 1}/${images.length}</span>
+            ` : ''}
+        `;
     }
 
     window.setProductSearch = function(value) {
@@ -2343,7 +2367,7 @@
             const payload = await response.json();
             reelFarmConfigured = Boolean(payload.configured);
             setStatus('ReelFarm 已连接');
-            renderReelFarmPanel();
+            renderFormats();
         } catch (error) {
             console.error(error);
             setStatus('ReelFarm 连接失败', 'error');
@@ -2353,18 +2377,18 @@
     window.syncReelFarmPrefix = async function(prefix) {
         if (window.location.protocol === 'file:') {
             setStatus('当前是 file:// 页面，不能调 ReelFarm API', 'error');
-            renderReelFarmPanel();
+            renderFormats();
             return;
         }
 
         if (!reelFarmConfigured) {
             setStatus('请先连接 ReelFarm API Key', 'error');
-            renderReelFarmPanel();
+            renderFormats();
             return;
         }
 
         reelFarmLoadingPrefix = prefix;
-        renderReelFarmPanel();
+        renderFormats();
 
         try {
             const response = await fetch(`${API_REELFARM_MATCHES_URL}?prefix=${encodeURIComponent(prefix)}`, { cache: 'no-store' });
@@ -2378,8 +2402,15 @@
             setStatus('ReelFarm 同步失败', 'error');
         } finally {
             reelFarmLoadingPrefix = '';
-            renderReelFarmPanel();
+            renderFormats();
         }
+    };
+
+    window.moveMaterialSlide = function(videoId, direction, total) {
+        const current = getSlideIndex(videoId);
+        const next = (current + direction + total) % total;
+        materialSlideIndexes[videoId] = next;
+        renderFormats();
     };
 
     window.refreshAllReelFarm = async function() {

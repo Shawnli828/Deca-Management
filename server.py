@@ -306,7 +306,7 @@ def compact_video(video):
         "failed": video.get("failed"),
         "video_type": video.get("video_type"),
         "video_url": video.get("video_url"),
-        "slideshow_images": images[:8],
+        "slideshow_images": images,
         "slide_count": len(images),
         "hook": hook_match.group(1) if hook_match else "",
         "prompt": prompt,
@@ -370,7 +370,7 @@ def reelfarm_matches(prefix):
             try:
                 return reelfarm_request(
                     "/videos",
-                    {"automation_id": automation_id, "video_type": "slideshow", "limit": 8},
+                    {"automation_id": automation_id, "video_type": "slideshow", "limit": 50},
                 )
             except RuntimeError as error:
                 return {"videos": [], "total": 0, "error": str(error)}
