@@ -415,10 +415,10 @@
 
         .country-sidebar-title {
             margin: 0;
-            color: #111827;
-            font-size: 17px;
-            font-weight: 900;
-            line-height: 1.3;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 500;
+            line-height: 1.35;
         }
 
         .country-sidebar-fields {
@@ -445,9 +445,10 @@
 
         .topic-panel-title {
             margin: 0;
-            color: #111827;
-            font-size: 16px;
-            font-weight: 900;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 500;
+            line-height: 1.35;
         }
 
         .overview-grid {
@@ -814,14 +815,18 @@
         }
 
         .concept-group-title .concept-input {
-            font-size: 14px;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 500;
+            line-height: 1.35;
             min-width: 120px;
         }
 
         .concept-path {
-            color: var(--subtle);
+            color: var(--muted);
             font-size: 12px;
-            font-weight: 850;
+            font-weight: 500;
+            line-height: 1.35;
             flex: 0 0 auto;
             white-space: nowrap;
         }
@@ -1863,6 +1868,16 @@
 
         .concept-input {
             color: var(--text) !important;
+        }
+
+        .country-sidebar-title,
+        .topic-panel-title,
+        .concept-path,
+        .concept-group-title .concept-input {
+            color: var(--muted) !important;
+            font-size: 12px;
+            font-weight: 500;
+            line-height: 1.35;
         }
 
         .topic-chevron {
