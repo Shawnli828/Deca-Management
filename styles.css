@@ -76,12 +76,34 @@
         .auth-card {
             display: grid;
             gap: 18px;
-            width: min(420px, 100%);
+            width: min(680px, 100%);
             border: 1px solid #302d28;
             border-radius: 0;
             padding: 28px;
             background: #0d0c0b;
             box-shadow: 0 28px 90px rgba(0, 0, 0, 0.4);
+        }
+
+        .auth-hero {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 132px;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .auth-copy {
+            min-width: 0;
+        }
+
+        .auth-gif {
+            width: 132px;
+            height: 132px;
+            align-self: center;
+            justify-self: end;
+            border: 1px solid #302d28;
+            object-fit: cover;
+            object-position: center;
+            background: #050505;
         }
 
         .auth-kicker {
@@ -146,6 +168,22 @@
 
         .auth-submit {
             width: 100%;
+        }
+
+        @media (max-width: 620px) {
+            .auth-card {
+                width: min(420px, 100%);
+            }
+
+            .auth-hero {
+                grid-template-columns: minmax(0, 1fr) 84px;
+                gap: 12px;
+            }
+
+            .auth-gif {
+                width: 84px;
+                height: 84px;
+            }
         }
 
         .launch-warning {
