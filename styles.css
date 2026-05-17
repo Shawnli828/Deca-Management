@@ -1715,6 +1715,68 @@
             background: #050505;
         }
 
+        .topic-panel {
+            overflow: visible;
+            border: 0;
+            background: transparent;
+        }
+
+        .topic-panel-head {
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: #11100e;
+        }
+
+        .topic-panel .concept-area {
+            padding: 14px 0 0;
+        }
+
+        .concept-group {
+            border: 0;
+            border-radius: 0;
+            background: transparent;
+        }
+
+        .concept-group-header {
+            border: 0;
+            border-radius: 0;
+            padding: 0 0 8px;
+            background: transparent;
+        }
+
+        .concept-group-title {
+            min-height: 44px;
+            border: 0;
+            background: transparent !important;
+            padding: 0;
+        }
+
+        .concept-group-items {
+            margin-left: 20px;
+            border-left-color: #272a4f;
+            padding: 4px 0 14px 14px;
+        }
+
+        .topic-summary {
+            padding: 0 0 10px 34px;
+        }
+
+        .logo-chip,
+        .flag-chip,
+        .logo-upload {
+            background: #050505 !important;
+        }
+
+        .logo-chip img,
+        .logo-upload img {
+            background: #050505;
+            border-radius: 6px;
+        }
+
+        .product-row {
+            background: transparent;
+        }
+
         .automation-prefix {
             color: #f4f1ea;
         }
