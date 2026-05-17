@@ -3,6 +3,8 @@
     const API_DATABASE_URL = '/api/database';
     const API_REELFARM_CONFIG_URL = '/api/reelfarm/config';
     const API_REELFARM_MATCHES_URL = '/api/reelfarm/matches';
+    const API_AUTH_LOGIN_URL = '/api/auth/login';
+    const API_AUTH_LOGOUT_URL = '/api/auth/logout';
     const REELFARM_WINDOW_KEY = 'management_table_reelfarm_window_days';
 
     const countryFlags = {
@@ -259,6 +261,51 @@
 
         status.textContent = message;
         status.classList.toggle('error', type === 'error');
+    }
+
+    function setAuthError(message = '') {
+        const error = document.getElementById('authError');
+        if (!error) return;
+
+        error.textContent = message;
+        error.classList.toggle('is-visible', Boolean(message));
+    }
+
+    function setAuthLoading(isLoading) {
+        const button = document.getElementById('adminLoginButton');
+        if (!button) return;
+
+        button.disabled = isLoading;
+        button.textContent = isLoading ? '正在进入...' : '进入中台';
+    }
+
+    function showAuthGate() {
+        document.querySelector('.app')?.classList.add('is-locked');
+        document.getElementById('authOverlay')?.classList.add('is-visible');
+        setAuthError('');
+        window.requestAnimationFrame(() => document.getElementById('adminUsername')?.focus());
+    }
+
+    function hideAuthGate() {
+        document.getElementById('authOverlay')?.classList.remove('is-visible');
+        document.querySelector('.app')?.classList.remove('is-locked');
+    }
+
+    async function startAuthenticatedApp() {
+        hideAuthGate();
+        await loadData();
+        await loadReelFarmConfig();
+        renderApp();
+    }
+
+    async function resetAuthOnRefresh() {
+        if (window.location.protocol === 'file:') return;
+
+        try {
+            await fetch(API_AUTH_LOGOUT_URL, { method: 'POST', cache: 'no-store' });
+        } catch (error) {
+            console.error(error);
+        }
     }
 
     async function loadData() {
@@ -1616,8 +1663,43 @@
         }
     };
 
+    window.handleAdminLogin = async function(event) {
+        event.preventDefault();
+        if (window.location.protocol === 'file:') {
+            setAuthError('请通过本地服务或线上地址打开，中台登录需要后端支持。');
+            return;
+        }
+
+        const username = document.getElementById('adminUsername')?.value?.trim() || '';
+        const password = document.getElementById('adminPassword')?.value || '';
+        if (!username || !password) {
+            setAuthError('请输入管理员账号和密码。');
+            return;
+        }
+
+        setAuthLoading(true);
+        setAuthError('');
+        try {
+            const response = await fetch(API_AUTH_LOGIN_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(payload.error || '登录失败');
+
+            document.getElementById('adminPassword').value = '';
+            await startAuthenticatedApp();
+        } catch (error) {
+            console.error(error);
+            setAuthError(error.message || '登录失败，请重新输入。');
+        } finally {
+            setAuthLoading(false);
+        }
+    };
+
     window.onload = async function() {
-        await loadData();
-        await loadReelFarmConfig();
-        renderApp();
+        document.title = 'Deca Growth中台';
+        showAuthGate();
+        await resetAuthOnRefresh();
     };

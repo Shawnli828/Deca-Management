@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 import json
+import hashlib
+import hmac
 import mimetypes
 import os
 import re
 import ssl
 import sqlite3
 import socket
+import time
 import uuid
 import webbrowser
 from concurrent.futures import ThreadPoolExecutor
@@ -29,6 +32,14 @@ STATE_KEY = "product_distribution"
 REELFARM_API_KEY = "reel_farm_api_key"
 REELFARM_BASE_URL = "https://reel.farm/api/v1"
 SEED_DATA_PATH = BASE_DIR / "seed_data.json"
+ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "Deca888").strip()
+ADMIN_PASSWORD_HASH = os.environ.get(
+    "ADMIN_PASSWORD_HASH",
+    "baacd133a9696faa0333b9a7a8d3f0e3b560ef781a494d017d0d2ea19d46c0b1",
+).strip()
+SESSION_SECRET = os.environ.get("SESSION_SECRET", ADMIN_PASSWORD_HASH).strip()
+SESSION_COOKIE = "deca_growth_session"
+SESSION_TTL_SECONDS = 60 * 60 * 12
 COUNTRY_CODES = {
     "United States": "US",
     "United Kingdom": "UK",
@@ -530,6 +541,47 @@ def cron_authorized(headers):
     return headers.get("Authorization", "") == f"Bearer {secret}"
 
 
+def password_hash(value):
+    return hashlib.sha256(str(value or "").encode("utf-8")).hexdigest()
+
+
+def auth_signature(username, expires_at):
+    payload = f"{username}|{expires_at}"
+    return hmac.new(SESSION_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def make_auth_token(username):
+    expires_at = int(time.time()) + SESSION_TTL_SECONDS
+    signature = auth_signature(username, expires_at)
+    return f"{username}|{expires_at}|{signature}"
+
+
+def valid_auth_token(token):
+    try:
+        username, expires_at_text, signature = str(token or "").split("|", 2)
+        expires_at = int(expires_at_text)
+    except (TypeError, ValueError):
+        return False
+
+    if username != ADMIN_USERNAME or expires_at < int(time.time()):
+        return False
+
+    expected = auth_signature(username, expires_at)
+    return hmac.compare_digest(signature, expected)
+
+
+def cookie_header(name, value, max_age=None):
+    parts = [
+        f"{name}={value}",
+        "Path=/",
+        "HttpOnly",
+        "SameSite=Lax",
+    ]
+    if max_age is not None:
+        parts.append(f"Max-Age={int(max_age)}")
+    return "; ".join(parts)
+
+
 def database_snapshot():
     init_db()
     with connect_db() as conn:
@@ -585,10 +637,12 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         print("[%s] %s" % (self.log_date_time_string(), format % args))
 
-    def send_json(self, status, payload):
+    def send_json(self, status, payload, headers=None):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        for name, value in (headers or {}).items():
+            self.send_header(name, value)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -600,8 +654,34 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
         raw_body = self.rfile.read(length)
         return json.loads(raw_body.decode("utf-8"))
 
+    def cookies(self):
+        cookies = {}
+        raw_cookie = self.headers.get("Cookie", "")
+        for part in raw_cookie.split(";"):
+            if "=" not in part:
+                continue
+            name, value = part.strip().split("=", 1)
+            cookies[name] = value
+        return cookies
+
+    def is_authenticated(self):
+        return valid_auth_token(self.cookies().get(SESSION_COOKIE, ""))
+
+    def auth_required(self, path):
+        if not path.startswith("/api/"):
+            return False
+        if path in {"/api/health", "/api/auth/login", "/api/auth/logout", "/api/auth/status"}:
+            return False
+        if path == "/api/reelfarm/sync-all" and cron_authorized(self.headers):
+            return False
+        return True
+
     def do_GET(self):
         path = urlparse(self.path).path
+        if self.auth_required(path) and not self.is_authenticated():
+            self.send_json(401, {"error": "Unauthorized"})
+            return
+
         if path == "/api/health":
             self.send_json(
                 200,
@@ -610,6 +690,10 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
                     "database_backend": "postgres" if using_postgres() else "sqlite",
                 },
             )
+            return
+
+        if path == "/api/auth/status":
+            self.send_json(200, {"authenticated": self.is_authenticated()})
             return
 
         if path == "/api/data":
@@ -674,6 +758,39 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
+
+        if path == "/api/auth/login":
+            try:
+                payload = self.read_json_body()
+            except json.JSONDecodeError:
+                self.send_json(400, {"error": "Invalid JSON"})
+                return
+
+            username = str(payload.get("username", "") if isinstance(payload, dict) else "").strip()
+            password = str(payload.get("password", "") if isinstance(payload, dict) else "")
+            if username == ADMIN_USERNAME and hmac.compare_digest(password_hash(password), ADMIN_PASSWORD_HASH):
+                token = make_auth_token(username)
+                self.send_json(
+                    200,
+                    {"ok": True, "authenticated": True},
+                    {"Set-Cookie": cookie_header(SESSION_COOKIE, token, SESSION_TTL_SECONDS)},
+                )
+                return
+
+            self.send_json(401, {"error": "账号或密码不正确"})
+            return
+
+        if path == "/api/auth/logout":
+            self.send_json(
+                200,
+                {"ok": True, "authenticated": False},
+                {"Set-Cookie": cookie_header(SESSION_COOKIE, "", 0)},
+            )
+            return
+
+        if self.auth_required(path) and not self.is_authenticated():
+            self.send_json(401, {"error": "Unauthorized"})
+            return
 
         if path == "/api/data":
             try:
