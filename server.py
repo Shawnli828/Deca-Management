@@ -23,6 +23,7 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 STATE_KEY = "product_distribution"
 REELFARM_API_KEY = "reel_farm_api_key"
 REELFARM_BASE_URL = "https://reel.farm/api/v1"
+SEED_DATA_PATH = BASE_DIR / "seed_data.json"
 
 
 def using_postgres():
@@ -96,6 +97,19 @@ def default_data():
     ]
 
 
+def initial_data():
+    if SEED_DATA_PATH.is_file():
+        try:
+            payload = json.loads(SEED_DATA_PATH.read_text(encoding="utf-8"))
+            data = payload.get("data")
+            if isinstance(data, list):
+                return data
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    return default_data()
+
+
 def connect_db():
     if using_postgres():
         try:
@@ -131,7 +145,7 @@ def init_db():
             (STATE_KEY,),
         ).fetchone()
         if row is None:
-            save_data(default_data(), conn)
+            save_data(initial_data(), conn)
 
 
 def save_app_value(key, value, conn=None):
