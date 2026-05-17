@@ -34,7 +34,7 @@
         body {
             margin: 0;
             min-height: 100vh;
-            padding: 24px;
+            padding: 0;
             background:
                 radial-gradient(circle at top left, rgba(15, 118, 110, 0.12), transparent 28%),
                 linear-gradient(135deg, #f1f4f7 0%, #fbfcfd 52%, #f2f7f4 100%);
@@ -53,8 +53,9 @@
         }
 
         .app {
-            width: min(1440px, 100%);
-            margin: 0 auto;
+            width: 100%;
+            min-height: 100vh;
+            margin: 0;
         }
 
         .launch-warning {
@@ -84,10 +85,11 @@
 
         .shell {
             overflow: hidden;
-            border: 1px solid rgba(203, 213, 223, 0.92);
-            border-radius: 8px;
+            min-height: 100vh;
+            border: 0;
+            border-radius: 0;
             background: rgba(255, 255, 255, 0.88);
-            box-shadow: var(--shadow);
+            box-shadow: none;
             backdrop-filter: blur(18px);
         }
 
@@ -231,7 +233,7 @@
         }
 
         .page-shell {
-            min-height: 690px;
+            min-height: calc(100vh - 238px);
             padding: 14px;
             background: #f3f6f8;
         }
@@ -905,12 +907,17 @@
 
         .creator-header {
             display: grid;
-            grid-template-columns: minmax(220px, 1.2fr) minmax(210px, 1fr) repeat(5, minmax(58px, 0.32fr));
+            grid-template-columns: minmax(220px, 1.2fr) minmax(210px, 1fr) repeat(5, minmax(58px, 0.32fr)) auto;
             gap: 12px;
             align-items: center;
             padding: 12px 14px;
             border-bottom: 1px solid #38342f;
             background: #181714;
+            cursor: pointer;
+        }
+
+        .creator-header:hover {
+            background: #201e1a;
         }
 
         .reelfarm-account {
@@ -1025,6 +1032,24 @@
             text-transform: uppercase;
         }
 
+        .creator-expand {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border: 1px solid #4a453e;
+            border-radius: 50%;
+            background: #0d0c0b;
+            color: #f2eee8;
+            font-size: 16px;
+            font-weight: 900;
+        }
+
+        .reelfarm-card.is-open .creator-expand {
+            transform: rotate(90deg);
+        }
+
         .creator-toolbar {
             display: flex;
             align-items: center;
@@ -1051,25 +1076,21 @@
         }
 
         .slideshow-list {
-            display: flex;
+            display: grid;
+            grid-template-columns: repeat(4, minmax(180px, 1fr));
             gap: 12px;
-            overflow-x: auto;
             padding: 12px 14px 14px;
             background: #2c2925;
-            scroll-snap-type: x proximity;
         }
 
         .slideshow-item {
             display: grid;
-            flex: 0 0 186px;
-            max-width: 186px;
             overflow: hidden;
             border: 1px solid #3b3630;
             border-radius: var(--radius);
             background: #070706;
             color: #f3f0ea;
             text-decoration: none;
-            scroll-snap-align: start;
         }
 
         .slideshow-item:hover {
@@ -1144,8 +1165,42 @@
         .material-preview img {
             width: 100%;
             display: block;
-            aspect-ratio: 4 / 5;
+            aspect-ratio: 4 / 4.8;
             object-fit: cover;
+        }
+
+        .post-pager {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 0 14px 14px;
+            background: #2c2925;
+            color: #cfc7bc;
+            font-size: 12px;
+            font-weight: 850;
+        }
+
+        .post-pager-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .post-page-btn {
+            min-height: 32px;
+            border: 1px solid #423c35;
+            border-radius: 7px;
+            padding: 0 10px;
+            background: #171512;
+            color: #f3f0ea;
+            font-size: 12px;
+            font-weight: 850;
+        }
+
+        .post-page-btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.42;
         }
 
         .slide-nav {
@@ -1372,7 +1427,7 @@
 
         @media (max-width: 760px) {
             body {
-                padding: 12px;
+                padding: 0;
             }
 
             .topbar,
@@ -1393,6 +1448,10 @@
                 grid-column: 1 / -1;
             }
 
+            .creator-expand {
+                justify-self: end;
+            }
+
             .top-actions {
                 justify-content: stretch;
             }
@@ -1407,6 +1466,10 @@
             .reelfarm-metrics,
             .material-data {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .slideshow-list {
+                grid-template-columns: 1fr;
             }
 
             .detail-grid,
@@ -1427,6 +1490,10 @@
 
             .country-sidebar {
                 position: static;
+            }
+
+            .slideshow-list {
+                grid-template-columns: 1fr;
             }
         }
     </style>
@@ -1542,6 +1609,8 @@
     let reelFarmLoadingPrefix = '';
     let materialSlideIndexes = {};
     let expandedTopics = {};
+    let expandedReelFarmCards = {};
+    let materialPageIndexes = {};
 
     function generateId() {
         return Math.random().toString(36).slice(2, 11);
@@ -1665,6 +1734,47 @@
 
     function getSlideIndex(videoId) {
         return Number(materialSlideIndexes[videoId]) || 0;
+    }
+
+    function cardStateKey(card) {
+        const automation = card?.automation || {};
+        const account = card?.account || {};
+        return String(
+            automation.automation_id
+            || automation.title
+            || account.tiktok_account_id
+            || account.account_username
+            || generateId()
+        );
+    }
+
+    function getMaterialPage(cardKey) {
+        return Math.max(0, Number(materialPageIndexes[cardKey]) || 0);
+    }
+
+    function getCachedReelFarmResult(concept, prefix) {
+        const liveResult = reelFarmResults[prefix];
+        if (liveResult) return liveResult;
+
+        if (concept?.reelFarmResult?.prefix === prefix) {
+            return concept.reelFarmResult;
+        }
+
+        return null;
+    }
+
+    function findConceptByPrefix(prefix) {
+        for (const product of dbData) {
+            for (const country of product.countries || []) {
+                for (const concept of country.concepts || []) {
+                    if (buildAutomationPrefix(product, country, concept) === prefix) {
+                        return concept;
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 
     function setStatus(message, type = 'ok') {
@@ -2253,7 +2363,7 @@
 
     function renderReelFarmFormat(product, country, concept) {
         const prefix = buildAutomationPrefix(product, country, concept);
-        const result = reelFarmResults[prefix];
+        const result = getCachedReelFarmResult(concept, prefix);
         const isLoading = reelFarmLoadingPrefix === prefix;
         let body = '';
 
@@ -2275,6 +2385,9 @@
                     <div>
                         <span class="automation-prefix">${escapeHtml(prefix)}</span>
                         <div class="item-meta">${escapeHtml(concept.group || '默认 Topic')} · ${escapeHtml(concept.name || 'Format')}</div>
+                        ${concept.reelFarmSyncedAt && concept.reelFarmResult?.prefix === prefix
+                            ? `<div class="item-meta">上次同步：${escapeHtml(concept.reelFarmSyncedAt)}</div>`
+                            : ''}
                     </div>
                     <button class="btn primary" type="button" onclick="syncReelFarmPrefix('${escapeHtml(prefix)}')">${isLoading ? '同步中...' : '同步 ReelFarm'}</button>
                 </div>
@@ -2290,6 +2403,8 @@
     function renderReelFarmCard(card) {
         const automation = card.automation || {};
         const account = card.account || {};
+        const cardKey = cardStateKey(card);
+        const isOpen = Boolean(expandedReelFarmCards[cardKey]);
         const accountName = account.account_username || account.username || account.account_name || automation.tiktok_account_id || '未绑定账号';
         const displayAccount = String(accountName).startsWith('@') ? accountName : `@${accountName}`;
         const accountInitial = String(accountName || '?').replace('@', '').slice(0, 2).toUpperCase() || '?';
@@ -2312,10 +2427,16 @@
             ['Likes', likes],
             ['Comments', comments]
         ];
+        const pageSize = 4;
+        const totalPages = Math.max(1, Math.ceil(slideshows.length / pageSize));
+        const page = Math.min(getMaterialPage(cardKey), totalPages - 1);
+        const pageItems = slideshows.slice(page * pageSize, page * pageSize + pageSize);
 
         return `
-            <article class="reelfarm-card">
-                <div class="creator-header">
+            <article class="reelfarm-card ${isOpen ? 'is-open' : ''}">
+                <div class="creator-header" role="button" tabindex="0" data-card="${escapeHtml(cardKey)}"
+                    onclick="toggleReelFarmCard(this.dataset.card)"
+                    onkeydown="if(event.key === 'Enter' || event.key === ' '){ event.preventDefault(); toggleReelFarmCard(this.dataset.card); }">
                     <div class="reelfarm-account">
                         <span class="reelfarm-avatar">${avatar}</span>
                         <span class="creator-meta">
@@ -2334,19 +2455,30 @@
                             <div class="creator-stat-value">${formatNumber(value)}</div>
                             <div class="creator-stat-label">${label}</div>
                         </div>`).join('')}
+                    <span class="creator-expand">›</span>
                 </div>
-                <div class="creator-toolbar">
-                    <div class="creator-toolbar-title">Posts by ${escapeHtml(displayAccount)}</div>
-                    <div class="creator-toolbar-pill">Recently Published</div>
-                </div>
-                <div class="slideshow-list">
-                    ${slideshows.length
-                        ? slideshows.map(video => renderMaterialItem(video, postsByVideo.get(String(video.video_id)), accountName, avatar)).join('')
-                        : '<div class="item-meta" style="color:#bfb7ad;">暂无素材数据</div>'}
-                </div>
-                ${card.errors?.videos || card.errors?.posts
-                    ? `<div class="item-meta" style="padding:0 14px 14px; color:#bfb7ad;">${escapeHtml(card.errors.videos || card.errors.posts)}</div>`
-                    : ''}
+                ${isOpen ? `
+                    <div class="creator-toolbar">
+                        <div class="creator-toolbar-title">Posts by ${escapeHtml(displayAccount)}</div>
+                        <div class="creator-toolbar-pill">Recently Published</div>
+                    </div>
+                    <div class="slideshow-list">
+                        ${pageItems.length
+                            ? pageItems.map(video => renderMaterialItem(video, postsByVideo.get(String(video.video_id)), accountName, avatar)).join('')
+                            : '<div class="item-meta" style="color:#bfb7ad;">暂无素材数据</div>'}
+                    </div>
+                    ${slideshows.length > pageSize ? `
+                        <div class="post-pager">
+                            <span>${page + 1}/${totalPages}</span>
+                            <div class="post-pager-controls">
+                                <button class="post-page-btn" type="button" data-card="${escapeHtml(cardKey)}" ${page === 0 ? 'disabled' : ''} onclick="moveMaterialPage(this.dataset.card, -1)">Previous</button>
+                                <button class="post-page-btn" type="button" data-card="${escapeHtml(cardKey)}" ${page >= totalPages - 1 ? 'disabled' : ''} onclick="moveMaterialPage(this.dataset.card, 1)">Next</button>
+                            </div>
+                        </div>` : ''}
+                    ${card.errors?.videos || card.errors?.posts
+                        ? `<div class="item-meta" style="padding:0 14px 14px; color:#bfb7ad;">${escapeHtml(card.errors.videos || card.errors.posts)}</div>`
+                        : ''}
+                ` : ''}
             </article>`;
     }
 
@@ -2739,6 +2871,12 @@
             const payload = await response.json();
             if (!response.ok) throw new Error(payload.error || 'Failed to sync ReelFarm data.');
             reelFarmResults[prefix] = payload;
+            const concept = findConceptByPrefix(prefix);
+            if (concept) {
+                concept.reelFarmResult = payload;
+                concept.reelFarmSyncedAt = new Date().toLocaleString();
+                await persistData(false);
+            }
             setStatus(`ReelFarm 已同步：${payload.count} 个 automation`);
         } catch (error) {
             console.error(error);
@@ -2754,6 +2892,21 @@
         const current = getSlideIndex(videoId);
         const next = (current + direction + total) % total;
         materialSlideIndexes[videoId] = next;
+        renderFormats();
+    };
+
+    window.toggleReelFarmCard = function(cardKey) {
+        if (expandedReelFarmCards[cardKey]) {
+            delete expandedReelFarmCards[cardKey];
+        } else {
+            expandedReelFarmCards[cardKey] = true;
+        }
+        renderFormats();
+    };
+
+    window.moveMaterialPage = function(cardKey, direction) {
+        const current = getMaterialPage(cardKey);
+        materialPageIndexes[cardKey] = Math.max(0, current + direction);
         renderFormats();
     };
 
