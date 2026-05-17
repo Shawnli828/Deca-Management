@@ -1496,16 +1496,16 @@
             --page: #050505;
             --surface: #11100e;
             --surface-soft: #171512;
-            --surface-tint: #17211f;
+            --surface-tint: #15182d;
             --line: #302d28;
             --line-strong: #4a453e;
             --text: #f4f1ea;
             --muted: #b5ada2;
             --subtle: #81786e;
-            --accent: #62b3a4;
-            --accent-strong: #8dd8c8;
-            --accent-soft: #12241f;
-            --blue: #8ba6ff;
+            --accent: #7c83ff;
+            --accent-strong: #b7bcff;
+            --accent-soft: #17182d;
+            --blue: #a5adff;
             --plum: #b8a6ff;
             --gold: #d5a45c;
             --red: #ff8a7f;
@@ -1537,6 +1537,7 @@
         .context-line,
         .topic-panel-head,
         .country-sidebar-head,
+        .concept-group-header,
         .database-header {
             background: #11100e;
         }
@@ -1586,6 +1587,8 @@
 
         .metric,
         .list-item,
+        .flag-chip,
+        .logo-chip,
         .country-sidebar,
         .topic-panel,
         .concept-group,
@@ -1619,6 +1622,19 @@
             color: var(--accent-strong);
         }
 
+        .country-title-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .country-title-row .btn {
+            min-height: 34px;
+            padding: 0 12px;
+            white-space: nowrap;
+        }
+
         .search-input::placeholder {
             color: #777066;
         }
@@ -1641,9 +1657,20 @@
         }
 
         .btn.primary {
-            border-color: #5fae9f;
-            background: linear-gradient(180deg, #27796e 0%, #16554e 100%);
+            border-color: #6f76f5;
+            background: linear-gradient(180deg, #6268e8 0%, #3d43b8 100%);
             color: #ffffff;
+        }
+
+        .btn.primary:hover {
+            background: linear-gradient(180deg, #7379ff 0%, #464ccb 100%);
+        }
+
+        .btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.55;
+            transform: none;
+            box-shadow: none;
         }
 
         .btn.danger,
@@ -1654,8 +1681,8 @@
         }
 
         .status-pill {
-            border-color: #2f665d;
-            background: #10241f;
+            border-color: #474b91;
+            background: #151735;
             color: var(--accent-strong);
         }
 
@@ -1671,8 +1698,21 @@
 
         .reelfarm-format,
         .reelfarm-config {
-            border-color: #2f4a43;
-            background: #0e1715;
+            border-color: #282b55;
+            background: #090a12;
+        }
+
+        .creator-chip.green {
+            background: #292d62;
+            color: #eef0ff;
+        }
+
+        .reelfarm-card,
+        .creator-header,
+        .creator-toolbar,
+        .slideshow-list,
+        .post-pager {
+            background: #050505;
         }
 
         .automation-prefix {

@@ -29,6 +29,20 @@ STATE_KEY = "product_distribution"
 REELFARM_API_KEY = "reel_farm_api_key"
 REELFARM_BASE_URL = "https://reel.farm/api/v1"
 SEED_DATA_PATH = BASE_DIR / "seed_data.json"
+COUNTRY_CODES = {
+    "United States": "US",
+    "United Kingdom": "UK",
+    "Japan": "JP",
+    "Germany": "DE",
+    "Brazil": "BR",
+    "India": "IN",
+    "China": "CN",
+    "France": "FR",
+    "Italy": "IT",
+    "Canada": "CA",
+    "Australia": "AU",
+    "South Korea": "KR",
+}
 
 
 def using_postgres():
@@ -58,6 +72,42 @@ def make_ssl_context():
 
 def generate_id():
     return uuid.uuid4().hex[:9]
+
+
+def slug_part(value):
+    cleaned = re.sub(r"[^a-zA-Z0-9]+", " ", str(value or "")).strip()
+    if not cleaned:
+        return "Item"
+    return "".join(part[:1].upper() + part[1:] for part in cleaned.split())
+
+
+def code_from_name(value):
+    cleaned = re.sub(r"[^a-zA-Z0-9 ]+", " ", str(value or "")).strip()
+    if not cleaned:
+        return "APP"
+
+    alias = re.sub(r"\s+", "", cleaned).lower()
+    if alias in {"delust", "dl"}:
+        return "DL"
+
+    compact = re.sub(r"\s+", "", cleaned)
+    if len(compact) <= 4:
+        return compact.upper()
+
+    initials = "".join(part[:1] for part in cleaned.split())
+    return (initials or compact[:4]).upper()
+
+
+def build_automation_prefix(product, country, concept):
+    country_code = (
+        country.get("reelFarmCode")
+        or COUNTRY_CODES.get(country.get("name"))
+        or code_from_name(country.get("name"))
+    ).upper()
+    product_code = (product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
+    topic = slug_part(concept.get("group") or "Topic")
+    format_name = slug_part(concept.get("name") or "Format")
+    return f"{country_code}-{product_code}-{topic}-{format_name}"
 
 
 def default_data():
@@ -426,6 +476,44 @@ def reelfarm_matches(prefix):
     return {"prefix": clean_prefix, "count": len(cards), "cards": cards}
 
 
+def sync_all_reelfarm_records():
+    if not reelfarm_api_key():
+        raise RuntimeError("ReelFarm API key is not configured.")
+
+    data = load_data()
+    synced_at = datetime.now(timezone.utc).isoformat()
+    successes = 0
+    errors = []
+
+    for product in data:
+        for country in product.get("countries", []) or []:
+            for concept in country.get("concepts", []) or []:
+                prefix = build_automation_prefix(product, country, concept)
+                try:
+                    result = reelfarm_matches(prefix)
+                    concept["reelFarmResult"] = result
+                    concept["reelFarmSyncedAt"] = synced_at
+                    successes += 1
+                except RuntimeError as error:
+                    errors.append({"prefix": prefix, "error": str(error)})
+
+    save_data(data)
+    return {
+        "ok": True,
+        "synced_at": synced_at,
+        "synced_count": successes,
+        "error_count": len(errors),
+        "errors": errors[:20],
+    }
+
+
+def cron_authorized(headers):
+    secret = os.environ.get("CRON_SECRET", "").strip()
+    if not secret:
+        return True
+    return headers.get("Authorization", "") == f"Bearer {secret}"
+
+
 def database_snapshot():
     init_db()
     with connect_db() as conn:
@@ -526,6 +614,16 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             )
             return
 
+        if path == "/api/reelfarm/sync-all":
+            if not cron_authorized(self.headers):
+                self.send_json(401, {"error": "Unauthorized"})
+                return
+            try:
+                self.send_json(200, sync_all_reelfarm_records())
+            except RuntimeError as error:
+                self.send_json(502, {"error": str(error)})
+            return
+
         if path == "/api/reelfarm/matches":
             query = parse_qs(urlparse(self.path).query)
             automation_prefix = query.get("prefix", [""])[0]
@@ -604,6 +702,16 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
                     "base_url": REELFARM_BASE_URL,
                 },
             )
+            return
+
+        if path == "/api/reelfarm/sync-all":
+            if not cron_authorized(self.headers):
+                self.send_json(401, {"error": "Unauthorized"})
+                return
+            try:
+                self.send_json(200, sync_all_reelfarm_records())
+            except RuntimeError as error:
+                self.send_json(502, {"error": str(error)})
             return
 
         self.send_json(404, {"error": "Not found"})

@@ -36,12 +36,12 @@
     };
 
     const tagColors = [
-        '#2563eb',
-        '#168344',
-        '#b06000',
-        '#7c3aed',
-        '#0369a1',
-        '#475467'
+        '#6f76f5',
+        '#9b6df3',
+        '#d18b45',
+        '#c46bd6',
+        '#557ee8',
+        '#8a8f98'
     ];
 
     let dbData = [];
@@ -717,10 +717,15 @@
         normalizeFormatGroups(country);
         const total = concepts.reduce((sum, concept) => sum + (Number(concept.count) || 0), 0);
         const groups = getFormatGroups(concepts);
+        const countrySyncKey = `country:${country.id}`;
+        const isCountrySyncing = reelFarmLoadingPrefix === countrySyncKey;
 
         context.innerHTML = `
             <div class="country-sidebar-head">
-                <h2 class="country-sidebar-title">${escapeHtml(country.name)} 的创意</h2>
+                <div class="country-title-row">
+                    <h2 class="country-sidebar-title">${escapeHtml(country.name)} 的创意</h2>
+                    <button class="btn primary" type="button" onclick="syncCurrentCountryReelFarm()" ${isCountrySyncing ? 'disabled' : ''}>${isCountrySyncing ? '同步中...' : '同步当前区'}</button>
+                </div>
                 <div class="context-meta">${escapeHtml(product.name)} · ${groups.length} 个 Topic · ${concepts.length} 个 Format · ${total} 数量</div>
             </div>
             <div class="country-sidebar-fields">
@@ -823,7 +828,7 @@
         } else if (result) {
             body = '<div class="empty-state"><div class="empty-title">没有找到匹配 automation</div><div>确认 ReelFarm 里 automation name 是否以这个 prefix 开头。</div></div>';
         } else {
-            body = '<div class="item-meta">点击同步后，会显示每个 TikTok 账号、slideshow、播放/点赞/评论等数据。</div>';
+            body = '<div class="item-meta">点击左侧「同步当前区」后，会显示每个 TikTok 账号、slideshow、播放/点赞/评论等数据。</div>';
         }
 
         return `
@@ -836,7 +841,6 @@
                             ? `<div class="item-meta">上次同步：${escapeHtml(concept.reelFarmSyncedAt)}</div>`
                             : ''}
                     </div>
-                    <button class="btn primary" type="button" onclick="syncReelFarmPrefix('${escapeHtml(prefix)}')">${isLoading ? '同步中...' : '同步 ReelFarm'}</button>
                 </div>
                 ${body}
             </section>`;
@@ -1297,6 +1301,21 @@
         }
     };
 
+    async function fetchAndStoreReelFarmPrefix(prefix) {
+        const response = await fetch(`${API_REELFARM_MATCHES_URL}?prefix=${encodeURIComponent(prefix)}`, { cache: 'no-store' });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || 'Failed to sync ReelFarm data.');
+
+        reelFarmResults[prefix] = payload;
+        const concept = findConceptByPrefix(prefix);
+        if (concept) {
+            concept.reelFarmResult = payload;
+            concept.reelFarmSyncedAt = new Date().toLocaleString();
+        }
+
+        return payload;
+    }
+
     window.syncReelFarmPrefix = async function(prefix) {
         if (window.location.protocol === 'file:') {
             setStatus('当前是 file:// 页面，不能调 ReelFarm API', 'error');
@@ -1314,21 +1333,60 @@
         renderFormats();
 
         try {
-            const response = await fetch(`${API_REELFARM_MATCHES_URL}?prefix=${encodeURIComponent(prefix)}`, { cache: 'no-store' });
-            const payload = await response.json();
-            if (!response.ok) throw new Error(payload.error || 'Failed to sync ReelFarm data.');
-            reelFarmResults[prefix] = payload;
-            const concept = findConceptByPrefix(prefix);
-            if (concept) {
-                concept.reelFarmResult = payload;
-                concept.reelFarmSyncedAt = new Date().toLocaleString();
-                await persistData(false);
-            }
+            const payload = await fetchAndStoreReelFarmPrefix(prefix);
+            await persistData(false);
             setStatus(`ReelFarm 已同步：${payload.count} 个 automation`);
         } catch (error) {
             console.error(error);
             reelFarmResults[prefix] = { error: error.message || '同步失败' };
             setStatus('ReelFarm 同步失败', 'error');
+        } finally {
+            reelFarmLoadingPrefix = '';
+            renderFormats();
+        }
+    };
+
+    window.syncCurrentCountryReelFarm = async function() {
+        if (window.location.protocol === 'file:') {
+            setStatus('当前是 file:// 页面，不能调 ReelFarm API', 'error');
+            renderFormats();
+            return;
+        }
+
+        if (!reelFarmConfigured) {
+            setStatus('请先连接 ReelFarm API Key', 'error');
+            renderFormats();
+            return;
+        }
+
+        const product = getSelectedProduct();
+        const country = getSelectedCountry();
+        if (!product || !country) return;
+
+        const prefixes = [...new Set((country.concepts || []).map(concept => buildAutomationPrefix(product, country, concept)))];
+        if (prefixes.length === 0) {
+            setStatus('这个国家/地区还没有 Format', 'error');
+            return;
+        }
+
+        reelFarmLoadingPrefix = `country:${country.id}`;
+        renderFormats();
+
+        let successCount = 0;
+        let errorCount = 0;
+        try {
+            for (const prefix of prefixes) {
+                try {
+                    await fetchAndStoreReelFarmPrefix(prefix);
+                    successCount += 1;
+                } catch (error) {
+                    console.error(error);
+                    reelFarmResults[prefix] = { error: error.message || '同步失败' };
+                    errorCount += 1;
+                }
+            }
+            await persistData(false);
+            setStatus(`当前区同步完成：${successCount} 个成功${errorCount ? `，${errorCount} 个失败` : ''}`);
         } finally {
             reelFarmLoadingPrefix = '';
             renderFormats();
@@ -1362,10 +1420,7 @@
         const country = getSelectedCountry();
         if (!product || !country) return;
 
-        const prefixes = (country.concepts || []).map(concept => buildAutomationPrefix(product, country, concept));
-        for (const prefix of prefixes) {
-            await window.syncReelFarmPrefix(prefix);
-        }
+        await window.syncCurrentCountryReelFarm();
     };
 
     window.handleImageUpload = function(inputElement, productId) {
