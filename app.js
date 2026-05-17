@@ -1699,7 +1699,7 @@
     };
 
     window.onload = async function() {
-        document.title = 'Deca Growth中台';
+        document.title = 'DECAGROWTH中台';
         showAuthGate();
         await resetAuthOnRefresh();
     };

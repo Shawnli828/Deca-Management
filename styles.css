@@ -18,6 +18,8 @@
             --red: #c24135;
             --shadow: 0 20px 54px rgba(31, 41, 55, 0.12);
             --radius: 8px;
+            --font-sans: "Avenir Next", "Inter", "Helvetica Neue", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", Arial, sans-serif;
+            --font-brand: "Avenir Next", "Inter", "Helvetica Neue", Arial, sans-serif;
         }
 
         * {
@@ -32,7 +34,7 @@
                 radial-gradient(circle at top left, rgba(15, 118, 110, 0.12), transparent 28%),
                 linear-gradient(135deg, #f1f4f7 0%, #fbfcfd 52%, #f2f7f4 100%);
             color: var(--text);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-family: var(--font-sans);
         }
 
         button,
@@ -85,7 +87,6 @@
 
         .auth-kicker {
             margin: 0 0 8px;
-            color: #8f8bff;
             font-size: 12px;
             font-weight: 900;
             letter-spacing: 0;
@@ -198,6 +199,25 @@
             font-size: 25px;
             line-height: 1.25;
             letter-spacing: 0;
+        }
+
+        .brand-mark {
+            color: #f4f1ea;
+            font-family: var(--font-brand);
+            font-weight: 900;
+            letter-spacing: 0;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .brand-dot {
+            color: #5c63ff;
+        }
+
+        .brand-cn {
+            margin-left: 8px;
+            color: var(--text);
+            font-weight: 700;
         }
 
         .subtitle {
