@@ -6,7 +6,7 @@
     <title>DECAGROWTH中台</title>
     <link rel="stylesheet" href="styles.css">
 </head>
-<body class="auth-active">
+<body>
 <section id="authOverlay" class="auth-overlay is-visible" aria-labelledby="authTitle">
     <form id="adminLoginForm" class="auth-card" onsubmit="handleAdminLogin(event)">
         <div>
@@ -16,11 +16,11 @@
         </div>
         <label class="auth-field">
             <span>管理员账号</span>
-            <input id="adminUsername" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" data-lpignore="true" required>
+            <input id="adminUsername" type="text" autocomplete="username" required>
         </label>
         <label class="auth-field">
             <span>管理员密码</span>
-            <input id="adminPassword" type="password" autocomplete="off" data-lpignore="true" required>
+            <input id="adminPassword" type="password" autocomplete="current-password" required>
         </label>
         <div id="authError" class="auth-error" role="alert"></div>
         <button id="adminLoginButton" class="btn primary auth-submit" type="submit">进入中台</button>

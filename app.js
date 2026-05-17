@@ -280,7 +280,6 @@
     }
 
     function showAuthGate() {
-        document.body.classList.add('auth-active');
         document.querySelector('.app')?.classList.add('is-locked');
         document.getElementById('authOverlay')?.classList.add('is-visible');
         setAuthError('');
@@ -288,7 +287,6 @@
     }
 
     function hideAuthGate() {
-        document.body.classList.remove('auth-active');
         document.getElementById('authOverlay')?.classList.remove('is-visible');
         document.querySelector('.app')?.classList.remove('is-locked');
     }
