@@ -1789,3 +1789,26 @@
             background: #050505;
             color: #dbeafe;
         }
+
+        .detail {
+            background: #0d0c0b !important;
+            border-color: var(--line);
+        }
+
+        .detail-grid {
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            padding: 14px;
+            background: #11100e !important;
+        }
+
+        .field-stack label {
+            background: transparent;
+        }
+
+        .detail .text-input,
+        .detail select,
+        .detail option {
+            background: #151310 !important;
+            color: var(--text) !important;
+        }
