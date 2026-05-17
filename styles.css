@@ -795,11 +795,11 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 24px;
-            height: 24px;
-            border: 1px solid var(--line);
-            border-radius: 50%;
-            background: #fff;
+            width: 18px;
+            height: 18px;
+            border: 0;
+            border-radius: 0;
+            background: transparent;
             color: var(--accent-strong);
             font-size: 14px;
             font-weight: 900;
@@ -846,7 +846,7 @@
 
         .concept-row {
             display: grid;
-            grid-template-columns: 34px minmax(160px, 1fr) 96px auto;
+            grid-template-columns: 22px minmax(160px, 1fr) 96px auto;
             gap: 10px;
             align-items: center;
             border: 1px solid transparent;
@@ -859,11 +859,11 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 34px;
+            width: 22px;
             height: 34px;
-            border: 1px solid var(--line);
-            border-radius: 50%;
-            background: #fff;
+            border: 0;
+            border-radius: 0;
+            background: transparent;
             color: var(--accent-strong);
             cursor: pointer;
             font-size: 16px;
@@ -895,11 +895,7 @@
         }
 
         .concept-dot {
-            width: 12px;
-            height: 12px;
-            margin-left: 8px;
-            border-radius: 50%;
-            flex: 0 0 12px;
+            display: none;
         }
 
         .concept-input {
@@ -911,6 +907,12 @@
             color: #111827;
             font-weight: 800;
             outline: none;
+        }
+
+        .concept-name-shell .concept-input {
+            font-size: 14px;
+            font-weight: 700;
+            line-height: 1.35;
         }
 
         .number-input {
@@ -1881,15 +1883,21 @@
         }
 
         .topic-chevron {
-            border-color: var(--line-strong);
-            background: #0d0c0b;
+            border: 0;
+            background: transparent;
             color: var(--accent-strong);
         }
 
         .format-toggle {
-            border-color: var(--line-strong);
-            background: #0d0c0b;
+            border: 0;
+            background: transparent;
             color: var(--accent-strong);
+        }
+
+        .concept-name-shell .concept-input {
+            font-size: 14px;
+            font-weight: 700;
+            line-height: 1.35;
         }
 
         .country-title-row {
