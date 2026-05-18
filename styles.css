@@ -1051,6 +1051,13 @@
             font-weight: 850;
         }
 
+        .number-display {
+            display: grid;
+            place-items: center;
+            cursor: default;
+            user-select: none;
+        }
+
         .delete-btn {
             display: inline-flex;
             align-items: center;

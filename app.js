@@ -257,6 +257,21 @@
         return (card?.posts || []).filter(isPostInSelectedWindow);
     }
 
+    function getReelFarmPostedCount(result, useSelectedWindow = false) {
+        return (result?.cards || []).reduce((sum, card) => {
+            const posts = useSelectedWindow ? getWindowedPosts(card) : (card?.posts || []);
+            return sum + posts.length;
+        }, 0);
+    }
+
+    function getFormatAutoCount(product, country, concept, useSelectedWindow = true) {
+        const prefix = product && country && concept ? buildAutomationPrefix(product, country, concept) : '';
+        const result = prefix ? getCachedReelFarmResult(concept, prefix) : null;
+        if (result?.cards) return getReelFarmPostedCount(result, useSelectedWindow);
+
+        return Number(concept?.count) || 0;
+    }
+
     function getSlideIndex(videoId) {
         return Number(materialSlideIndexes[videoId]) || 0;
     }
@@ -286,6 +301,14 @@
         }
 
         return null;
+    }
+
+    function storeReelFarmResultOnConcept(concept, payload) {
+        if (!concept) return;
+
+        concept.reelFarmResult = payload;
+        concept.reelFarmSyncedAt = new Date().toLocaleString();
+        concept.count = getReelFarmPostedCount(payload, false);
     }
 
     function findConceptByPrefix(prefix) {
@@ -1054,7 +1077,7 @@
 
         const concepts = country.concepts || [];
         normalizeFormatGroups(country);
-        const total = concepts.reduce((sum, concept) => sum + (Number(concept.count) || 0), 0);
+        const total = concepts.reduce((sum, concept) => sum + getFormatAutoCount(product, country, concept), 0);
         const groups = getFormatGroups(concepts);
         const countrySyncKey = `country:${country.id}`;
         const isCountrySyncing = reelFarmLoadingPrefix === countrySyncKey;
@@ -1108,8 +1131,9 @@
 
     function renderFormatGroup(group) {
         const color = getTagColor(group.name);
-        const total = group.concepts.reduce((sum, concept) => sum + (Number(concept.count) || 0), 0);
+        const product = getSelectedProduct();
         const country = getSelectedCountry();
+        const total = group.concepts.reduce((sum, concept) => sum + getFormatAutoCount(product, country, concept), 0);
         const isOpen = isTopicExpanded(country?.id, group.name);
 
         return `
@@ -1143,6 +1167,7 @@
         const country = getSelectedCountry();
         const reelFarmHtml = product && country ? renderReelFarmFormat(product, country, concept) : '';
         const isOpen = isFormatExpanded(concept.id);
+        const autoCount = getFormatAutoCount(product, country, concept);
 
         return `
             <section class="format-block ${isOpen ? 'is-open' : ''}">
@@ -1156,9 +1181,7 @@
                             onchange="updateFormatName('${concept.id}', this.value)"
                             onblur="updateFormatName('${concept.id}', this.value)">
                     </div>
-                    <input class="number-input" type="number" min="0" value="${Number(concept.count) || 0}"
-                        onchange="updateFormatCount('${concept.id}', this.value)"
-                        onblur="updateFormatCount('${concept.id}', this.value)">
+                    <div class="number-input number-display" title="同步 ReelFarm 后自动计算 posted 素材数量">${autoCount}</div>
                     <button class="delete-btn" type="button" title="删除 Format" onclick="deleteFormat('${concept.id}')">删除</button>
                 </div>
                 ${isOpen ? reelFarmHtml : ''}
@@ -1763,10 +1786,7 @@
 
         reelFarmResults[prefix] = payload;
         const concept = findConceptByPrefix(prefix);
-        if (concept) {
-            concept.reelFarmResult = payload;
-            concept.reelFarmSyncedAt = new Date().toLocaleString();
-        }
+        storeReelFarmResultOnConcept(concept, payload);
 
         return payload;
     }

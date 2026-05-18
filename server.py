@@ -585,6 +585,15 @@ def reelfarm_matches(prefix):
     return {"prefix": clean_prefix, "count": len(cards), "cards": cards}
 
 
+def reelfarm_posted_count(result):
+    cards = result.get("cards", []) if isinstance(result, dict) else []
+    return sum(
+        len(card.get("posts", []) or [])
+        for card in cards
+        if isinstance(card, dict)
+    )
+
+
 def sync_all_reelfarm_records():
     if not reelfarm_api_key():
         raise RuntimeError("ReelFarm API key is not configured.")
@@ -602,6 +611,7 @@ def sync_all_reelfarm_records():
                     result = reelfarm_matches(prefix)
                     concept["reelFarmResult"] = result
                     concept["reelFarmSyncedAt"] = synced_at
+                    concept["count"] = reelfarm_posted_count(result)
                     successes += 1
                 except RuntimeError as error:
                     errors.append({"prefix": prefix, "error": str(error)})
