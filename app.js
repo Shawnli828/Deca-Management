@@ -5,6 +5,7 @@
     const API_REELFARM_MATCHES_URL = '/api/reelfarm/matches';
     const API_AUTH_LOGIN_URL = '/api/auth/login';
     const API_AUTH_LOGOUT_URL = '/api/auth/logout';
+    const API_ROASTER_URL = '/api/roaster';
     const REELFARM_WINDOW_KEY = 'management_table_reelfarm_window_days';
 
     const countryFlags = {
@@ -47,6 +48,18 @@
         '#8a8f98'
     ];
 
+    const roasterRoles = [
+        { key: 'leader', label: 'Leader', group: '负责人' },
+        { key: 'pm', label: 'PM', group: '负责人' },
+        { key: 'backend', label: '后台', group: '负责人' },
+        { key: 'slideshow', label: 'Slideshow', group: '执行人' },
+        { key: 'shortVideo', label: 'Short video', group: '执行人' },
+        { key: 'reddit', label: 'Reddit', group: '执行人' },
+        { key: 'seo', label: 'SEO', group: '执行人' },
+        { key: 'twitter', label: 'Twitter', group: '执行人' },
+        { key: 'influencer', label: 'Influencer', group: '执行人' }
+    ];
+
     let dbData = [];
     let selectedProductId = null;
     let selectedCountryId = null;
@@ -55,6 +68,7 @@
     let productSearch = '';
     let countrySearch = '';
     let latestDatabaseSnapshot = null;
+    let roasterState = { people: [], assignments: {} };
     let reelFarmConfigured = false;
     let reelFarmResults = {};
     let reelFarmLoadingPrefix = '';
@@ -152,6 +166,38 @@
             .join('');
 
         return (initials || compact.slice(0, 4)).toUpperCase();
+    }
+
+    function personInitials(value) {
+        const name = String(value || '').trim();
+        if (!name) return '?';
+        if (/^[a-zA-Z]/.test(name)) return name.slice(0, 1).toUpperCase();
+        return name.slice(0, 1);
+    }
+
+    function personColorClass(personId) {
+        let hash = 0;
+        for (let i = 0; i < String(personId).length; i += 1) {
+            hash = String(personId).charCodeAt(i) + ((hash << 5) - hash);
+        }
+        return `tone-${Math.abs(hash) % 6}`;
+    }
+
+    function createPersonId(name) {
+        const base = String(name || '')
+            .normalize('NFKD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-zA-Z0-9\u4e00-\u9fa5]+/g, '-')
+            .replace(/^-+|-+$/g, '')
+            .toLowerCase() || 'person';
+        let candidate = base;
+        let index = 2;
+        const existing = new Set((roasterState.people || []).map(person => person.id));
+        while (existing.has(candidate)) {
+            candidate = `${base}-${index}`;
+            index += 1;
+        }
+        return candidate;
     }
 
     function getProductReelFarmCode(product) {
@@ -296,6 +342,7 @@
         hideAuthGate();
         await loadData();
         await loadReelFarmConfig();
+        await loadRoasterState();
         renderApp();
     }
 
@@ -349,6 +396,191 @@
             console.error(error);
             reelFarmConfigured = false;
         }
+    }
+
+    function defaultRoasterState() {
+        return {
+            people: [
+                { id: 'han', name: 'han' },
+                { id: 'li-zihan', name: '李梓瞻' },
+                { id: 'ding-lifeng', name: '丁立峰' },
+                { id: 'wang-hengjia', name: '王恒加' },
+                { id: 'jj', name: 'JJ' },
+                { id: 'doris', name: 'Doris' },
+                { id: 'mina', name: 'Mina' }
+            ],
+            assignments: {}
+        };
+    }
+
+    function normalizeRoasterState(state) {
+        const fallback = defaultRoasterState();
+        return {
+            people: Array.isArray(state?.people) && state.people.length ? state.people : fallback.people,
+            assignments: state?.assignments && typeof state.assignments === 'object' ? state.assignments : {}
+        };
+    }
+
+    async function loadRoasterState() {
+        if (window.location.protocol === 'file:') {
+            roasterState = defaultRoasterState();
+            return;
+        }
+
+        try {
+            const response = await fetch(API_ROASTER_URL, { cache: 'no-store' });
+            if (!response.ok) throw new Error('Failed to load Roaster data.');
+            roasterState = normalizeRoasterState(await response.json());
+        } catch (error) {
+            console.error(error);
+            roasterState = defaultRoasterState();
+            setStatus('Roaster 数据加载失败', 'error');
+        }
+    }
+
+    async function persistRoasterState(shouldRender = true) {
+        roasterState = normalizeRoasterState(roasterState);
+        if (shouldRender) renderRoaster();
+
+        if (window.location.protocol === 'file:') {
+            setStatus('文件模式无法保存 Roaster', 'error');
+            return;
+        }
+
+        try {
+            const response = await fetch(API_ROASTER_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ state: roasterState })
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(payload.error || 'Failed to save Roaster data.');
+            roasterState = normalizeRoasterState(payload.state);
+            setStatus('Roaster 已保存');
+        } catch (error) {
+            console.error(error);
+            setStatus('Roaster 保存失败', 'error');
+        }
+    }
+
+    function roasterProductRows() {
+        return [...dbData].sort((a, b) => {
+            const folderOrder = normalizeProductFolder(a).localeCompare(normalizeProductFolder(b), 'zh-Hans');
+            if (folderOrder) return folderOrder;
+            return String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hans');
+        });
+    }
+
+    function getRoasterAssignment(productId, roleKey) {
+        if (!roasterState.assignments[productId]) roasterState.assignments[productId] = {};
+        if (!Array.isArray(roasterState.assignments[productId][roleKey])) {
+            roasterState.assignments[productId][roleKey] = [];
+        }
+
+        const validPeople = new Set((roasterState.people || []).map(person => person.id));
+        roasterState.assignments[productId][roleKey] = roasterState.assignments[productId][roleKey]
+            .filter(personId => validPeople.has(personId));
+        return roasterState.assignments[productId][roleKey];
+    }
+
+    function getRoasterPerson(personId) {
+        return (roasterState.people || []).find(person => person.id === personId) || null;
+    }
+
+    function renderPersonChip(person, options = {}) {
+        const removable = Boolean(options.removable);
+        const assigned = Boolean(options.assigned);
+        const removeAction = options.removeAction || '';
+        const deleteAction = options.deleteAction || '';
+        const className = assigned ? 'person-chip assignment-chip' : 'person-chip';
+        const closeButton = removable
+            ? `<button class="person-chip-remove" type="button" onclick="${removeAction}" title="移出">×</button>`
+            : '';
+        const deleteButton = deleteAction
+            ? `<button class="person-chip-delete" type="button" onclick="${deleteAction}" title="删除人员">删除</button>`
+            : '';
+
+        return `
+            <span class="${className} ${personColorClass(person.id)}" draggable="true" ondragstart="handlePersonDragStart(event, '${escapeHtml(person.id)}')">
+                <span class="person-avatar">${escapeHtml(personInitials(person.name))}</span>
+                <span class="person-name">${escapeHtml(person.name)}</span>
+                ${closeButton}
+                ${deleteButton}
+            </span>`;
+    }
+
+    function renderRoaster() {
+        const board = document.getElementById('roasterBoard');
+        if (!board) return;
+
+        roasterState = normalizeRoasterState(roasterState);
+        const products = roasterProductRows();
+        const people = roasterState.people || [];
+        const rows = products.map(product => {
+            const roleCells = roasterRoles.map(role => {
+                const assigned = getRoasterAssignment(product.id, role.key)
+                    .map(personId => getRoasterPerson(personId))
+                    .filter(Boolean);
+                const chips = assigned.map(person => renderPersonChip(person, {
+                    assigned: true,
+                    removable: true,
+                    removeAction: `removeRoasterAssignment('${escapeHtml(product.id)}', '${escapeHtml(role.key)}', '${escapeHtml(person.id)}')`
+                })).join('');
+
+                return `
+                    <td>
+                        <div class="roaster-dropzone ${assigned.length ? '' : 'is-empty'}"
+                             ondragover="handleRoasterDragOver(event)"
+                             ondrop="handleRoasterDrop(event, '${escapeHtml(product.id)}', '${escapeHtml(role.key)}')">
+                            ${chips || '<span>拖入人员</span>'}
+                        </div>
+                    </td>`;
+            }).join('');
+
+            return `
+                <tr>
+                    <td class="roaster-attr">${escapeHtml(normalizeProductFolder(product))}</td>
+                    <td class="roaster-app-name">${escapeHtml(product.name || '未命名产品')}</td>
+                    ${roleCells}
+                </tr>`;
+        }).join('');
+
+        board.innerHTML = `
+            <div class="roaster-toolbar">
+                <div>
+                    <h2>Roaster</h2>
+                    <p>人员可以从这里拖到下面任意职责格子，同一个格子可以放多个人。</p>
+                </div>
+                <form class="roaster-person-form" onsubmit="addRoasterPerson(event)">
+                    <input id="roasterPersonName" class="text-input" type="text" placeholder="添加人员">
+                    <button class="btn primary" type="submit">添加</button>
+                </form>
+            </div>
+            <div class="roaster-people">
+                ${people.map(person => renderPersonChip(person, {
+                    deleteAction: `deleteRoasterPerson('${escapeHtml(person.id)}')`
+                })).join('')}
+            </div>
+            <div class="roaster-table-wrap">
+                <table class="roaster-table">
+                    <thead>
+                        <tr class="roaster-group-row">
+                            <th></th>
+                            <th></th>
+                            <th colspan="3">负责人</th>
+                            <th colspan="6">执行人</th>
+                        </tr>
+                        <tr>
+                            <th>属性</th>
+                            <th>名称</th>
+                            ${roasterRoles.map(role => `<th>${escapeHtml(role.label)}</th>`).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows || '<tr><td colspan="11" class="roaster-empty-cell">还没有产品，请先在 Slide Show 里新建 App。</td></tr>'}
+                    </tbody>
+                </table>
+            </div>`;
     }
 
     async function persistData(shouldRender = true) {
@@ -492,6 +724,12 @@
 
     function renderApp() {
         renderWorkspaceTool();
+        if (currentWorkspaceTool === 'roaster') {
+            ensureSelection();
+            renderRoaster();
+            return;
+        }
+
         if (currentWorkspaceTool !== 'slideshow') return;
 
         ensureSelection();
@@ -1191,6 +1429,57 @@
         if (!['slideshow', 'roaster'].includes(tool)) return;
         currentWorkspaceTool = tool;
         renderApp();
+    };
+
+    window.handlePersonDragStart = function(event, personId) {
+        event.dataTransfer.setData('text/plain', personId);
+        event.dataTransfer.effectAllowed = 'copy';
+    };
+
+    window.handleRoasterDragOver = function(event) {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'copy';
+    };
+
+    window.handleRoasterDrop = function(event, productId, roleKey) {
+        event.preventDefault();
+        const personId = event.dataTransfer.getData('text/plain');
+        if (!personId || !getRoasterPerson(personId)) return;
+
+        const assigned = getRoasterAssignment(productId, roleKey);
+        if (!assigned.includes(personId)) assigned.push(personId);
+        persistRoasterState(true);
+    };
+
+    window.removeRoasterAssignment = function(productId, roleKey, personId) {
+        const assigned = getRoasterAssignment(productId, roleKey);
+        roasterState.assignments[productId][roleKey] = assigned.filter(id => id !== personId);
+        persistRoasterState(true);
+    };
+
+    window.addRoasterPerson = function(event) {
+        event.preventDefault();
+        const input = document.getElementById('roasterPersonName');
+        const name = input?.value.trim();
+        if (!name) return;
+
+        roasterState.people.push({ id: createPersonId(name), name });
+        if (input) input.value = '';
+        persistRoasterState(true);
+    };
+
+    window.deleteRoasterPerson = function(personId) {
+        const person = getRoasterPerson(personId);
+        if (!person) return;
+        if (!confirm(`确定删除 ${person.name} 吗？这个人会从所有职责格子里移除。`)) return;
+
+        roasterState.people = roasterState.people.filter(item => item.id !== personId);
+        Object.values(roasterState.assignments || {}).forEach(roleMap => {
+            Object.keys(roleMap || {}).forEach(roleKey => {
+                roleMap[roleKey] = (roleMap[roleKey] || []).filter(id => id !== personId);
+            });
+        });
+        persistRoasterState(true);
     };
 
     window.addNewProduct = function() {

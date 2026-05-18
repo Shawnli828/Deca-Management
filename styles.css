@@ -2261,3 +2261,249 @@
             background: #151310 !important;
             color: var(--text) !important;
         }
+
+        .roaster-board {
+            min-height: calc(100vh - 112px);
+            padding: 24px;
+            border-top: 1px solid var(--line);
+            background: #050505;
+        }
+
+        .roaster-toolbar {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 20px;
+            margin-bottom: 16px;
+        }
+
+        .roaster-toolbar h2 {
+            margin: 0;
+            color: var(--text);
+            font-size: 22px;
+            line-height: 1.2;
+        }
+
+        .roaster-toolbar p {
+            margin: 7px 0 0;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .roaster-person-form {
+            display: flex;
+            gap: 10px;
+            min-width: min(420px, 100%);
+        }
+
+        .roaster-person-form .text-input {
+            min-height: 42px;
+        }
+
+        .roaster-people {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 18px;
+            padding: 14px;
+            border: 1px solid var(--line);
+            background: #0d0c0b;
+        }
+
+        .person-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            min-height: 30px;
+            max-width: 100%;
+            padding: 3px 8px 3px 4px;
+            border: 1px solid transparent;
+            border-radius: 999px;
+            background: #e9edf7;
+            color: #161616;
+            font-size: 14px;
+            font-weight: 650;
+            line-height: 1;
+            cursor: grab;
+            user-select: none;
+        }
+
+        .person-chip:active {
+            cursor: grabbing;
+        }
+
+        .person-avatar {
+            display: inline-grid;
+            place-items: center;
+            width: 23px;
+            height: 23px;
+            border-radius: 50%;
+            background: #20a884;
+            color: #ffffff;
+            font-size: 11px;
+            font-weight: 800;
+        }
+
+        .person-name {
+            overflow: hidden;
+            max-width: 108px;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .person-chip.tone-1 .person-avatar {
+            background: #2563eb;
+        }
+
+        .person-chip.tone-2 .person-avatar {
+            background: #7c3aed;
+        }
+
+        .person-chip.tone-3 .person-avatar {
+            background: #c2410c;
+        }
+
+        .person-chip.tone-4 .person-avatar {
+            background: #0f766e;
+        }
+
+        .person-chip.tone-5 .person-avatar {
+            background: #be185d;
+        }
+
+        .person-chip-delete,
+        .person-chip-remove {
+            display: inline-grid;
+            place-items: center;
+            border: 0;
+            background: transparent;
+            color: rgba(0, 0, 0, 0.58);
+            font: inherit;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .person-chip-remove {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            font-size: 16px;
+            line-height: 1;
+        }
+
+        .person-chip-delete:hover,
+        .person-chip-remove:hover {
+            color: #000000;
+        }
+
+        .roaster-table-wrap {
+            overflow: auto;
+            border: 1px solid var(--line);
+            background: #0d0c0b;
+        }
+
+        .roaster-table {
+            width: 100%;
+            min-width: 1320px;
+            border-collapse: collapse;
+            color: var(--text);
+            table-layout: fixed;
+        }
+
+        .roaster-table th,
+        .roaster-table td {
+            border: 1px solid var(--line);
+            padding: 12px;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        .roaster-table thead th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            background: #24211d;
+            color: var(--text);
+            font-size: 14px;
+            font-weight: 680;
+            white-space: nowrap;
+        }
+
+        .roaster-table .roaster-group-row th {
+            background: #151310;
+            text-align: center;
+            color: var(--text);
+            font-size: 15px;
+            font-weight: 750;
+        }
+
+        .roaster-table tbody td {
+            height: 86px;
+            background: #090908;
+        }
+
+        .roaster-table tbody tr:nth-child(even) td {
+            background: #0f0e0c;
+        }
+
+        .roaster-table tbody tr:hover td {
+            background: #151310;
+        }
+
+        .roaster-attr {
+            width: 96px;
+            color: var(--muted);
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .roaster-app-name {
+            width: 150px;
+            font-size: 15px;
+            font-weight: 750;
+            white-space: nowrap;
+        }
+
+        .roaster-dropzone {
+            display: flex;
+            align-content: flex-start;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 8px;
+            min-height: 62px;
+            padding: 2px;
+        }
+
+        .roaster-dropzone.is-empty {
+            align-items: center;
+            color: var(--subtle);
+            font-size: 12px;
+        }
+
+        .roaster-dropzone:hover {
+            outline: 1px solid #555bef;
+            outline-offset: 7px;
+        }
+
+        .assignment-chip {
+            margin: 0;
+        }
+
+        .roaster-empty-cell {
+            height: 160px !important;
+            color: var(--muted);
+            text-align: center !important;
+            vertical-align: middle !important;
+        }
+
+        @media (max-width: 900px) {
+            .roaster-toolbar {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .roaster-person-form {
+                min-width: 0;
+            }
+        }

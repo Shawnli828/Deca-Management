@@ -30,6 +30,7 @@ DATABASE_URL = (
 ).strip()
 STATE_KEY = "product_distribution"
 REELFARM_API_KEY = "reel_farm_api_key"
+ROASTER_STATE_KEY = "roaster_state"
 REELFARM_BASE_URL = "https://reel.farm/api/v1"
 SEED_DATA_PATH = BASE_DIR / "seed_data.json"
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "Deca888").strip()
@@ -279,6 +280,87 @@ def load_data():
         return data
 
     return data if isinstance(data, list) else default_data()
+
+
+def default_roaster_state():
+    return {
+        "people": [
+            {"id": "han", "name": "han"},
+            {"id": "li-zihan", "name": "李梓瞻"},
+            {"id": "ding-lifeng", "name": "丁立峰"},
+            {"id": "wang-hengjia", "name": "王恒加"},
+            {"id": "jj", "name": "JJ"},
+            {"id": "doris", "name": "Doris"},
+            {"id": "mina", "name": "Mina"},
+        ],
+        "assignments": {},
+    }
+
+
+def normalize_roaster_state(value):
+    state = value if isinstance(value, dict) else {}
+    people = state.get("people") if isinstance(state.get("people"), list) else []
+    assignments = state.get("assignments") if isinstance(state.get("assignments"), dict) else {}
+
+    clean_people = []
+    seen = set()
+    for person in people:
+        if not isinstance(person, dict):
+            continue
+        person_id = str(person.get("id") or "").strip()
+        name = str(person.get("name") or "").strip()
+        if not person_id or not name or person_id in seen:
+            continue
+        seen.add(person_id)
+        clean_people.append({"id": person_id, "name": name})
+
+    clean_ids = {person["id"] for person in clean_people}
+    clean_assignments = {}
+    for product_id, role_map in assignments.items():
+        if not isinstance(role_map, dict):
+            continue
+
+        clean_role_map = {}
+        for role_key, person_ids in role_map.items():
+            if not isinstance(person_ids, list):
+                continue
+
+            clean_role_map[str(role_key)] = [
+                str(person_id)
+                for person_id in person_ids
+                if str(person_id) in clean_ids
+            ]
+
+        if clean_role_map:
+            clean_assignments[str(product_id)] = clean_role_map
+
+    return {
+        "people": clean_people or default_roaster_state()["people"],
+        "assignments": clean_assignments,
+    }
+
+
+def load_roaster_state():
+    value = load_app_value(ROASTER_STATE_KEY)
+    if not value:
+        state = default_roaster_state()
+        save_app_value(ROASTER_STATE_KEY, state)
+        return state
+
+    try:
+        state = json.loads(value)
+    except json.JSONDecodeError:
+        state = default_roaster_state()
+        save_app_value(ROASTER_STATE_KEY, state)
+        return state
+
+    return normalize_roaster_state(state)
+
+
+def save_roaster_state(state):
+    clean_state = normalize_roaster_state(state)
+    save_app_value(ROASTER_STATE_KEY, clean_state)
+    return clean_state
 
 
 def reelfarm_api_key():
@@ -704,6 +786,10 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             self.send_json(200, database_snapshot())
             return
 
+        if path == "/api/roaster":
+            self.send_json(200, load_roaster_state())
+            return
+
         if path == "/api/reelfarm/config":
             self.send_json(
                 200,
@@ -812,6 +898,21 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             data = default_data()
             save_data(data)
             self.send_json(200, {"ok": True, "data": data})
+            return
+
+        if path == "/api/roaster":
+            try:
+                payload = self.read_json_body()
+            except json.JSONDecodeError:
+                self.send_json(400, {"error": "Invalid JSON"})
+                return
+
+            state = payload.get("state") if isinstance(payload, dict) else None
+            if not isinstance(state, dict):
+                self.send_json(400, {"error": "Expected { state: {...} }"})
+                return
+
+            self.send_json(200, {"ok": True, "state": save_roaster_state(state)})
             return
 
         if path == "/api/reelfarm/config":
