@@ -517,6 +517,9 @@
         const products = roasterProductRows();
         const people = roasterState.people || [];
         const rows = products.map(product => {
+            const productLogo = product.logo
+                ? `<img src="${escapeHtml(product.logo)}" alt="${escapeHtml(product.name || '产品')} Logo">`
+                : escapeHtml(String(product.name || 'P').slice(0, 1).toUpperCase());
             const roleCells = roasterRoles.map(role => {
                 const assigned = getRoasterAssignment(product.id, role.key)
                     .map(personId => getRoasterPerson(personId))
@@ -540,7 +543,12 @@
             return `
                 <tr>
                     <td class="roaster-attr">${escapeHtml(normalizeProductFolder(product))}</td>
-                    <td class="roaster-app-name">${escapeHtml(product.name || '未命名产品')}</td>
+                    <td class="roaster-product">
+                        <div class="roaster-product-cell">
+                            <span class="roaster-product-logo">${productLogo}</span>
+                            <span class="roaster-app-name">${escapeHtml(product.name || '未命名产品')}</span>
+                        </div>
+                    </td>
                     ${roleCells}
                 </tr>`;
         }).join('');
@@ -572,7 +580,7 @@
                         </tr>
                         <tr>
                             <th>属性</th>
-                            <th>名称</th>
+                            <th>产品</th>
                             ${roasterRoles.map(role => `<th>${escapeHtml(role.label)}</th>`).join('')}
                         </tr>
                     </thead>

@@ -2458,10 +2458,46 @@
             white-space: nowrap;
         }
 
+        .roaster-product {
+            width: 190px;
+        }
+
+        .roaster-product-cell {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 0;
+        }
+
+        .roaster-product-logo {
+            display: inline-grid;
+            flex: 0 0 auto;
+            place-items: center;
+            width: 38px;
+            height: 38px;
+            overflow: hidden;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: #050505;
+            color: var(--text);
+            font-size: 15px;
+            font-weight: 800;
+        }
+
+        .roaster-product-logo img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+        }
+
         .roaster-app-name {
-            width: 150px;
+            overflow: hidden;
+            min-width: 0;
+            color: var(--text);
             font-size: 15px;
             font-weight: 750;
+            text-overflow: ellipsis;
             white-space: nowrap;
         }
 
