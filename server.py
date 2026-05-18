@@ -585,13 +585,29 @@ def reelfarm_matches(prefix):
     return {"prefix": clean_prefix, "count": len(cards), "cards": cards}
 
 
-def reelfarm_posted_count(result):
+def reelfarm_creator_count(result):
     cards = result.get("cards", []) if isinstance(result, dict) else []
-    return sum(
-        len(card.get("posts", []) or [])
-        for card in cards
-        if isinstance(card, dict)
-    )
+    creator_keys = set()
+    for card in cards:
+        if not isinstance(card, dict):
+            continue
+
+        account = card.get("account") if isinstance(card.get("account"), dict) else {}
+        automation = card.get("automation") if isinstance(card.get("automation"), dict) else {}
+        creator_key = str(
+            account.get("tiktok_account_id")
+            or automation.get("tiktok_account_id")
+            or account.get("account_username")
+            or account.get("username")
+            or account.get("account_name")
+            or automation.get("automation_id")
+            or automation.get("title")
+            or ""
+        ).strip()
+        if creator_key:
+            creator_keys.add(creator_key)
+
+    return len(creator_keys)
 
 
 def sync_all_reelfarm_records():
@@ -611,7 +627,7 @@ def sync_all_reelfarm_records():
                     result = reelfarm_matches(prefix)
                     concept["reelFarmResult"] = result
                     concept["reelFarmSyncedAt"] = synced_at
-                    concept["count"] = reelfarm_posted_count(result)
+                    concept["count"] = reelfarm_creator_count(result)
                     successes += 1
                 except RuntimeError as error:
                     errors.append({"prefix": prefix, "error": str(error)})

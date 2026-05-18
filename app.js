@@ -257,17 +257,34 @@
         return (card?.posts || []).filter(isPostInSelectedWindow);
     }
 
-    function getReelFarmPostedCount(result, useSelectedWindow = false) {
-        return (result?.cards || []).reduce((sum, card) => {
-            const posts = useSelectedWindow ? getWindowedPosts(card) : (card?.posts || []);
-            return sum + posts.length;
-        }, 0);
+    function getCreatorKey(card) {
+        const account = card?.account || {};
+        const automation = card?.automation || {};
+        return String(
+            account.tiktok_account_id
+            || automation.tiktok_account_id
+            || account.account_username
+            || account.username
+            || account.account_name
+            || automation.automation_id
+            || automation.title
+            || ''
+        ).trim();
     }
 
-    function getFormatAutoCount(product, country, concept, useSelectedWindow = true) {
+    function getReelFarmCreatorCount(result) {
+        const creatorKeys = new Set();
+        (result?.cards || []).forEach(card => {
+            const key = getCreatorKey(card);
+            if (key) creatorKeys.add(key);
+        });
+        return creatorKeys.size;
+    }
+
+    function getFormatAutoCount(product, country, concept) {
         const prefix = product && country && concept ? buildAutomationPrefix(product, country, concept) : '';
         const result = prefix ? getCachedReelFarmResult(concept, prefix) : null;
-        if (result?.cards) return getReelFarmPostedCount(result, useSelectedWindow);
+        if (result?.cards) return getReelFarmCreatorCount(result);
 
         return Number(concept?.count) || 0;
     }
@@ -308,7 +325,7 @@
 
         concept.reelFarmResult = payload;
         concept.reelFarmSyncedAt = new Date().toLocaleString();
-        concept.count = getReelFarmPostedCount(payload, false);
+        concept.count = getReelFarmCreatorCount(payload);
     }
 
     function findConceptByPrefix(prefix) {
@@ -1181,7 +1198,7 @@
                             onchange="updateFormatName('${concept.id}', this.value)"
                             onblur="updateFormatName('${concept.id}', this.value)">
                     </div>
-                    <div class="number-input number-display" title="同步 ReelFarm 后自动计算 posted 素材数量">${autoCount}</div>
+                    <div class="number-input number-display" title="同步 ReelFarm 后自动计算 Creator / TikTok 账号数量">${autoCount}</div>
                     <button class="delete-btn" type="button" title="删除 Format" onclick="deleteFormat('${concept.id}')">删除</button>
                 </div>
                 ${isOpen ? reelFarmHtml : ''}
