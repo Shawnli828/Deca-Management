@@ -642,6 +642,49 @@ def sync_all_reelfarm_records():
     }
 
 
+def sync_reelfarm_prefix(prefix, product_id="", country_id="", concept_id="", product_code="", country_code=""):
+    clean_prefix = (prefix or "").strip()
+    if not clean_prefix:
+        raise ValueError("Missing automation prefix.")
+
+    data = load_data()
+    synced_at = datetime.now(timezone.utc).isoformat()
+
+    for product in data:
+        for country in product.get("countries", []) or []:
+            for concept in country.get("concepts", []) or []:
+                id_match = (
+                    concept_id
+                    and country_id
+                    and product_id
+                    and str(concept.get("id")) == str(concept_id)
+                    and str(country.get("id")) == str(country_id)
+                    and str(product.get("id")) == str(product_id)
+                )
+                prefix_match = build_automation_prefix(product, country, concept) == clean_prefix
+                if not id_match and not prefix_match:
+                    continue
+
+                if product_code:
+                    product["reelFarmCode"] = str(product_code).strip().upper()
+                if country_code:
+                    country["reelFarmCode"] = str(country_code).strip().upper()
+                result = reelfarm_matches(clean_prefix)
+                concept["reelFarmResult"] = result
+                concept["reelFarmSyncedAt"] = synced_at
+                concept["count"] = reelfarm_creator_count(result)
+                save_data(data)
+                return {
+                    "ok": True,
+                    "prefix": clean_prefix,
+                    "synced_at": synced_at,
+                    "result": result,
+                    "creator_count": concept["count"],
+                }
+
+    raise ValueError("No matching Format found for this prefix.")
+
+
 def cron_authorized(headers):
     secret = os.environ.get("CRON_SECRET", "").strip()
     if not secret:
@@ -962,6 +1005,32 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
                     "base_url": REELFARM_BASE_URL,
                 },
             )
+            return
+
+        if path == "/api/reelfarm/sync-prefix":
+            try:
+                payload = self.read_json_body()
+            except json.JSONDecodeError:
+                self.send_json(400, {"error": "Invalid JSON"})
+                return
+
+            prefix = str(payload.get("prefix", "") if isinstance(payload, dict) else "").strip()
+            try:
+                self.send_json(
+                    200,
+                    sync_reelfarm_prefix(
+                        prefix,
+                        str(payload.get("product_id", "") if isinstance(payload, dict) else "").strip(),
+                        str(payload.get("country_id", "") if isinstance(payload, dict) else "").strip(),
+                        str(payload.get("concept_id", "") if isinstance(payload, dict) else "").strip(),
+                        str(payload.get("product_code", "") if isinstance(payload, dict) else "").strip(),
+                        str(payload.get("country_code", "") if isinstance(payload, dict) else "").strip(),
+                    ),
+                )
+            except ValueError as error:
+                self.send_json(400, {"error": str(error)})
+            except RuntimeError as error:
+                self.send_json(502, {"error": str(error)})
             return
 
         if path == "/api/reelfarm/sync-all":

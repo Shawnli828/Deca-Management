@@ -3,6 +3,7 @@
     const API_DATABASE_URL = '/api/database';
     const API_REELFARM_CONFIG_URL = '/api/reelfarm/config';
     const API_REELFARM_MATCHES_URL = '/api/reelfarm/matches';
+    const API_REELFARM_SYNC_PREFIX_URL = '/api/reelfarm/sync-prefix';
     const API_AUTH_LOGIN_URL = '/api/auth/login';
     const API_AUTH_LOGOUT_URL = '/api/auth/logout';
     const API_ROASTER_URL = '/api/roaster';
@@ -335,6 +336,20 @@
                 for (const concept of country.concepts || []) {
                     if (buildAutomationPrefix(product, country, concept) === prefix) {
                         return concept;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    function findReelFarmContextByPrefix(prefix) {
+        for (const product of dbData) {
+            for (const country of product.countries || []) {
+                for (const concept of country.concepts || []) {
+                    if (buildAutomationPrefix(product, country, concept) === prefix) {
+                        return { product, country, concept };
                     }
                 }
             }
@@ -1810,15 +1825,28 @@
     };
 
     async function fetchAndStoreReelFarmPrefix(prefix) {
-        const response = await fetch(`${API_REELFARM_MATCHES_URL}?prefix=${encodeURIComponent(prefix)}`, { cache: 'no-store' });
+        const context = findReelFarmContextByPrefix(prefix);
+        const response = await fetch(API_REELFARM_SYNC_PREFIX_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                prefix,
+                product_id: context?.product?.id || '',
+                country_id: context?.country?.id || '',
+                concept_id: context?.concept?.id || '',
+                product_code: context?.product ? getProductReelFarmCode(context.product) : '',
+                country_code: context?.country ? getCountryReelFarmCode(context.country) : ''
+            })
+        });
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error || 'Failed to sync ReelFarm data.');
 
-        reelFarmResults[prefix] = payload;
-        const concept = findConceptByPrefix(prefix);
-        storeReelFarmResultOnConcept(concept, payload);
+        const result = payload.result || payload;
+        reelFarmResults[prefix] = result;
+        const concept = context?.concept || findConceptByPrefix(prefix);
+        storeReelFarmResultOnConcept(concept, result);
 
-        return payload;
+        return result;
     }
 
     window.syncReelFarmPrefix = async function(prefix) {
@@ -1839,7 +1867,6 @@
 
         try {
             const payload = await fetchAndStoreReelFarmPrefix(prefix);
-            await persistData(false);
             setStatus(`ReelFarm 已同步：${payload.count} 个 automation`);
         } catch (error) {
             console.error(error);
@@ -1890,7 +1917,6 @@
                     errorCount += 1;
                 }
             }
-            await persistData(false);
             setStatus(`当前区同步完成：${successCount} 个成功${errorCount ? `，${errorCount} 个失败` : ''}`);
         } finally {
             reelFarmLoadingPrefix = '';
