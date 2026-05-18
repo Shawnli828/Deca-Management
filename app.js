@@ -69,6 +69,7 @@
     let countrySearch = '';
     let latestDatabaseSnapshot = null;
     let roasterState = { people: [], assignments: {} };
+    let dirtyCountryCodeIds = new Set();
     let reelFarmConfigured = false;
     let reelFarmResults = {};
     let reelFarmLoadingPrefix = '';
@@ -1126,6 +1127,7 @@
                 <label>
                     <span class="field-label">ReelFarm 国家代码</span>
                     <input class="text-input" value="${escapeHtml(getCountryReelFarmCode(country))}" placeholder="例如 US"
+                        oninput="draftCountryReelFarmCode('${country.id}', this.value)"
                         onchange="updateCountryReelFarmCode('${country.id}', this.value)"
                         onblur="updateCountryReelFarmCode('${country.id}', this.value)">
                 </label>
@@ -1672,11 +1674,22 @@
         if (!country) return;
 
         const nextValue = (value.trim() || countryCodes[country.name] || codeFromName(country.name)).toUpperCase();
-        if (country.reelFarmCode === nextValue) return;
+        if (country.reelFarmCode === nextValue && !dirtyCountryCodeIds.has(countryId)) return;
 
         country.reelFarmCode = nextValue;
+        dirtyCountryCodeIds.delete(countryId);
         reelFarmResults = {};
         saveData();
+    };
+
+    window.draftCountryReelFarmCode = function(countryId, value) {
+        const product = getSelectedProduct();
+        const country = product?.countries?.find(item => item.id === countryId);
+        if (!country) return;
+
+        country.reelFarmCode = value.trim().toUpperCase();
+        dirtyCountryCodeIds.add(countryId);
+        reelFarmResults = {};
     };
 
     window.setReelFarmWindow = function(days) {
