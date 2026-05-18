@@ -37,28 +37,67 @@
         <a href="http://127.0.0.1:8765/">http://127.0.0.1:8765/</a>，不是 file://。
     </div>
 
-    <main class="shell">
-        <header class="topbar">
-            <div>
-                <h1><span class="brand-mark">DECAGROWTH<span class="brand-dot">.</span></span><span class="brand-cn">中台</span></h1>
-                <p class="subtitle">按「产品 → 国家/地区 → 创意」逐层管理，适合大量产品和市场内容。</p>
+    <div class="app-layout">
+        <aside class="side-menu" aria-label="中台菜单">
+            <div class="side-brand">
+                <span class="brand-mark">DG<span class="brand-dot">.</span></span>
+                <span>中台</span>
             </div>
-            <div class="top-actions">
-                <span id="serverStatus" class="status-pill">正在连接数据库...</span>
-                <button class="btn ghost" type="button" onclick="openDatabasePanel()">打开数据库</button>
-                <button class="btn ghost" type="button" onclick="resetDemoData()">恢复示例</button>
-            </div>
-        </header>
+            <nav class="side-nav">
+                <button class="side-nav-btn active" type="button" data-tool-target="slideshow" onclick="setWorkspaceTool('slideshow')">
+                    <span class="side-nav-title">Slide Show</span>
+                    <span class="side-nav-meta">Reel Farm</span>
+                </button>
+                <button class="side-nav-btn" type="button" data-tool-target="roaster" onclick="setWorkspaceTool('roaster')">
+                    <span class="side-nav-title">Roaster</span>
+                    <span class="side-nav-meta">Coming next</span>
+                </button>
+            </nav>
+        </aside>
 
-        <section id="metrics" class="metrics"></section>
+        <main class="shell">
+            <section id="slideshowTool" class="tool-page active">
+                <header class="topbar">
+                    <div>
+                        <h1><span class="brand-mark">DECAGROWTH<span class="brand-dot">.</span></span><span class="brand-cn">中台</span></h1>
+                        <p class="subtitle">Slide Show (Reel Farm) · 按「产品 → 国家/地区 → 创意」逐层管理，适合大量产品和市场内容。</p>
+                    </div>
+                    <div class="top-actions">
+                        <span id="serverStatus" class="status-pill">正在连接数据库...</span>
+                        <button class="btn ghost" type="button" onclick="openDatabasePanel()">打开数据库</button>
+                        <button class="btn ghost" type="button" onclick="resetDemoData()">恢复示例</button>
+                    </div>
+                </header>
 
-        <section class="page-shell">
-            <nav id="breadcrumbs" class="breadcrumbs"></nav>
-            <section id="productsPage" class="page"></section>
-            <section id="productPage" class="page"></section>
-            <section id="countryPage" class="page"></section>
-        </section>
-    </main>
+                <section id="metrics" class="metrics"></section>
+
+                <section class="page-shell">
+                    <nav id="breadcrumbs" class="breadcrumbs"></nav>
+                    <section id="productsPage" class="page"></section>
+                    <section id="productPage" class="page"></section>
+                    <section id="countryPage" class="page"></section>
+                </section>
+            </section>
+
+            <section id="roasterTool" class="tool-page">
+                <header class="topbar">
+                    <div>
+                        <h1>Roaster</h1>
+                        <p class="subtitle">Roaster 模块会放在这里，后面可以继续接产品、账号或内容审核流程。</p>
+                    </div>
+                    <div class="top-actions">
+                        <span class="status-pill">准备中</span>
+                    </div>
+                </header>
+                <section class="roaster-empty">
+                    <div>
+                        <h2>Roaster</h2>
+                        <p>这里先留出独立工作区，不影响 Slide Show (Reel Farm) 的数据和同步。</p>
+                    </div>
+                </section>
+            </section>
+        </main>
+    </div>
 </div>
 
 <div id="databaseModal" class="database-modal" onclick="closeDatabasePanel(event)">

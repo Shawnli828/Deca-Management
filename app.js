@@ -51,6 +51,7 @@
     let selectedProductId = null;
     let selectedCountryId = null;
     let currentPage = 'products';
+    let currentWorkspaceTool = 'slideshow';
     let productSearch = '';
     let countrySearch = '';
     let latestDatabaseSnapshot = null;
@@ -490,10 +491,22 @@
     }
 
     function renderApp() {
+        renderWorkspaceTool();
+        if (currentWorkspaceTool !== 'slideshow') return;
+
         ensureSelection();
         renderMetrics();
         renderBreadcrumbs();
         renderPages();
+    }
+
+    function renderWorkspaceTool() {
+        document.querySelectorAll('.tool-page').forEach(page => page.classList.remove('active'));
+        document.getElementById(`${currentWorkspaceTool}Tool`)?.classList.add('active');
+
+        document.querySelectorAll('[data-tool-target]').forEach(button => {
+            button.classList.toggle('active', button.dataset.toolTarget === currentWorkspaceTool);
+        });
     }
 
     function setActivePage(page) {
@@ -1125,11 +1138,13 @@
     };
 
     window.goProducts = function() {
+        currentWorkspaceTool = 'slideshow';
         currentPage = 'products';
         renderApp();
     };
 
     window.goProduct = function(productId) {
+        currentWorkspaceTool = 'slideshow';
         selectedProductId = productId;
         countrySearch = '';
         ensureSelection();
@@ -1138,6 +1153,7 @@
     };
 
     window.selectProduct = function(productId) {
+        currentWorkspaceTool = 'slideshow';
         selectedProductId = productId;
         countrySearch = '';
         const input = document.getElementById('countrySearch');
@@ -1148,6 +1164,7 @@
     };
 
     window.selectCountry = function(countryId) {
+        currentWorkspaceTool = 'slideshow';
         selectedCountryId = countryId;
         currentPage = 'country';
         renderApp();
@@ -1168,6 +1185,12 @@
             expandedFormats[conceptId] = true;
         }
         renderFormats();
+    };
+
+    window.setWorkspaceTool = function(tool) {
+        if (!['slideshow', 'roaster'].includes(tool)) return;
+        currentWorkspaceTool = tool;
+        renderApp();
     };
 
     window.addNewProduct = function() {
