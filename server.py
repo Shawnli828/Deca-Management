@@ -13,7 +13,7 @@ import time
 import uuid
 import webbrowser
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -1651,6 +1651,487 @@ def database_snapshot():
     }
 
 
+DATA_QUERY_RESOURCES = {
+    "summary",
+    "country_cards",
+    "countries",
+    "accounts",
+    "account_posts",
+    "posts",
+    "materials",
+    "daily_metrics",
+    "top_posts",
+}
+DATA_QUERY_METRICS = {"view_count", "like_count", "comment_count", "share_count", "bookmark_count"}
+
+
+def query_value(query, key, default=""):
+    value = query.get(key, [default])
+    if isinstance(value, list):
+        return str(value[0] if value else default).strip()
+    return str(value or default).strip()
+
+
+def query_limit_offset(query, default=50, max_limit=500):
+    try:
+        limit = int(query_value(query, "limit", default))
+    except ValueError:
+        limit = default
+    try:
+        offset = int(query_value(query, "offset", 0))
+    except ValueError:
+        offset = 0
+    limit = max(1, min(max_limit, limit))
+    offset = max(0, offset)
+    return limit, offset
+
+
+def query_days_window(query):
+    try:
+        days = int(query_value(query, "days", 0))
+    except ValueError:
+        days = 0
+    if days <= 0:
+        return "", ""
+    days = min(days, 366)
+    end = datetime.now(timezone.utc).date()
+    start = end - timedelta(days=days - 1)
+    return start.isoformat(), end.isoformat()
+
+
+def query_filters(query):
+    product_code = query_value(query, "product_code").upper()
+    market_code = (query_value(query, "country_code") or query_value(query, "market_code")).upper()
+    return {
+        "product_code": product_code or None,
+        "country_code": market_code or None,
+        "market_code": market_code or None,
+        "account_id": query_value(query, "account_id") or None,
+        "automation_id": query_value(query, "automation_id") or None,
+        "material_id": query_value(query, "material_id") or None,
+        "post_id": query_value(query, "post_id") or None,
+        "date_from": query_value(query, "date_from") or None,
+        "date_to": query_value(query, "date_to") or None,
+        "days": query_value(query, "days") or None,
+        "metric": query_value(query, "metric") or None,
+        "include": query_value(query, "include") or None,
+    }
+
+
+def compact_filters(filters):
+    return {key: value for key, value in filters.items() if value not in ("", None)}
+
+
+def pagination_payload(limit, offset, rows):
+    return {
+        "limit": limit,
+        "offset": offset,
+        "has_more": len(rows) > limit,
+    }
+
+
+def row_dict(row):
+    return dict(row) if row else {}
+
+
+def common_where(query, date_column="post.published_at", include_post_dates=True):
+    placeholder = db_placeholder()
+    where = ["ch.code = " + placeholder]
+    params = ["TIKTOK"]
+    product_code = query_value(query, "product_code").upper()
+    market_code = (query_value(query, "country_code") or query_value(query, "market_code")).upper()
+    account_id = query_value(query, "account_id")
+    automation_id = query_value(query, "automation_id")
+    material_id = query_value(query, "material_id")
+    post_id = query_value(query, "post_id")
+    date_from = query_value(query, "date_from")
+    date_to = query_value(query, "date_to")
+
+    if product_code:
+        where.append("p.code = " + placeholder)
+        params.append(product_code)
+    if market_code:
+        where.append("m.code = " + placeholder)
+        params.append(market_code)
+    if account_id:
+        where.append(f"(acc.id = {placeholder} OR acc.reelfarm_account_id = {placeholder} OR acc.username = {placeholder})")
+        params.extend([account_id, account_id, account_id.lstrip("@")])
+    if automation_id:
+        where.append(f"(a.id = {placeholder} OR a.reelfarm_automation_id = {placeholder})")
+        params.extend([automation_id, automation_id])
+    if material_id:
+        where.append(f"(mat.id = {placeholder} OR mat.reelfarm_video_id = {placeholder})")
+        params.extend([material_id, material_id])
+    if post_id:
+        where.append(f"(post.id = {placeholder} OR post.reelfarm_post_id = {placeholder})")
+        params.extend([post_id, post_id])
+    if include_post_dates and date_from:
+        where.append(f"{date_column} >= {placeholder}")
+        params.append(date_from)
+    if include_post_dates and date_to:
+        where.append(f"{date_column} <= {placeholder}")
+        params.append(date_to)
+
+    return " AND ".join(where), params
+
+
+def relational_base_from():
+    return """
+        FROM products p
+        JOIN product_markets pm ON pm.product_id = p.id
+        JOIN markets m ON m.id = pm.market_id
+        JOIN product_market_channels pmc ON pmc.product_market_id = pm.id
+        JOIN channels ch ON ch.id = pmc.channel_id
+        LEFT JOIN automations a ON a.product_market_channel_id = pmc.id
+        LEFT JOIN accounts acc ON acc.id = a.account_id
+        LEFT JOIN materials mat ON mat.automation_id = a.id
+        LEFT JOIN posts post ON post.material_id = mat.id
+    """
+
+
+def query_summary(query):
+    where_sql, params = common_where(query)
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        row = conn.execute(
+            f"""
+            SELECT
+                COUNT(DISTINCT p.id) AS products,
+                COUNT(DISTINCT m.id) AS countries,
+                COUNT(DISTINCT acc.id) AS accounts,
+                COUNT(DISTINCT a.id) AS automations,
+                COUNT(DISTINCT mat.id) AS materials,
+                COUNT(DISTINCT post.id) AS posts,
+                COALESCE(SUM(post.view_count), 0) AS total_views,
+                COALESCE(SUM(post.like_count), 0) AS total_likes,
+                COALESCE(SUM(post.comment_count), 0) AS total_comments,
+                COALESCE(SUM(post.share_count), 0) AS total_shares,
+                COALESCE(SUM(post.bookmark_count), 0) AS total_bookmarks,
+                MAX(COALESCE(post.synced_at, mat.synced_at, a.synced_at)) AS last_synced_at
+            {relational_base_from()}
+            WHERE {where_sql}
+            """,
+            tuple(params),
+        ).fetchone()
+    return row_dict(row)
+
+
+def query_country_cards(query):
+    product_code = query_value(query, "product_code").upper()
+    country_code = (query_value(query, "country_code") or query_value(query, "market_code")).upper()
+    return stored_reelfarm_country(product_code, country_code)
+
+
+def query_countries(query):
+    where_sql, params = common_where(query, include_post_dates=False)
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        rows = conn.execute(
+            f"""
+            SELECT
+                p.id AS product_id,
+                p.code AS product_code,
+                p.name AS product_name,
+                m.id AS market_id,
+                m.id AS country_id,
+                m.code AS market_code,
+                m.code AS country_code,
+                m.name AS country_name,
+                COUNT(DISTINCT acc.id) AS creator_count,
+                COUNT(DISTINCT a.id) AS automation_count,
+                COUNT(DISTINCT mat.id) AS material_count,
+                COUNT(DISTINCT post.id) AS post_count,
+                COALESCE(SUM(post.view_count), 0) AS total_views,
+                COALESCE(SUM(post.like_count), 0) AS total_likes,
+                COALESCE(SUM(post.comment_count), 0) AS total_comments,
+                COALESCE(SUM(post.share_count), 0) AS total_shares,
+                COALESCE(SUM(post.bookmark_count), 0) AS total_bookmarks,
+                MAX(COALESCE(post.synced_at, mat.synced_at, a.synced_at)) AS last_synced_at
+            {relational_base_from()}
+            WHERE {where_sql}
+            GROUP BY p.id, p.code, p.name, m.id, m.code, m.name
+            ORDER BY p.name, m.code
+            """,
+            tuple(params),
+        ).fetchall()
+    return [row_dict(row) for row in rows]
+
+
+def query_accounts(query):
+    where_sql, params = common_where(query, include_post_dates=False)
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        rows = conn.execute(
+            f"""
+            SELECT
+                acc.id AS account_id,
+                acc.reelfarm_account_id,
+                acc.username,
+                acc.display_name,
+                acc.avatar_url,
+                acc.status,
+                COUNT(DISTINCT a.id) AS automation_count,
+                COUNT(DISTINCT mat.id) AS material_count,
+                COUNT(DISTINCT post.id) AS post_count,
+                COALESCE(SUM(post.view_count), 0) AS total_views,
+                COALESCE(SUM(post.like_count), 0) AS total_likes,
+                COALESCE(SUM(post.comment_count), 0) AS total_comments,
+                COALESCE(SUM(post.share_count), 0) AS total_shares,
+                COALESCE(SUM(post.bookmark_count), 0) AS total_bookmarks,
+                MAX(post.published_at) AS latest_post_at,
+                MAX(COALESCE(post.synced_at, mat.synced_at, a.synced_at)) AS last_synced_at
+            {relational_base_from()}
+            WHERE {where_sql} AND acc.id IS NOT NULL
+            GROUP BY acc.id, acc.reelfarm_account_id, acc.username, acc.display_name, acc.avatar_url, acc.status
+            ORDER BY total_views DESC, post_count DESC
+            """,
+            tuple(params),
+        ).fetchall()
+    return [row_dict(row) for row in rows]
+
+
+def detailed_select():
+    return """
+        p.id AS product_id,
+        p.code AS product_code,
+        p.name AS product_name,
+        m.id AS market_id,
+        m.code AS market_code,
+        m.name AS market_name,
+        acc.id AS account_id,
+        acc.reelfarm_account_id,
+        acc.username AS account_username,
+        acc.display_name AS account_display_name,
+        acc.avatar_url AS account_avatar_url,
+        acc.status AS account_status,
+        a.id AS automation_id,
+        a.reelfarm_automation_id,
+        a.name AS automation_name,
+        a.status AS automation_status,
+        a.schedule AS automation_schedule,
+        mat.id AS material_id,
+        mat.reelfarm_video_id,
+        mat.video_type,
+        mat.hook,
+        mat.prompt,
+        mat.images_json,
+        mat.slide_count,
+        mat.status AS material_status,
+        mat.created_at AS material_created_at,
+        mat.finished_at AS material_finished_at,
+        post.id AS post_id,
+        post.reelfarm_post_id,
+        post.status AS post_status,
+        post.title AS post_title,
+        post.published_at,
+        post.published_at_readable,
+        post.view_count,
+        post.like_count,
+        post.comment_count,
+        post.share_count,
+        post.bookmark_count,
+        post.synced_at AS post_synced_at
+    """
+
+
+def detailed_row(row):
+    data = row_dict(row)
+    return {
+        "product": {"id": data.get("product_id"), "code": data.get("product_code"), "name": data.get("product_name")},
+        "country": {"id": data.get("market_id"), "code": data.get("market_code"), "name": data.get("market_name")},
+        "market": {"id": data.get("market_id"), "code": data.get("market_code"), "name": data.get("market_name")},
+        "account": {
+            "id": data.get("account_id"),
+            "reelfarm_account_id": data.get("reelfarm_account_id"),
+            "username": data.get("account_username"),
+            "display_name": data.get("account_display_name"),
+            "avatar_url": data.get("account_avatar_url"),
+            "status": data.get("account_status"),
+        },
+        "automation": {
+            "id": data.get("automation_id"),
+            "reelfarm_automation_id": data.get("reelfarm_automation_id"),
+            "name": data.get("automation_name"),
+            "status": data.get("automation_status"),
+            "schedule": parse_json_list(data.get("automation_schedule")),
+        },
+        "material": {
+            "id": data.get("material_id"),
+            "reelfarm_video_id": data.get("reelfarm_video_id"),
+            "video_type": data.get("video_type"),
+            "hook": data.get("hook"),
+            "prompt": data.get("prompt"),
+            "slideshow_images": parse_json_list(data.get("images_json")),
+            "slide_count": data.get("slide_count"),
+            "status": data.get("material_status"),
+            "created_at": data.get("material_created_at"),
+            "finished_at": data.get("material_finished_at"),
+        },
+        "post": {
+            "id": data.get("post_id"),
+            "reelfarm_post_id": data.get("reelfarm_post_id"),
+            "status": data.get("post_status"),
+            "title": data.get("post_title"),
+            "published_at": data.get("published_at"),
+            "published_at_readable": data.get("published_at_readable"),
+            "synced_at": data.get("post_synced_at"),
+        },
+        "metrics": {
+            "view_count": data.get("view_count"),
+            "like_count": data.get("like_count"),
+            "comment_count": data.get("comment_count"),
+            "share_count": data.get("share_count"),
+            "bookmark_count": data.get("bookmark_count"),
+        },
+    }
+
+
+def query_posts(query, top_metric=""):
+    max_limit = 100 if top_metric else 500
+    limit, offset = query_limit_offset(query, max_limit=max_limit)
+    where_sql, params = common_where(query)
+    order_sql = f"post.{top_metric} DESC, post.published_at DESC" if top_metric else "post.published_at DESC"
+    placeholder = db_placeholder()
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        rows = conn.execute(
+            f"""
+            SELECT {detailed_select()}
+            {relational_base_from()}
+            WHERE {where_sql} AND post.id IS NOT NULL
+            ORDER BY {order_sql}
+            LIMIT {placeholder} OFFSET {placeholder}
+            """,
+            tuple(params + [limit + 1, offset]),
+        ).fetchall()
+    return [detailed_row(row) for row in rows], pagination_payload(limit, offset, rows)
+
+
+def query_materials(query):
+    limit, offset = query_limit_offset(query)
+    where_sql, params = common_where(query)
+    placeholder = db_placeholder()
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        rows = conn.execute(
+            f"""
+            SELECT {detailed_select()}
+            {relational_base_from()}
+            WHERE {where_sql} AND mat.id IS NOT NULL
+            ORDER BY mat.created_at DESC, post.published_at DESC
+            LIMIT {placeholder} OFFSET {placeholder}
+            """,
+            tuple(params + [limit + 1, offset]),
+        ).fetchall()
+    return [detailed_row(row) for row in rows], pagination_payload(limit, offset, rows)
+
+
+def query_daily_metrics(query):
+    filters = query_filters(query)
+    if not filters.get("date_from") and not filters.get("date_to"):
+        date_from, date_to = query_days_window(query)
+        filters["date_from"] = date_from or filters.get("date_from")
+        filters["date_to"] = date_to or filters.get("date_to")
+
+    placeholder = db_placeholder()
+    where_sql, params = common_where(query, date_column="snap.snapshot_date", include_post_dates=False)
+    if filters.get("date_from"):
+        where_sql += f" AND snap.snapshot_date >= {placeholder}"
+        params.append(filters["date_from"])
+    if filters.get("date_to"):
+        where_sql += f" AND snap.snapshot_date <= {placeholder}"
+        params.append(filters["date_to"])
+
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        rows = conn.execute(
+            f"""
+            SELECT
+                snap.snapshot_date,
+                COUNT(DISTINCT post.id) AS post_count,
+                COALESCE(SUM(snap.view_count), 0) AS views,
+                COALESCE(SUM(snap.like_count), 0) AS likes,
+                COALESCE(SUM(snap.comment_count), 0) AS comments,
+                COALESCE(SUM(snap.share_count), 0) AS shares,
+                COALESCE(SUM(snap.bookmark_count), 0) AS bookmarks
+            FROM post_daily_snapshots snap
+            JOIN posts post ON post.id = snap.post_id
+            JOIN materials mat ON mat.id = post.material_id
+            JOIN automations a ON a.id = mat.automation_id
+            LEFT JOIN accounts acc ON acc.id = post.account_id
+            JOIN product_market_channels pmc ON pmc.id = a.product_market_channel_id
+            JOIN product_markets pm ON pm.id = pmc.product_market_id
+            JOIN products p ON p.id = pm.product_id
+            JOIN markets m ON m.id = pm.market_id
+            JOIN channels ch ON ch.id = pmc.channel_id
+            WHERE {where_sql}
+            GROUP BY snap.snapshot_date
+            ORDER BY snap.snapshot_date
+            """,
+            tuple(params),
+        ).fetchall()
+
+    data = [row_dict(row) for row in rows]
+    previous = None
+    for row in data:
+        if previous:
+            row["deltas"] = {
+                "views": int(row.get("views") or 0) - int(previous.get("views") or 0),
+                "likes": int(row.get("likes") or 0) - int(previous.get("likes") or 0),
+                "comments": int(row.get("comments") or 0) - int(previous.get("comments") or 0),
+                "shares": int(row.get("shares") or 0) - int(previous.get("shares") or 0),
+                "bookmarks": int(row.get("bookmarks") or 0) - int(previous.get("bookmarks") or 0),
+            }
+        else:
+            row["deltas"] = None
+        previous = row
+    return data
+
+
+def data_query_payload(query):
+    resource = query_value(query, "resource").lower()
+    if resource not in DATA_QUERY_RESOURCES:
+        raise ValueError("Unsupported or missing resource.")
+
+    filters = compact_filters(query_filters(query))
+    response = {
+        "ok": True,
+        "resource": resource,
+        "filters": filters,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    if resource == "summary":
+        response["data"] = query_summary(query)
+    elif resource == "country_cards":
+        response["data"] = query_country_cards(query)
+    elif resource == "countries":
+        response["data"] = query_countries(query)
+    elif resource == "accounts":
+        response["data"] = query_accounts(query)
+    elif resource in {"posts", "account_posts"}:
+        rows, pagination = query_posts(query)
+        response["data"] = rows[: pagination["limit"]]
+        response["pagination"] = pagination
+    elif resource == "materials":
+        rows, pagination = query_materials(query)
+        response["data"] = rows[: pagination["limit"]]
+        response["pagination"] = pagination
+    elif resource == "daily_metrics":
+        response["data"] = query_daily_metrics(query)
+    elif resource == "top_posts":
+        metric = query_value(query, "metric", "view_count")
+        if metric not in DATA_QUERY_METRICS:
+            raise ValueError("Unsupported metric.")
+        filters["metric"] = metric
+        rows, pagination = query_posts(query, top_metric=metric)
+        response["filters"] = filters
+        response["data"] = rows[: pagination["limit"]]
+        response["pagination"] = pagination
+
+    return response
+
+
 def ai_materials_payload(query):
     product_filter = (query.get("product_code", [""])[0] or "").strip().upper()
     country_filter = (query.get("country_code", [""])[0] or "").strip().upper()
@@ -1839,6 +2320,8 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             return False
         if path == "/api/ai/materials" and self.ai_authorized():
             return False
+        if path == "/api/data/query" and self.ai_authorized():
+            return False
         return True
 
     def do_GET(self):
@@ -1889,6 +2372,14 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
         if path == "/api/ai/materials":
             query = parse_qs(urlparse(self.path).query)
             self.send_json(200, ai_materials_payload(query))
+            return
+
+        if path == "/api/data/query":
+            query = parse_qs(urlparse(self.path).query)
+            try:
+                self.send_json(200, data_query_payload(query))
+            except ValueError as error:
+                self.send_json(400, {"ok": False, "error": str(error)})
             return
 
         if path == "/api/roaster":

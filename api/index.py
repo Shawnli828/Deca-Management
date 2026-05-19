@@ -16,6 +16,7 @@ from server import (
     create_external_api_key,
     cron_authorized,
     database_snapshot,
+    data_query_payload,
     default_data,
     connect_db,
     external_api_key_authorized,
@@ -103,8 +104,17 @@ def require_materials_api_key(authorization: str | None) -> None:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
+def require_data_query_auth(request: Request, authorization: str | None) -> None:
+    if authenticated(request):
+        return
+    token = bearer_token(authorization)
+    if external_api_key_authorized(token, "materials:read"):
+        return
+    raise HTTPException(status_code=401, detail="Unauthorized")
+
+
 def json_error(status_code: int, message: str) -> JSONResponse:
-    return JSONResponse(status_code=status_code, content={"error": message})
+    return JSONResponse(status_code=status_code, content={"ok": False, "error": message})
 
 
 def static_file_response(asset_path: str):
@@ -273,6 +283,15 @@ def post_api_keys_revoke(request: Request, payload: dict[str, Any] = Body(defaul
 def get_ai_materials(request: Request, authorization: str | None = Header(default=None)):
     require_materials_api_key(authorization)
     return ai_materials_payload(query_as_lists(request))
+
+
+@app.get("/api/data/query")
+def get_data_query(request: Request, authorization: str | None = Header(default=None)):
+    require_data_query_auth(request, authorization)
+    try:
+        return data_query_payload(query_as_lists(request))
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @app.get("/api/reelfarm/matches")
