@@ -80,6 +80,7 @@
     let reelFarmConfigured = false;
     let reelFarmResults = {};
     let reelFarmAccountPostLoading = {};
+    let reelFarmAccountPostCache = {};
     let reelFarmLoadingPrefix = '';
     let materialSlideIndexes = {};
     let expandedTopics = {};
@@ -281,7 +282,7 @@
     }
 
     function getWindowedPosts(card) {
-        return (card?.posts || []).filter(isPostInSelectedWindow);
+        return card?.posts || [];
     }
 
     function hasVisibleReelFarmCard(card) {
@@ -445,7 +446,7 @@
                 latest_post_at: row.latest_post_at,
                 last_synced_at: row.last_synced_at
             },
-            pagination: { limit: 50, offset: 0, has_more: Number(row.post_count) > 50 },
+            pagination: { limit: 4, offset: 0, has_more: Number(row.post_count) > 4 },
             errors: { videos: null, posts: null }
         };
     }
@@ -1544,10 +1545,10 @@
         const videos = card.videos || [];
         const summary = card.summary_metrics || {};
         const hasLoadedPosts = (card.posts || []).length > 0;
-        const views = hasLoadedPosts ? getMetricFromPosts(posts, 'view_count') : (Number(summary.total_views) || 0);
-        const likes = hasLoadedPosts ? getMetricFromPosts(posts, 'like_count') : (Number(summary.total_likes) || 0);
-        const comments = hasLoadedPosts ? getMetricFromPosts(posts, 'comment_count') : (Number(summary.total_comments) || 0);
-        const shares = hasLoadedPosts ? getMetricFromPosts(posts, 'share_count') : (Number(summary.total_shares) || 0);
+        const views = Number(summary.total_views) || (hasLoadedPosts ? getMetricFromPosts(posts, 'view_count') : 0);
+        const likes = Number(summary.total_likes) || (hasLoadedPosts ? getMetricFromPosts(posts, 'like_count') : 0);
+        const comments = Number(summary.total_comments) || (hasLoadedPosts ? getMetricFromPosts(posts, 'comment_count') : 0);
+        const shares = Number(summary.total_shares) || (hasLoadedPosts ? getMetricFromPosts(posts, 'share_count') : 0);
         const engagement = views > 0 ? ((likes + comments + shares) / views) * 100 : 0;
         const postsByVideo = new Map(posts.map(post => [String(post.video_id), post]));
         const slideshows = videos.filter(video => {
@@ -1555,8 +1556,8 @@
             return isSlideshow && postsByVideo.has(String(video.video_id));
         });
         const title = automation.title || automation.automation_id || 'Untitled automation';
-        const displayPostCount = hasLoadedPosts ? posts.length : (Number(summary.post_count) || 0);
-        const displaySlideCount = hasLoadedPosts ? slideshows.length : (Number(summary.material_count) || Number(card.video_total) || 0);
+        const displayPostCount = Number(summary.post_count) || (hasLoadedPosts ? posts.length : 0);
+        const displaySlideCount = Number(summary.material_count) || Number(card.video_total) || (hasLoadedPosts ? slideshows.length : 0);
         const statRows = [
             ['Posts', formatNumber(displayPostCount)],
             ['Slides', formatNumber(displaySlideCount)],
@@ -1566,10 +1567,10 @@
             ['Shares', formatNumber(shares)],
             ['Engagement', formatPercent(engagement)]
         ];
-        const pageSize = 4;
-        const totalPages = Math.max(1, Math.ceil(slideshows.length / pageSize));
-        const page = Math.min(getMaterialPage(cardKey), totalPages - 1);
-        const pageItems = slideshows.slice(page * pageSize, page * pageSize + pageSize);
+        const pageSize = Number(card.pagination?.limit) || 4;
+        const page = Math.max(0, Math.floor((Number(card.pagination?.offset) || 0) / pageSize));
+        const totalPages = Math.max(1, page + (card.pagination?.has_more ? 2 : 1));
+        const pageItems = slideshows;
         const isLoadingPosts = Boolean(reelFarmAccountPostLoading[cardKey]);
 
         return `
@@ -1607,21 +1608,17 @@
                             ? pageItems.map(video => renderMaterialItem(video, postsByVideo.get(String(video.video_id)), accountName, avatar)).join('')
                             : '<div class="item-meta" style="color:#bfb7ad;">暂无素材数据</div>'}
                     </div>
-                    ${slideshows.length > pageSize ? `
+                    ${(card.pagination && (page > 0 || card.pagination.has_more)) ? `
                         <div class="post-pager">
                             <span>${page + 1}/${totalPages}</span>
                             <div class="post-pager-controls">
                                 <button class="post-page-btn" type="button" data-card="${escapeHtml(cardKey)}" ${page === 0 ? 'disabled' : ''} onclick="moveMaterialPage(this.dataset.card, -1)">Previous</button>
-                                <button class="post-page-btn" type="button" data-card="${escapeHtml(cardKey)}" ${page >= totalPages - 1 ? 'disabled' : ''} onclick="moveMaterialPage(this.dataset.card, 1)">Next</button>
+                                <button class="post-page-btn" type="button" data-card="${escapeHtml(cardKey)}" ${card.pagination.has_more ? '' : 'disabled'} onclick="moveMaterialPage(this.dataset.card, 1)">Next</button>
                             </div>
                         </div>` : ''}
                     ${card.errors?.videos || card.errors?.posts
                         ? `<div class="item-meta" style="padding:0 14px 14px; color:#bfb7ad;">${escapeHtml(card.errors.videos || card.errors.posts)}</div>`
                         : ''}
-                    ${card.pagination?.has_more ? `
-                        <div class="post-pager">
-                            <button class="post-page-btn" type="button" data-card="${escapeHtml(cardKey)}" onclick="loadMoreAccountPosts(this.dataset.card)">Load more</button>
-                        </div>` : ''}
                 ` : ''}
             </article>`;
     }
@@ -1730,6 +1727,10 @@
         currentWorkspaceTool = 'slideshow';
         selectedCountryId = countryId;
         currentPage = 'country';
+        reelFarmResults = {};
+        reelFarmAccountPostCache = {};
+        reelFarmAccountPostLoading = {};
+        materialPageIndexes = {};
         renderApp();
         loadStoredReelFarmCountry(getSelectedProduct(), getSelectedCountry());
     };
@@ -1976,6 +1977,13 @@
         reelFarmWindowDays = nextDays;
         localStorage.setItem(REELFARM_WINDOW_KEY, String(nextDays));
         materialPageIndexes = {};
+        reelFarmResults = {};
+        reelFarmAccountPostCache = {};
+        const product = getSelectedProduct();
+        const country = getSelectedCountry();
+        if (currentPage === 'country' && product && country) {
+            loadStoredReelFarmCountry(product, country, true);
+        }
         renderFormats();
     };
 
@@ -2122,6 +2130,9 @@
         country.reelFarmSyncedAt = new Date().toLocaleString();
         country.creatorCount = Number(payload.creator_count) || 0;
         country.materialCount = Number(payload.material_count) || 0;
+        reelFarmResults = {};
+        reelFarmAccountPostCache = {};
+        reelFarmAccountPostLoading = {};
 
         const stored = await loadStoredReelFarmCountry(product, country, true);
         return stored || payload;
@@ -2138,7 +2149,7 @@
         try {
             reelFarmResults[prefix] = { prefix, count: 0, cards: [], loading: true };
             renderFormats();
-            const params = countryQueryParams(product, country, { resource: 'accounts' });
+            const params = countryQueryParams(product, country, { resource: 'accounts', days: reelFarmWindowDays });
             const response = await fetch(`${API_DATA_QUERY_URL}?${params.toString()}`, { cache: 'no-store' });
             const payload = await readJsonResponse(response, 'Failed to load account summaries.');
             const cards = (payload.data || []).map(accountSummaryToCard);
@@ -2163,15 +2174,34 @@
         return null;
     }
 
-    async function loadAccountPosts(cardKey, append = false) {
+    function accountPostCacheKey(product, country, card, offset) {
+        const account = card?.account || {};
+        return [
+            getProductReelFarmCode(product),
+            getCountryReelFarmCode(country),
+            account.id || account.account_id || account.reelfarm_account_id || account.tiktok_account_id || account.username || account.account_username || '',
+            reelFarmWindowDays,
+            offset
+        ].join('|');
+    }
+
+    async function loadAccountPosts(cardKey, offset = 0) {
         const product = getSelectedProduct();
         const country = getSelectedCountry();
         const card = findCardByKey(cardKey);
         if (!product || !country || !card || window.location.protocol === 'file:') return;
-        if (!append && card.posts?.length) return;
 
         const account = card.account || {};
-        const offset = append ? (card.posts || []).length : 0;
+        const pageOffset = Math.max(0, Number(offset) || 0);
+        const cacheKey = accountPostCacheKey(product, country, card, pageOffset);
+        const cached = reelFarmAccountPostCache[cacheKey];
+        if (cached) {
+            detailedRowsToCardPayload(card, cached.data || [], false);
+            card.pagination = cached.pagination || { limit: 4, offset: pageOffset, has_more: false };
+            renderFormats();
+            return;
+        }
+
         reelFarmAccountPostLoading[cardKey] = true;
         renderFormats();
 
@@ -2179,16 +2209,18 @@
             const params = countryQueryParams(product, country, {
                 resource: 'account_posts',
                 account_id: account.id || account.account_id || account.reelfarm_account_id || account.tiktok_account_id || account.username || account.account_username || '',
-                limit: 50,
-                offset
+                days: reelFarmWindowDays,
+                limit: 4,
+                offset: pageOffset
             });
             const response = await fetch(`${API_DATA_QUERY_URL}?${params.toString()}`, { cache: 'no-store' });
             const payload = await readJsonResponse(response, 'Failed to load account posts.');
-            detailedRowsToCardPayload(card, payload.data || [], append);
-            card.pagination = payload.pagination || { limit: 50, offset: 0, has_more: false };
-            if (append && card.pagination) {
-                card.pagination.offset = offset;
-            }
+            reelFarmAccountPostCache[cacheKey] = {
+                data: payload.data || [],
+                pagination: payload.pagination || { limit: 4, offset: pageOffset, has_more: false }
+            };
+            detailedRowsToCardPayload(card, payload.data || [], false);
+            card.pagination = payload.pagination || { limit: 4, offset: pageOffset, has_more: false };
             card.errors = { videos: null, posts: null };
         } catch (error) {
             console.error(error);
@@ -2274,19 +2306,17 @@
             delete expandedReelFarmCards[cardKey];
         } else {
             expandedReelFarmCards[cardKey] = true;
-            loadAccountPosts(cardKey);
+            loadAccountPosts(cardKey, 0);
         }
         renderFormats();
     };
 
-    window.loadMoreAccountPosts = function(cardKey) {
-        loadAccountPosts(cardKey, true);
-    };
-
     window.moveMaterialPage = function(cardKey, direction) {
-        const current = getMaterialPage(cardKey);
-        materialPageIndexes[cardKey] = Math.max(0, current + direction);
-        renderFormats();
+        const card = findCardByKey(cardKey);
+        const limit = Number(card?.pagination?.limit) || 4;
+        const currentOffset = Number(card?.pagination?.offset) || 0;
+        const nextOffset = Math.max(0, currentOffset + (Number(direction) || 0) * limit);
+        loadAccountPosts(cardKey, nextOffset);
     };
 
     window.refreshAllReelFarm = async function() {

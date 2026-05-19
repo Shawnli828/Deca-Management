@@ -1699,6 +1699,15 @@ def query_days_window(query):
     return start.isoformat(), end.isoformat()
 
 
+def post_datetime_bound(value, end=False):
+    clean = str(value or "").strip()
+    if not clean:
+        return ""
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", clean):
+        return f"{clean}T23:59:59.999999+00:00" if end else f"{clean}T00:00:00+00:00"
+    return clean
+
+
 def query_filters(query):
     product_code = query_value(query, "product_code").upper()
     market_code = (query_value(query, "country_code") or query_value(query, "market_code")).upper()
@@ -1746,6 +1755,8 @@ def common_where(query, date_column="post.published_at", include_post_dates=True
     post_id = query_value(query, "post_id")
     date_from = query_value(query, "date_from")
     date_to = query_value(query, "date_to")
+    if include_post_dates and not date_from and not date_to:
+        date_from, date_to = query_days_window(query)
 
     if product_code:
         where.append("p.code = " + placeholder)
@@ -1767,10 +1778,10 @@ def common_where(query, date_column="post.published_at", include_post_dates=True
         params.extend([post_id, post_id])
     if include_post_dates and date_from:
         where.append(f"{date_column} >= {placeholder}")
-        params.append(date_from)
+        params.append(post_datetime_bound(date_from))
     if include_post_dates and date_to:
         where.append(f"{date_column} <= {placeholder}")
-        params.append(date_to)
+        params.append(post_datetime_bound(date_to, end=True))
 
     return " AND ".join(where), params
 
@@ -1858,7 +1869,7 @@ def query_countries(query):
 
 
 def query_accounts(query):
-    where_sql, params = common_where(query, include_post_dates=False)
+    where_sql, params = common_where(query, include_post_dates=True)
     with connect_db() as conn:
         init_relational_schema(conn)
         rows = conn.execute(
