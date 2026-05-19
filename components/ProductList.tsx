@@ -26,9 +26,9 @@ export function ProductList({ products, onSelect }: { products: Product[]; onSel
             {items.map(product => (
               <button className="product-card" type="button" key={product.id} onClick={() => onSelect(product)}>
                 <span className="product-logo">{product.logo ? <img src={product.logo} alt="" /> : product.name?.slice(0, 1)}</span>
-                <span>
-                  <strong>{product.name}</strong>{' '}
-                  <span>{product.countries?.length || 0} 个国家/地区</span>
+                <span className="product-card-copy">
+                  <strong className="product-card-name">{product.name || '未命名产品'}</strong>
+                  <span className="product-card-meta">{product.countries?.length || 0} 个国家/地区</span>
                 </span>
               </button>
             ))}

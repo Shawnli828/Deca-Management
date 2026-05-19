@@ -2,7 +2,7 @@
 
 import type { Product, RoasterState } from '@/lib/types';
 import { createPersonId, normalizeProductFolder } from '@/lib/utils';
-import { FormEvent, useState } from 'react';
+import { DragEvent, FormEvent, useMemo, useState } from 'react';
 
 const roles = [
   { key: 'leader', label: 'Leader', group: '负责人' },
@@ -18,6 +18,7 @@ const roles = [
 
 export function RoasterBoard({ products, state, onChange }: { products: Product[]; state: RoasterState; onChange: (state: RoasterState) => void }) {
   const [name, setName] = useState('');
+  const peopleById = useMemo(() => new Map(state.people.map(person => [person.id, person])), [state.people]);
 
   function addPerson(event: FormEvent) {
     event.preventDefault();
@@ -27,12 +28,49 @@ export function RoasterBoard({ products, state, onChange }: { products: Product[
     setName('');
   }
 
-  function toggle(productId: string, role: string, personId: string) {
+  function assign(productId: string, role: string, personId: string) {
+    if (!peopleById.has(personId)) return;
     const assignments = { ...state.assignments };
     assignments[productId] = { ...(assignments[productId] || {}) };
     const current = assignments[productId][role] || [];
-    assignments[productId][role] = current.includes(personId) ? current.filter(id => id !== personId) : [...current, personId];
+    if (current.includes(personId)) return;
+    assignments[productId][role] = [...current, personId];
     onChange({ ...state, assignments });
+  }
+
+  function unassign(productId: string, role: string, personId: string) {
+    const assignments = { ...state.assignments };
+    assignments[productId] = { ...(assignments[productId] || {}) };
+    assignments[productId][role] = (assignments[productId][role] || []).filter(id => id !== personId);
+    onChange({ ...state, assignments });
+  }
+
+  function removePerson(personId: string) {
+    const assignments: RoasterState['assignments'] = {};
+    Object.entries(state.assignments || {}).forEach(([productId, roleMap]) => {
+      assignments[productId] = {};
+      Object.entries(roleMap || {}).forEach(([role, personIds]) => {
+        assignments[productId][role] = personIds.filter(id => id !== personId);
+      });
+    });
+    onChange({ people: state.people.filter(person => person.id !== personId), assignments });
+  }
+
+  function handleDragStart(event: DragEvent<HTMLSpanElement>, personId: string) {
+    event.dataTransfer.effectAllowed = 'copy';
+    event.dataTransfer.setData('application/x-deca-person-id', personId);
+    event.dataTransfer.setData('text/plain', personId);
+  }
+
+  function handleDrop(event: DragEvent<HTMLDivElement>, productId: string, role: string) {
+    event.preventDefault();
+    const personId = event.dataTransfer.getData('application/x-deca-person-id') || event.dataTransfer.getData('text/plain');
+    assign(productId, role, personId);
+  }
+
+  function toneFor(personId: string) {
+    const seed = personId.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
+    return `tone-${(seed % 5) + 1}`;
   }
 
   return (
@@ -44,10 +82,27 @@ export function RoasterBoard({ products, state, onChange }: { products: Product[
         </form>
       </div>
       <div className="roaster-people">
-        {state.people.map(person => <span className="person-chip" key={person.id}>{person.name}</span>)}
+        {state.people.length ? state.people.map(person => (
+          <span
+            className={`person-chip ${toneFor(person.id)}`}
+            draggable
+            key={person.id}
+            onDragStart={event => handleDragStart(event, person.id)}
+            title="拖到角色格子里分配"
+          >
+            <span className="person-avatar">{person.name.slice(0, 1).toUpperCase()}</span>
+            <span className="person-name">{person.name}</span>
+            <button className="person-chip-delete" type="button" onClick={() => removePerson(person.id)} aria-label={`删除 ${person.name}`}>×</button>
+          </span>
+        )) : <span className="roaster-empty-people">先添加人员，再拖入下面的角色格子。</span>}
       </div>
       <div className="roaster-table-wrap">
         <table className="roaster-table">
+          <colgroup>
+            <col className="roaster-col-attr" />
+            <col className="roaster-col-product" />
+            {roles.map(role => <col className="roaster-col-role" key={role.key} />)}
+          </colgroup>
           <thead>
             <tr className="roaster-group-row">
               <th></th>
@@ -68,12 +123,21 @@ export function RoasterBoard({ products, state, onChange }: { products: Product[
                 <td className="roaster-product"><div className="roaster-product-cell"><span className="roaster-product-logo">{product.logo ? <img src={product.logo} alt="" /> : product.name?.slice(0, 1)}</span><span className="roaster-app-name">{product.name}</span></div></td>
                 {roles.map(role => {
                   const assigned = state.assignments?.[product.id]?.[role.key] || [];
+                  const assignedPeople = assigned.map(personId => peopleById.get(personId)).filter(Boolean) as Array<{ id: string; name: string }>;
                   return (
                     <td key={role.key}>
-                      <div className={`roaster-dropzone ${assigned.length ? '' : 'is-empty'}`}>
-                        {state.people.map(person => (
-                          <button type="button" className={`person-chip ${assigned.includes(person.id) ? 'active' : ''}`} key={person.id} onClick={() => toggle(product.id, role.key, person.id)}>{person.name}</button>
-                        ))}
+                      <div
+                        className={`roaster-dropzone ${assignedPeople.length ? '' : 'is-empty'}`}
+                        onDragOver={event => event.preventDefault()}
+                        onDrop={event => handleDrop(event, product.id, role.key)}
+                      >
+                        {assignedPeople.length ? assignedPeople.map(person => (
+                          <span className={`person-chip assignment-chip ${toneFor(person.id)}`} key={person.id}>
+                            <span className="person-avatar">{person.name.slice(0, 1).toUpperCase()}</span>
+                            <span className="person-name">{person.name}</span>
+                            <button className="person-chip-remove" type="button" onClick={() => unassign(product.id, role.key, person.id)} aria-label={`移除 ${person.name}`}>×</button>
+                          </span>
+                        )) : <span className="roaster-empty-cell-label">拖入人员</span>}
                       </div>
                     </td>
                   );

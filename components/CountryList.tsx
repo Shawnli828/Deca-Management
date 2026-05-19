@@ -19,11 +19,11 @@ export function CountryList({ product, onBack, onSelect }: { product: Product; o
       </div>
       <div className="country-list">
         {(product.countries || []).map(country => (
-          <button className="list-item" type="button" key={country.id} onClick={() => onSelect(country)}>
+          <button className="list-item country-list-item" type="button" key={country.id} onClick={() => onSelect(country)}>
             <span className="country-code">{getCountryReelFarmCode(country)}</span>
-            <span>
-              <strong>{country.name}</strong>
-              <span>{country.creatorCount || 0} 个账号 · {country.materialCount || 0} 个素材</span>
+            <span className="country-copy">
+              <strong className="country-name">{country.name || '未命名地区'}</strong>
+              <span className="country-meta">{country.creatorCount || 0} 个账号 · {country.materialCount || 0} 个素材</span>
             </span>
           </button>
         ))}
