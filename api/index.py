@@ -2,11 +2,12 @@ from typing import Any
 
 from fastapi import Body, FastAPI, Header, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from server import (
     ADMIN_PASSWORD_HASH,
     ADMIN_USERNAME,
+    BASE_DIR,
     REELFARM_BASE_URL,
     SESSION_COOKIE,
     SESSION_TTL_SECONDS,
@@ -61,8 +62,9 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.middleware("http")
 async def rewrite_vercel_route(request: Request, call_next):
     routed_path = request.query_params.get("path")
-    if request.scope.get("path", "").endswith("/api/index.py") and routed_path:
-        request.scope["path"] = f"/api/{routed_path.strip('/')}"
+    if request.scope.get("path", "").endswith("/api/index.py") and routed_path is not None:
+        clean_path = routed_path.strip("/")
+        request.scope["path"] = f"/{clean_path}" if clean_path else "/"
         request.scope["raw_path"] = request.scope["path"].encode("utf-8")
     return await call_next(request)
 
@@ -99,6 +101,26 @@ def require_materials_api_key(authorization: str | None) -> None:
 
 def json_error(status_code: int, message: str) -> JSONResponse:
     return JSONResponse(status_code=status_code, content={"error": message})
+
+
+def static_file_response(asset_path: str):
+    clean_path = asset_path.strip("/") or "index.html"
+    requested = (BASE_DIR / clean_path).resolve()
+    if BASE_DIR not in requested.parents and requested != BASE_DIR:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if not requested.is_file():
+        raise HTTPException(status_code=404, detail="Not found")
+    return FileResponse(requested, headers={"Cache-Control": "no-store"})
+
+
+@app.get("/")
+def root_page():
+    return static_file_response("index.html")
+
+
+@app.get("/index.html")
+def index_page():
+    return static_file_response("index.html")
 
 
 @app.get("/api/health")
@@ -292,3 +314,8 @@ def reelfarm_sync_all(request: Request):
         return sync_all_reelfarm_records()
     except RuntimeError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@app.get("/{asset_path:path}")
+def static_assets(asset_path: str):
+    return static_file_response(asset_path)
