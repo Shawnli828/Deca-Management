@@ -98,15 +98,15 @@
     <section class="database-panel" role="dialog" aria-modal="true" aria-labelledby="databaseTitle">
         <header class="database-header">
             <div>
-                <h2 id="databaseTitle" class="database-title">SQLite 数据库</h2>
-                <p id="databaseSubtitle" class="database-subtitle">正在读取数据库...</p>
+                <h2 id="databaseTitle" class="database-title">数据库与外部 API</h2>
+                <p id="databaseSubtitle" class="database-subtitle">不会自动读取完整数据库，需要时可手动加载。</p>
             </div>
             <button class="icon-btn" type="button" onclick="closeDatabasePanel()" title="关闭">×</button>
         </header>
         <div class="database-body">
             <div id="databaseStats" class="database-stats"></div>
             <div class="database-actions">
-                <button class="btn ghost" type="button" onclick="openDatabasePanel()">刷新数据库视图</button>
+                <button class="btn ghost" type="button" onclick="refreshDatabasePanel()">读取数据库视图</button>
                 <button class="btn ghost" type="button" onclick="copyDatabaseJson()">复制 JSON</button>
             </div>
             <section class="api-key-panel">
@@ -123,7 +123,7 @@
                 <div id="generatedApiKey" class="generated-api-key"></div>
                 <div id="apiKeyList" class="api-key-list"></div>
             </section>
-            <pre id="databaseJson" class="database-json">正在读取...</pre>
+            <pre id="databaseJson" class="database-json">数据库 JSON 暂未加载。</pre>
         </div>
     </section>
 </div>

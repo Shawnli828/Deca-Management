@@ -2147,12 +2147,23 @@
         const json = document.getElementById('databaseJson');
 
         modal.classList.add('is-open');
+        subtitle.textContent = '不会自动读取完整数据库，需要时可手动加载。';
+        stats.innerHTML = '';
+        json.textContent = '数据库 JSON 暂未加载。';
+        latestDatabaseSnapshot = null;
+        document.getElementById('generatedApiKey').innerHTML = '';
+        loadExternalApiKeys();
+        setStatus('数据库面板已打开');
+    };
+
+    window.refreshDatabasePanel = async function() {
+        const subtitle = document.getElementById('databaseSubtitle');
+        const stats = document.getElementById('databaseStats');
+        const json = document.getElementById('databaseJson');
+
         subtitle.textContent = '正在读取数据库...';
         stats.innerHTML = '';
         json.textContent = '正在读取...';
-        document.getElementById('generatedApiKey').innerHTML = '';
-        loadExternalApiKeys();
-
         try {
             const response = await fetch(API_DATABASE_URL, { cache: 'no-store' });
             if (!response.ok) throw new Error('Failed to open database.');
