@@ -241,7 +241,7 @@
     }
 
     function getPostTimestamp(post) {
-        const value = post?.published_at || '';
+        const value = post?.published_at_meta || post?.published_at || '';
         const timestamp = Date.parse(value);
         return Number.isNaN(timestamp) ? null : timestamp;
     }
@@ -1368,6 +1368,7 @@
         const title = video.hook || post?.title || video.prompt_preview || video.video_id || video.id || 'Slideshow';
         const images = Array.isArray(video.slideshow_images) ? video.slideshow_images : [];
         const imageCount = video.slide_count || images.length;
+        const publishedReadable = post?.published_at_readable || post?.published_at || '';
         const meta = [
             imageCount ? `${imageCount} slides` : '',
             video.finished_at || video.created_at || ''
@@ -1403,7 +1404,7 @@
                         </div>`).join('')}
                 </div>
                 <div class="slideshow-footer">
-                    <span>${post?.published_at ? `Published ${escapeHtml(post.published_at)}` : '暂无 TikTok 发布数据'}</span>
+                    <span>${publishedReadable ? `Published ${escapeHtml(publishedReadable)}` : '暂无 TikTok 发布数据'}</span>
                     <span>${escapeHtml(video.status || '')}</span>
                 </div>
             </div>`;

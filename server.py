@@ -457,14 +457,32 @@ def compact_video(video):
     }
 
 
+def readable_utc_datetime(value):
+    raw_value = str(value or "").strip()
+    if not raw_value:
+        return ""
+
+    try:
+        parsed = datetime.fromisoformat(raw_value.replace("Z", "+00:00"))
+    except ValueError:
+        return raw_value
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).strftime("%Y/%m/%d %H:%M UTC")
+
+
 def compact_post(post):
+    published_at = post.get("published_at")
     return {
         "post_id": post.get("post_id"),
         "video_id": post.get("video_id"),
         "status": post.get("status") or post.get("post_status"),
         "title": post.get("title"),
         "account_username": post.get("account_username"),
-        "published_at": post.get("published_at"),
+        "published_at": published_at,
+        "published_at_meta": published_at,
+        "published_at_readable": readable_utc_datetime(published_at),
         "view_count": post.get("view_count"),
         "like_count": post.get("like_count"),
         "comment_count": post.get("comment_count"),
