@@ -229,6 +229,18 @@
         return `${number.toFixed(1)}%`;
     }
 
+    function formatUtcReadable(value) {
+        const date = new Date(value || '');
+        if (Number.isNaN(date.getTime())) return value || '';
+
+        const year = date.getUTCFullYear();
+        const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(date.getUTCDate()).padStart(2, '0');
+        const hours = String(date.getUTCHours()).padStart(2, '0');
+        const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+        return `${year}/${month}/${day} ${hours}:${minutes} UTC`;
+    }
+
     function formatSchedule(value) {
         if (Array.isArray(value)) {
             return value
@@ -1368,11 +1380,8 @@
         const title = video.hook || post?.title || video.prompt_preview || video.video_id || video.id || 'Slideshow';
         const images = Array.isArray(video.slideshow_images) ? video.slideshow_images : [];
         const imageCount = video.slide_count || images.length;
-        const publishedReadable = post?.published_at_readable || post?.published_at || '';
-        const meta = [
-            imageCount ? `${imageCount} slides` : '',
-            video.finished_at || video.created_at || ''
-        ].filter(Boolean).join(' · ');
+        const publishedReadable = post?.published_at_readable || formatUtcReadable(post?.published_at_meta || post?.published_at || '');
+        const meta = imageCount ? `${imageCount} slides` : '';
         const displayAccount = String(accountName || '').startsWith('@') ? accountName : `@${accountName || 'unknown'}`;
         const dataRows = [
             ['Views', post?.view_count],
