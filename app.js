@@ -338,10 +338,6 @@
         const liveResult = reelFarmResults[prefix];
         if (liveResult) return liveResult;
 
-        if (concept?.reelFarmResult?.prefix === prefix) {
-            return concept.reelFarmResult;
-        }
-
         return null;
     }
 
@@ -349,17 +345,12 @@
         const liveResult = reelFarmResults[prefix];
         if (liveResult) return liveResult;
 
-        if (country?.reelFarmResult?.prefix === prefix) {
-            return country.reelFarmResult;
-        }
-
         return null;
     }
 
     function storeReelFarmResultOnConcept(concept, payload) {
         if (!concept) return;
 
-        concept.reelFarmResult = payload;
         concept.reelFarmSyncedAt = new Date().toLocaleString();
         concept.count = getReelFarmCreatorCount(payload);
     }
@@ -371,7 +362,6 @@
     function storeReelFarmResultOnCountry(country, payload) {
         if (!country) return;
 
-        country.reelFarmResult = payload;
         country.reelFarmSyncedAt = new Date().toLocaleString();
         country.creatorCount = getReelFarmCreatorCount(payload);
         country.materialCount = getReelFarmMaterialCount(payload);
@@ -1246,7 +1236,7 @@
                     <div>
                         <span class="automation-prefix">${escapeHtml(prefix)}</span>
                         <div class="item-meta">国家/地区素材池 · 暂不按 Topic / Format 分类</div>
-                        ${country.reelFarmSyncedAt && country.reelFarmResult?.prefix === prefix
+                        ${country.reelFarmSyncedAt
                             ? `<div class="item-meta">上次同步：${escapeHtml(country.reelFarmSyncedAt)}</div>`
                             : ''}
                     </div>
@@ -1356,7 +1346,7 @@
                     <div>
                         <span class="automation-prefix">${escapeHtml(prefix)}</span>
                         <div class="item-meta">${escapeHtml(concept.group || '默认 Topic')} · ${escapeHtml(concept.name || 'Format')}</div>
-                        ${concept.reelFarmSyncedAt && concept.reelFarmResult?.prefix === prefix
+                        ${concept.reelFarmSyncedAt
                             ? `<div class="item-meta">上次同步：${escapeHtml(concept.reelFarmSyncedAt)}</div>`
                             : ''}
                     </div>
@@ -1932,12 +1922,7 @@
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error || 'Failed to sync ReelFarm data.');
 
-        const result = payload.result || payload;
-        reelFarmResults[prefix] = result;
-        const concept = context?.concept || findConceptByPrefix(prefix);
-        storeReelFarmResultOnConcept(concept, result);
-
-        return result;
+        return payload;
     }
 
     async function fetchAndStoreReelFarmCountry(product, country) {
@@ -1956,18 +1941,20 @@
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error || 'Failed to sync ReelFarm country data.');
 
-        const result = payload.result || payload;
-        reelFarmResults[prefix] = result;
-        storeReelFarmResultOnCountry(country, result);
-        return result;
+        country.reelFarmSyncedAt = new Date().toLocaleString();
+        country.creatorCount = Number(payload.creator_count) || 0;
+        country.materialCount = Number(payload.material_count) || 0;
+
+        const stored = await loadStoredReelFarmCountry(product, country);
+        return stored || payload;
     }
 
     async function loadStoredReelFarmCountry(product, country) {
         if (!product || !country || window.location.protocol === 'file:') return null;
 
         const prefix = buildCountryAutomationPrefix(product, country);
-        if (reelFarmResults[prefix] || country.reelFarmResult?.prefix === prefix) {
-            return reelFarmResults[prefix] || country.reelFarmResult;
+        if (reelFarmResults[prefix]) {
+            return reelFarmResults[prefix];
         }
 
         try {

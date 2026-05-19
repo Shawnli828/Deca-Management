@@ -1407,13 +1407,14 @@ def sync_all_reelfarm_records():
             prefix = build_country_automation_prefix(product, country)
             try:
                 result = reelfarm_matches(prefix)
-                country["reelFarmResult"] = result
                 country["reelFarmSyncedAt"] = synced_at
                 country["creatorCount"] = reelfarm_creator_count(result)
                 country["materialCount"] = reelfarm_material_count(result)
+                scoped_country = dict(country)
+                scoped_country["reelFarmResult"] = result
                 relational_projection = project_synced_country_to_relational(
                     product,
-                    country,
+                    scoped_country,
                 )
                 successes += 1
             except RuntimeError as error:
@@ -1456,17 +1457,17 @@ def sync_reelfarm_country(prefix, product_id="", country_id="", product_code="",
                 country["reelFarmCode"] = str(country_code).strip().upper()
 
             result = reelfarm_matches(clean_prefix)
-            country["reelFarmResult"] = result
             country["reelFarmSyncedAt"] = synced_at
             country["creatorCount"] = reelfarm_creator_count(result)
             country["materialCount"] = reelfarm_material_count(result)
-            relational_projection = project_synced_country_to_relational(product, country)
+            scoped_country = dict(country)
+            scoped_country["reelFarmResult"] = result
+            relational_projection = project_synced_country_to_relational(product, scoped_country)
             save_data(data)
             return {
                 "ok": True,
                 "prefix": clean_prefix,
                 "synced_at": synced_at,
-                "result": result,
                 "creator_count": country["creatorCount"],
                 "material_count": country["materialCount"],
                 "relational_projection": relational_projection,
@@ -1503,7 +1504,6 @@ def sync_reelfarm_prefix(prefix, product_id="", country_id="", concept_id="", pr
                 if country_code:
                     country["reelFarmCode"] = str(country_code).strip().upper()
                 result = reelfarm_matches(clean_prefix)
-                concept["reelFarmResult"] = result
                 concept["reelFarmSyncedAt"] = synced_at
                 concept["count"] = reelfarm_creator_count(result)
                 save_data(data)
@@ -1511,7 +1511,6 @@ def sync_reelfarm_prefix(prefix, product_id="", country_id="", concept_id="", pr
                     "ok": True,
                     "prefix": clean_prefix,
                     "synced_at": synced_at,
-                    "result": result,
                     "creator_count": concept["count"],
                 }
 
