@@ -146,25 +146,7 @@
         }
 
         .auth-hero {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) 78px;
-            gap: 12px;
-            align-items: center;
-        }
-
-        .auth-copy {
-            min-width: 0;
-        }
-
-        .auth-gif {
-            width: 78px;
-            height: 78px;
-            align-self: center;
-            justify-self: end;
-            border: 1px solid #302d28;
-            object-fit: cover;
-            object-position: center;
-            background: #050505;
+            display: block;
         }
 
         .auth-kicker {
@@ -234,16 +216,6 @@
         @media (max-width: 620px) {
             .auth-card {
                 width: min(420px, 100%);
-            }
-
-            .auth-hero {
-                grid-template-columns: minmax(0, 1fr) 64px;
-                gap: 10px;
-            }
-
-            .auth-gif {
-                width: 64px;
-                height: 64px;
             }
         }
 
