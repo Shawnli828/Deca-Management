@@ -1,0 +1,363 @@
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import { AuthGate } from '@/components/AuthGate';
+import { CountryList } from '@/components/CountryList';
+import { CountryWorkspace } from '@/components/CountryWorkspace';
+import { DatabaseModal } from '@/components/DatabaseModal';
+import { MetricsBar } from '@/components/MetricsBar';
+import { ProductList } from '@/components/ProductList';
+import { RoasterBoard } from '@/components/RoasterBoard';
+import { SideMenu } from '@/components/SideMenu';
+import { accountSummaryToCard, api, mergePostRowsIntoCard } from '@/lib/api';
+import type { Country, DatabaseSnapshot, ExternalApiKey, Product, ReelFarmResult, RoasterState } from '@/lib/types';
+import { buildCountryAutomationPrefix, cardStateKey, getCountryReelFarmCode, getProductReelFarmCode } from '@/lib/utils';
+
+const defaultRoaster: RoasterState = {
+  people: [
+    { id: 'han', name: 'han' },
+    { id: 'li-zihan', name: '李梓瞻' },
+    { id: 'ding-lifeng', name: '丁立峰' },
+    { id: 'wang-hengjia', name: '王恒加' },
+    { id: 'jj', name: 'JJ' },
+    { id: 'doris', name: 'Doris' },
+    { id: 'mina', name: 'Mina' }
+  ],
+  assignments: {}
+};
+
+export default function DashboardPage() {
+  const [authenticated, setAuthenticated] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [tool, setTool] = useState<'slideshow' | 'roaster'>('slideshow');
+  const [page, setPage] = useState<'products' | 'product' | 'country'>('products');
+  const [selectedProductId, setSelectedProductId] = useState('');
+  const [selectedCountryId, setSelectedCountryId] = useState('');
+  const [status, setStatus] = useState('正在连接数据库...');
+  const [statusError, setStatusError] = useState(false);
+  const [days, setDays] = useState(30);
+  const [reelFarmResults, setReelFarmResults] = useState<Record<string, ReelFarmResult>>({});
+  const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
+  const [postLoading, setPostLoading] = useState<Record<string, boolean>>({});
+  const [postCache, setPostCache] = useState<Record<string, { data: any[]; pagination: { limit: number; offset: number; has_more: boolean } }>>({});
+  const [slideIndexes, setSlideIndexes] = useState<Record<string, number>>({});
+  const [syncPrefix, setSyncPrefix] = useState('');
+  const [roaster, setRoaster] = useState<RoasterState>(defaultRoaster);
+  const [databaseOpen, setDatabaseOpen] = useState(false);
+  const [snapshot, setSnapshot] = useState<DatabaseSnapshot | null>(null);
+  const [apiKeys, setApiKeys] = useState<ExternalApiKey[]>([]);
+  const [generatedKey, setGeneratedKey] = useState('');
+
+  const selectedProduct = useMemo(() => products.find(product => product.id === selectedProductId) || products[0] || null, [products, selectedProductId]);
+  const selectedCountry = useMemo(() => selectedProduct?.countries?.find(country => country.id === selectedCountryId) || selectedProduct?.countries?.[0] || null, [selectedProduct, selectedCountryId]);
+  const currentPrefix = selectedProduct && selectedCountry ? buildCountryAutomationPrefix(selectedProduct, selectedCountry) : '';
+
+  useEffect(() => {
+    document.title = 'DECAGROWTH中台';
+    api.logout().catch(() => {});
+  }, []);
+
+  async function loadApp() {
+    const payload = await api.data();
+    const data = Array.isArray(payload.data) ? payload.data : [];
+    setProducts(data);
+    setSelectedProductId(data[0]?.id || '');
+    setSelectedCountryId(data[0]?.countries?.[0]?.id || '');
+    setStatus('已连接数据库');
+    setStatusError(false);
+    try {
+      setRoaster(await api.roaster());
+    } catch {
+      setRoaster(defaultRoaster);
+    }
+  }
+
+  async function login(username: string, password: string) {
+    await api.login(username, password);
+    setAuthenticated(true);
+    await loadApp();
+  }
+
+  async function saveProducts(nextProducts: Product[]) {
+    setProducts(nextProducts);
+    try {
+      const payload = await api.saveData(nextProducts);
+      setProducts(payload.data || nextProducts);
+      setStatus('已保存到数据库');
+      setStatusError(false);
+    } catch {
+      setStatus('保存失败');
+      setStatusError(true);
+    }
+  }
+
+  async function loadAccounts(product = selectedProduct, country = selectedCountry, force = false) {
+    if (!product || !country) return;
+    const prefix = buildCountryAutomationPrefix(product, country);
+    if (!force && reelFarmResults[prefix]) return;
+
+    setReelFarmResults(prev => ({ ...prev, [prefix]: { prefix, count: 0, cards: [], loading: true } }));
+    try {
+      const payload = await api.accounts(getProductReelFarmCode(product), getCountryReelFarmCode(country), days);
+      const cards = (payload.data || []).map(accountSummaryToCard);
+      setReelFarmResults(prev => ({ ...prev, [prefix]: { prefix, count: cards.length, cards } }));
+    } catch (error: any) {
+      setReelFarmResults(prev => ({ ...prev, [prefix]: { prefix, count: 0, cards: [], error: error?.message || '账号数据加载失败' } }));
+    }
+  }
+
+  useEffect(() => {
+    if (authenticated && page === 'country') {
+      loadAccounts(selectedProduct, selectedCountry, false);
+    }
+  }, [authenticated, page, selectedProductId, selectedCountryId]);
+
+  function selectProduct(product: Product) {
+    setSelectedProductId(product.id);
+    setSelectedCountryId(product.countries?.[0]?.id || '');
+    setPage('product');
+  }
+
+  function selectCountry(country: Country) {
+    setSelectedCountryId(country.id);
+    setPage('country');
+    setReelFarmResults({});
+    setPostCache({});
+    setPostLoading({});
+    setExpandedCards({});
+    setSlideIndexes({});
+  }
+
+  function changeDays(nextDays: number) {
+    if (![7, 14, 30].includes(nextDays)) return;
+    setDays(nextDays);
+    setReelFarmResults({});
+    setPostCache({});
+    setExpandedCards({});
+    setSlideIndexes({});
+    setTimeout(() => loadAccounts(selectedProduct, selectedCountry, true), 0);
+  }
+
+  function findCard(cardKey: string) {
+    for (const result of Object.values(reelFarmResults)) {
+      const card = result.cards.find(item => cardStateKey(item) === cardKey);
+      if (card) return card;
+    }
+    return null;
+  }
+
+  async function loadPosts(cardKey: string, offset = 0) {
+    const product = selectedProduct;
+    const country = selectedCountry;
+    const card = findCard(cardKey);
+    if (!product || !country || !card) return;
+    const account = card.account || {};
+    const accountId = account.id || account.account_id || account.reelfarm_account_id || account.tiktok_account_id || account.username || account.account_username || '';
+    const cacheKey = [getProductReelFarmCode(product), getCountryReelFarmCode(country), accountId, days, offset].join('|');
+    const cached = postCache[cacheKey];
+
+    function updateCard(data: any[], pagination: { limit: number; offset: number; has_more: boolean }) {
+      const prefix = buildCountryAutomationPrefix(product, country);
+      setReelFarmResults(prev => {
+        const result = prev[prefix];
+        if (!result) return prev;
+        const cards = result.cards.map(item => {
+          if (cardStateKey(item) !== cardKey) return item;
+          const clone = structuredClone(item);
+          mergePostRowsIntoCard(clone, data);
+          clone.pagination = pagination;
+          return clone;
+        });
+        return { ...prev, [prefix]: { ...result, cards } };
+      });
+    }
+
+    if (cached) {
+      updateCard(cached.data, cached.pagination);
+      return;
+    }
+
+    setPostLoading(prev => ({ ...prev, [cardKey]: true }));
+    try {
+      const payload = await api.accountPosts(getProductReelFarmCode(product), getCountryReelFarmCode(country), String(accountId), days, 4, offset);
+      const pagination = payload.pagination || { limit: 4, offset, has_more: false };
+      setPostCache(prev => ({ ...prev, [cacheKey]: { data: payload.data || [], pagination } }));
+      updateCard(payload.data || [], pagination);
+    } catch (error: any) {
+      setReelFarmResults(prev => {
+        const prefix = buildCountryAutomationPrefix(product, country);
+        const result = prev[prefix];
+        if (!result) return prev;
+        const cards = result.cards.map(item => cardStateKey(item) === cardKey ? { ...item, errors: { videos: null, posts: error?.message || 'Posts loading failed.' } } : item);
+        return { ...prev, [prefix]: { ...result, cards } };
+      });
+    } finally {
+      setPostLoading(prev => {
+        const next = { ...prev };
+        delete next[cardKey];
+        return next;
+      });
+    }
+  }
+
+  function toggleCard(cardKey: string) {
+    setExpandedCards(prev => {
+      const next = { ...prev, [cardKey]: !prev[cardKey] };
+      if (next[cardKey]) loadPosts(cardKey, 0);
+      return next;
+    });
+  }
+
+  function pagePosts(cardKey: string, direction: number) {
+    const card = findCard(cardKey);
+    const limit = Number(card?.pagination?.limit) || 4;
+    const offset = Number(card?.pagination?.offset) || 0;
+    loadPosts(cardKey, Math.max(0, offset + direction * limit));
+  }
+
+  function moveSlide(videoId: string, direction: number, total: number) {
+    setSlideIndexes(prev => ({ ...prev, [videoId]: ((prev[videoId] || 0) + direction + total) % total }));
+  }
+
+  async function syncCountry() {
+    if (!selectedProduct || !selectedCountry) return;
+    const prefix = buildCountryAutomationPrefix(selectedProduct, selectedCountry);
+    setSyncPrefix(`country:${selectedCountry.id}`);
+    try {
+      const payload = await api.syncCountry({
+        prefix,
+        product_id: selectedProduct.id,
+        country_id: selectedCountry.id,
+        product_code: getProductReelFarmCode(selectedProduct),
+        country_code: getCountryReelFarmCode(selectedCountry)
+      });
+      setPostCache({});
+      setExpandedCards({});
+      await loadAccounts(selectedProduct, selectedCountry, true);
+      setStatus(`当前区同步完成：${payload.creator_count} 个账号，${payload.material_count} 个素材`);
+      setStatusError(false);
+    } catch (error: any) {
+      setStatus(error?.message || 'ReelFarm 同步失败');
+      setStatusError(true);
+    } finally {
+      setSyncPrefix('');
+    }
+  }
+
+  async function saveRoaster(next: RoasterState) {
+    setRoaster(next);
+    try {
+      const payload = await api.saveRoaster(next);
+      setRoaster(payload.state);
+      setStatus('Roaster 已保存');
+      setStatusError(false);
+    } catch {
+      setStatus('Roaster 保存失败');
+      setStatusError(true);
+    }
+  }
+
+  async function openDatabase() {
+    setDatabaseOpen(true);
+    setGeneratedKey('');
+    const payload = await api.apiKeys();
+    setApiKeys(payload.keys || []);
+  }
+
+  async function refreshDatabase() {
+    setSnapshot(await api.database());
+  }
+
+  async function createKey(name: string) {
+    const payload = await api.createApiKey(name);
+    setGeneratedKey(payload.key);
+    const keys = await api.apiKeys();
+    setApiKeys(keys.keys || []);
+  }
+
+  async function revokeKey(id: string) {
+    if (!confirm('确定要停用这个 API Key 吗？停用后外部 AI 将无法继续使用它。')) return;
+    await api.revokeApiKey(id);
+    const keys = await api.apiKeys();
+    setApiKeys(keys.keys || []);
+  }
+
+  async function copy(value: string) {
+    await navigator.clipboard.writeText(value);
+    setStatus('已复制');
+    setStatusError(false);
+  }
+
+  if (!authenticated) return <AuthGate onLogin={login} />;
+
+  return (
+    <div className="app">
+      <div className="app-layout">
+        <SideMenu tool={tool} setTool={setTool} />
+        <main className="shell">
+          <section className={`tool-page ${tool === 'slideshow' ? 'active' : ''}`}>
+            <header className="topbar">
+              <div>
+                <h1><span className="brand-mark">DECAGROWTH<span className="brand-dot">.</span></span><span className="brand-cn">中台</span></h1>
+                <p className="subtitle">Slide Show (Reel Farm) · 按「产品 → 国家/地区 → 创意」逐层管理，适合大量产品和市场内容。</p>
+              </div>
+              <div className="top-actions">
+                <span className={`status-pill ${statusError ? 'error' : ''}`}>{status}</span>
+                <button className="btn ghost" type="button" onClick={openDatabase}>打开数据库</button>
+                <button className="btn ghost" type="button" onClick={async () => {
+                  const payload = await api.reset();
+                  setProducts(payload.data || []);
+                  setPage('products');
+                }}>恢复示例</button>
+              </div>
+            </header>
+            <MetricsBar products={products} />
+            <section className="page-shell">
+              {page === 'products' ? <ProductList products={products} onSelect={selectProduct} /> : null}
+              {page === 'product' && selectedProduct ? <CountryList product={selectedProduct} onBack={() => setPage('products')} onSelect={selectCountry} /> : null}
+              {page === 'country' && selectedProduct && selectedCountry ? (
+                <CountryWorkspace
+                  product={selectedProduct}
+                  country={selectedCountry}
+                  result={reelFarmResults[currentPrefix]}
+                  days={days}
+                  loadingPrefix={syncPrefix}
+                  expandedCards={expandedCards}
+                  postLoading={postLoading}
+                  slideIndexes={slideIndexes}
+                  onBack={() => setPage('product')}
+                  onDays={changeDays}
+                  onSync={syncCountry}
+                  onToggleCard={toggleCard}
+                  onPage={pagePosts}
+                  onMoveSlide={moveSlide}
+                />
+              ) : null}
+            </section>
+          </section>
+          <section className={`tool-page ${tool === 'roaster' ? 'active' : ''}`}>
+            <header className="topbar">
+              <div>
+                <h1>Roaster</h1>
+                <p className="subtitle">按 App 管理负责人和执行人，把人员拖进对应职责格子即可。</p>
+              </div>
+              <div className="top-actions"><span className="status-pill">团队排班</span></div>
+            </header>
+            <RoasterBoard products={products} state={roaster} onChange={saveRoaster} />
+          </section>
+        </main>
+      </div>
+      <DatabaseModal
+        open={databaseOpen}
+        snapshot={snapshot}
+        keys={apiKeys}
+        generatedKey={generatedKey}
+        onClose={() => setDatabaseOpen(false)}
+        onRefresh={refreshDatabase}
+        onCreateKey={createKey}
+        onRevokeKey={revokeKey}
+        onCopy={copy}
+      />
+    </div>
+  );
+}
