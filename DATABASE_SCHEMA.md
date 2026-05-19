@@ -2,7 +2,7 @@
 
 The current production database is Neon Postgres.
 
-The app still keeps the legacy `app_state` JSON record for frontend compatibility, but the database now also has relational tables for the long-term data model.
+The relational tables below are the source of truth for synced ReelFarm data. The app may still keep the legacy `app_state` JSON record temporarily for frontend compatibility, but new ReelFarm syncs write into this schema directly.
 
 ## Core Model
 
@@ -38,20 +38,14 @@ Material
 - `materials`: ReelFarm-generated materials, owned by automation/account/product-market-channel and optionally classified into concept/format.
 - `posts`: published post data and metrics for materials.
 
-## Rebuild Endpoint
+## Sync Behavior
 
-The relational tables can be rebuilt from the current saved dashboard JSON:
+ReelFarm sync is the write path for this schema:
 
-```http
-POST /api/database/rebuild-relational
+```text
+ReelFarm automation/account/videos/posts
+  -> parse product + market from automation name
+  -> upsert account / automation / material / post rows
 ```
 
-This does not delete `app_state`; it only rebuilds the relational projection tables.
-
-Normal ReelFarm sync now also writes into these relational tables automatically. The rebuild endpoint is only for backfilling or repairing old saved JSON data.
-
-For large datasets, rebuild one product/market at a time:
-
-```http
-POST /api/database/rebuild-relational?product_code=DL&country_code=US&reset=false
-```
+There is no public rebuild endpoint in the app flow. Old JSON data is not the target schema.

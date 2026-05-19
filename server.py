@@ -465,23 +465,6 @@ def parse_concept_format_from_automation(title, country_code, product_code):
     return parts[0], "-".join(parts[1:])
 
 
-def delete_relational_data(conn):
-    for table in (
-        "posts",
-        "materials",
-        "formats",
-        "concepts",
-        "automations",
-        "accounts",
-        "product_market_channels",
-        "product_markets",
-        "channels",
-        "markets",
-        "products",
-    ):
-        conn.execute(f"DELETE FROM {table}")
-
-
 def relational_table_counts(conn):
     counts = {}
     for table in (
@@ -502,7 +485,7 @@ def relational_table_counts(conn):
     return counts
 
 
-def rebuild_relational_data(data=None, product_code_filter="", market_code_filter="", reset=True):
+def project_products_to_relational(data=None, product_code_filter="", market_code_filter=""):
     data = data if isinstance(data, list) else load_data()
     now = datetime.now(timezone.utc).isoformat()
     channel_id = stable_id("channel", "TIKTOK")
@@ -511,8 +494,6 @@ def rebuild_relational_data(data=None, product_code_filter="", market_code_filte
 
     with connect_db() as conn:
         init_relational_schema(conn)
-        if reset:
-            delete_relational_data(conn)
         upsert_row(
             conn,
             "channels",
@@ -747,18 +728,17 @@ def rebuild_relational_data(data=None, product_code_filter="", market_code_filte
 
     return {
         "ok": True,
-        "rebuilt_at": now,
+        "projected_at": now,
         "database_backend": "postgres" if using_postgres() else "sqlite",
         "filters": {
             "product_code": product_code_filter or None,
             "market_code": market_code_filter or None,
-            "reset": bool(reset),
         },
         "tables": counts,
     }
 
 
-def project_synced_country_to_relational(product, country, reset=False):
+def project_synced_country_to_relational(product, country):
     if not isinstance(product, dict) or not isinstance(country, dict):
         return None
 
@@ -771,11 +751,10 @@ def project_synced_country_to_relational(product, country, reset=False):
         or COUNTRY_CODES.get(scoped_country.get("name"))
         or code_from_name(scoped_country.get("name"))
     ).upper()
-    return rebuild_relational_data(
+    return project_products_to_relational(
         data=[scoped_product],
         product_code_filter=product_code,
         market_code_filter=market_code,
-        reset=reset,
     )
 
 
@@ -1266,7 +1245,6 @@ def sync_all_reelfarm_records():
                 relational_projection = project_synced_country_to_relational(
                     product,
                     country,
-                    reset=successes == 0,
                 )
                 successes += 1
             except RuntimeError as error:
@@ -1313,7 +1291,7 @@ def sync_reelfarm_country(prefix, product_id="", country_id="", product_code="",
             country["reelFarmSyncedAt"] = synced_at
             country["creatorCount"] = reelfarm_creator_count(result)
             country["materialCount"] = reelfarm_material_count(result)
-            relational_projection = project_synced_country_to_relational(product, country, reset=False)
+            relational_projection = project_synced_country_to_relational(product, country)
             save_data(data)
             return {
                 "ok": True,
@@ -1812,19 +1790,6 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             data = default_data()
             save_data(data)
             self.send_json(200, {"ok": True, "data": data})
-            return
-
-        if path == "/api/database/rebuild-relational":
-            query = parse_qs(urlparse(self.path).query)
-            self.send_json(
-                200,
-                rebuild_relational_data(
-                    product_code_filter=query.get("product_code", [""])[0],
-                    market_code_filter=query.get("country_code", query.get("market_code", [""]))[0],
-                    reset=(query.get("reset", ["true"])[0] or "").strip().lower()
-                    not in {"0", "false", "no"},
-                ),
-            )
             return
 
         if path == "/api/roaster":

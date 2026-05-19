@@ -27,7 +27,6 @@ from server import (
     reelfarm_api_key,
     reelfarm_matches,
     relational_table_counts,
-    rebuild_relational_data,
     revoke_external_api_key,
     save_app_value,
     save_data,
@@ -192,22 +191,6 @@ def get_relational_database(request: Request):
             "database_backend": "postgres" if using_postgres() else "sqlite",
             "tables": relational_table_counts(conn),
         }
-
-
-@app.post("/api/database/rebuild-relational")
-def post_rebuild_relational_database(
-    request: Request,
-    product_code: str = "",
-    country_code: str = "",
-    market_code: str = "",
-    reset: bool = True,
-):
-    require_dashboard_auth(request)
-    return rebuild_relational_data(
-        product_code_filter=product_code,
-        market_code_filter=country_code or market_code,
-        reset=reset,
-    )
 
 
 @app.post("/api/reset")
