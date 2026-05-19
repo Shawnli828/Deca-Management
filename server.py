@@ -338,6 +338,26 @@ def init_relational_schema(conn):
             synced_at TEXT
         )
         """,
+        """
+        CREATE TABLE IF NOT EXISTS post_daily_snapshots (
+            id TEXT PRIMARY KEY,
+            post_id TEXT NOT NULL,
+            snapshot_date TEXT NOT NULL,
+            view_count INTEGER,
+            like_count INTEGER,
+            comment_count INTEGER,
+            share_count INTEGER,
+            bookmark_count INTEGER,
+            synced_at TEXT NOT NULL,
+            UNIQUE(post_id, snapshot_date)
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_post_daily_snapshots_snapshot_date ON post_daily_snapshots(snapshot_date)",
+        "CREATE INDEX IF NOT EXISTS idx_post_daily_snapshots_post_id ON post_daily_snapshots(post_id)",
+        "CREATE INDEX IF NOT EXISTS idx_posts_published_at ON posts(published_at)",
+        "CREATE INDEX IF NOT EXISTS idx_posts_material_id ON posts(material_id)",
+        "CREATE INDEX IF NOT EXISTS idx_materials_automation_id ON materials(automation_id)",
+        "CREATE INDEX IF NOT EXISTS idx_automations_product_market_channel_id ON automations(product_market_channel_id)",
     ]
     for statement in statements:
         conn.execute(statement)
@@ -479,6 +499,12 @@ def parse_concept_format_from_automation(title, country_code, product_code):
     return parts[0], "-".join(parts[1:])
 
 
+def utc_snapshot_date(value=None):
+    if isinstance(value, datetime):
+        return value.astimezone(timezone.utc).date().isoformat()
+    return datetime.now(timezone.utc).date().isoformat()
+
+
 def relational_table_counts(conn):
     counts = {}
     for table in (
@@ -493,6 +519,7 @@ def relational_table_counts(conn):
         "formats",
         "materials",
         "posts",
+        "post_daily_snapshots",
     ):
         row = conn.execute(f"SELECT COUNT(*) AS count FROM {table}").fetchone()
         counts[table] = int(row["count"] if row else 0)
@@ -715,11 +742,13 @@ def project_products_to_relational(data=None, product_code_filter="", market_cod
                         if not isinstance(post, dict):
                             continue
                         reelfarm_post_id = str(post.get("post_id") or stable_id("post_source", material_id))
+                        post_id = stable_id("post", reelfarm_post_id)
+                        snapshot_date = utc_snapshot_date()
                         upsert_row(
                             conn,
                             "posts",
                             {
-                                "id": stable_id("post", reelfarm_post_id),
+                                "id": post_id,
                                 "material_id": material_id,
                                 "account_id": account_id,
                                 "reelfarm_post_id": reelfarm_post_id,
@@ -735,6 +764,22 @@ def project_products_to_relational(data=None, product_code_filter="", market_cod
                                 "synced_at": synced_at,
                             },
                             ["reelfarm_post_id"],
+                        )
+                        upsert_row(
+                            conn,
+                            "post_daily_snapshots",
+                            {
+                                "id": stable_id("post_daily_snapshot", post_id, snapshot_date),
+                                "post_id": post_id,
+                                "snapshot_date": snapshot_date,
+                                "view_count": int_or_none(post.get("view_count")),
+                                "like_count": int_or_none(post.get("like_count")),
+                                "comment_count": int_or_none(post.get("comment_count")),
+                                "share_count": int_or_none(post.get("share_count")),
+                                "bookmark_count": int_or_none(post.get("bookmark_count")),
+                                "synced_at": synced_at,
+                            },
+                            ["post_id", "snapshot_date"],
                         )
 
         counts = relational_table_counts(conn)

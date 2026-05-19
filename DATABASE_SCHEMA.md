@@ -14,6 +14,7 @@ Product
       -> Automation
         -> Material
           -> Post
+            -> PostDailySnapshot
 
 Product
   -> Concept
@@ -37,6 +38,7 @@ Material
 - `formats`: formats under concepts.
 - `materials`: ReelFarm-generated materials, owned by automation/account/product-market-channel and optionally classified into concept/format.
 - `posts`: published post data and metrics for materials.
+- `post_daily_snapshots`: one metrics snapshot per post per UTC day for trend analysis.
 
 ## Sync Behavior
 
@@ -46,6 +48,7 @@ ReelFarm sync is the write path for this schema:
 ReelFarm automation/account/videos/posts
   -> parse product + market from automation name
   -> upsert account / automation / material / post rows
+  -> upsert one post_daily_snapshots row per post for today's UTC date
 ```
 
 There is no public rebuild endpoint in the app flow. Old JSON data is not the target schema.
