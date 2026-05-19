@@ -47,3 +47,9 @@ POST /api/database/rebuild-relational
 ```
 
 This does not delete `app_state`; it only rebuilds the relational projection tables.
+
+For large datasets, rebuild one product/market at a time:
+
+```http
+POST /api/database/rebuild-relational?product_code=DL&country_code=US&reset=false
+```

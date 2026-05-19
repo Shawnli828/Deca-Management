@@ -195,9 +195,19 @@ def get_relational_database(request: Request):
 
 
 @app.post("/api/database/rebuild-relational")
-def post_rebuild_relational_database(request: Request):
+def post_rebuild_relational_database(
+    request: Request,
+    product_code: str = "",
+    country_code: str = "",
+    market_code: str = "",
+    reset: bool = True,
+):
     require_dashboard_auth(request)
-    return rebuild_relational_data()
+    return rebuild_relational_data(
+        product_code_filter=product_code,
+        market_code_filter=country_code or market_code,
+        reset=reset,
+    )
 
 
 @app.post("/api/reset")

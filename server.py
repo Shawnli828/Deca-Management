@@ -502,14 +502,17 @@ def relational_table_counts(conn):
     return counts
 
 
-def rebuild_relational_data(data=None):
+def rebuild_relational_data(data=None, product_code_filter="", market_code_filter="", reset=True):
     data = data if isinstance(data, list) else load_data()
     now = datetime.now(timezone.utc).isoformat()
     channel_id = stable_id("channel", "TIKTOK")
+    product_code_filter = str(product_code_filter or "").strip().upper()
+    market_code_filter = str(market_code_filter or "").strip().upper()
 
     with connect_db() as conn:
         init_relational_schema(conn)
-        delete_relational_data(conn)
+        if reset:
+            delete_relational_data(conn)
         upsert_row(
             conn,
             "channels",
@@ -523,6 +526,9 @@ def rebuild_relational_data(data=None):
 
             product_id = str(product.get("id") or stable_id("product", product.get("name")))
             product_code = (product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
+            if product_code_filter and product_code != product_code_filter:
+                continue
+
             upsert_row(
                 conn,
                 "products",
@@ -547,6 +553,9 @@ def rebuild_relational_data(data=None):
                     or COUNTRY_CODES.get(country.get("name"))
                     or code_from_name(country.get("name"))
                 ).upper()
+                if market_code_filter and market_code != market_code_filter:
+                    continue
+
                 market_id = stable_id("market", market_code)
                 product_market_id = stable_id("product_market", product_id, market_id)
                 product_market_channel_id = stable_id("product_market_channel", product_market_id, channel_id)
@@ -740,6 +749,11 @@ def rebuild_relational_data(data=None):
         "ok": True,
         "rebuilt_at": now,
         "database_backend": "postgres" if using_postgres() else "sqlite",
+        "filters": {
+            "product_code": product_code_filter or None,
+            "market_code": market_code_filter or None,
+            "reset": bool(reset),
+        },
         "tables": counts,
     }
 
@@ -1771,7 +1785,16 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/database/rebuild-relational":
-            self.send_json(200, rebuild_relational_data())
+            query = parse_qs(urlparse(self.path).query)
+            self.send_json(
+                200,
+                rebuild_relational_data(
+                    product_code_filter=query.get("product_code", [""])[0],
+                    market_code_filter=query.get("country_code", query.get("market_code", [""]))[0],
+                    reset=(query.get("reset", ["true"])[0] or "").strip().lower()
+                    not in {"0", "false", "no"},
+                ),
+            )
             return
 
         if path == "/api/roaster":
