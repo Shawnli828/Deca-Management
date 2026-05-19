@@ -41,6 +41,7 @@ ADMIN_PASSWORD_HASH = os.environ.get(
 SESSION_SECRET = os.environ.get("SESSION_SECRET", ADMIN_PASSWORD_HASH).strip()
 SESSION_COOKIE = "deca_growth_session"
 SESSION_TTL_SECONDS = 60 * 60 * 12
+AI_API_KEY = os.environ.get("AI_API_KEY", "").strip()
 COUNTRY_CODES = {
     "United States": "US",
     "United Kingdom": "UK",
@@ -852,6 +853,133 @@ def database_snapshot():
     }
 
 
+def ai_materials_payload(query):
+    data = load_data()
+    product_filter = (query.get("product_code", [""])[0] or "").strip().upper()
+    country_filter = (query.get("country_code", [""])[0] or "").strip().upper()
+    product_id_filter = (query.get("product_id", [""])[0] or "").strip()
+    country_id_filter = (query.get("country_id", [""])[0] or "").strip()
+    synced_only = (query.get("synced_only", [""])[0] or "").strip().lower() in {"1", "true", "yes"}
+    include_raw = (query.get("include_raw", [""])[0] or "").strip().lower() in {"1", "true", "yes"}
+
+    countries_payload = []
+    totals = {
+        "products": 0,
+        "countries": 0,
+        "creators": 0,
+        "materials": 0,
+        "posts": 0,
+    }
+
+    for product in data:
+        product_code = (product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
+        if product_filter and product_code != product_filter:
+            continue
+        if product_id_filter and str(product.get("id")) != product_id_filter:
+            continue
+
+        product_included = False
+        for country in product.get("countries", []) or []:
+            country_code = (
+                country.get("reelFarmCode")
+                or COUNTRY_CODES.get(country.get("name"))
+                or code_from_name(country.get("name"))
+            ).upper()
+            if country_filter and country_code != country_filter:
+                continue
+            if country_id_filter and str(country.get("id")) != country_id_filter:
+                continue
+
+            result = country.get("reelFarmResult") if isinstance(country.get("reelFarmResult"), dict) else {}
+            cards = result.get("cards", []) if isinstance(result.get("cards"), list) else []
+            if synced_only and not cards:
+                continue
+
+            creators = []
+            country_material_count = 0
+            country_post_count = 0
+            for card in cards:
+                if not isinstance(card, dict):
+                    continue
+                account = card.get("account") if isinstance(card.get("account"), dict) else {}
+                automation = card.get("automation") if isinstance(card.get("automation"), dict) else {}
+                videos = card.get("videos") if isinstance(card.get("videos"), list) else []
+                posts = card.get("posts") if isinstance(card.get("posts"), list) else []
+                posts_by_video = {str(post.get("video_id")): post for post in posts if isinstance(post, dict)}
+                materials = []
+
+                for video in videos:
+                    if not isinstance(video, dict):
+                        continue
+                    video_id = str(video.get("video_id") or video.get("id") or "")
+                    materials.append(
+                        {
+                            "video": video,
+                            "post": posts_by_video.get(video_id),
+                        }
+                    )
+
+                country_material_count += len(materials)
+                country_post_count += len(posts)
+                creators.append(
+                    {
+                        "account": account,
+                        "automation": automation,
+                        "material_count": len(materials),
+                        "post_count": len(posts),
+                        "materials": materials,
+                    }
+                )
+
+            country_payload = {
+                "product": {
+                    "id": product.get("id"),
+                    "name": product.get("name"),
+                    "folder": product.get("folder"),
+                    "reelFarmCode": product_code,
+                },
+                "country": {
+                    "id": country.get("id"),
+                    "name": country.get("name"),
+                    "reelFarmCode": country_code,
+                },
+                "automation_prefix": build_country_automation_prefix(product, country),
+                "synced_at": country.get("reelFarmSyncedAt"),
+                "creator_count": country.get("creatorCount", reelfarm_creator_count(result)),
+                "material_count": country.get("materialCount", country_material_count),
+                "post_count": country_post_count,
+                "creators": creators,
+            }
+            if include_raw:
+                country_payload["raw_reelfarm_result"] = result
+
+            countries_payload.append(country_payload)
+            totals["countries"] += 1
+            totals["creators"] += len(creators)
+            totals["materials"] += country_material_count
+            totals["posts"] += country_post_count
+            product_included = True
+
+        if product_included:
+            totals["products"] += 1
+
+    return {
+        "ok": True,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "database_backend": "postgres" if using_postgres() else "sqlite",
+        "filters": {
+            "product_code": product_filter or None,
+            "country_code": country_filter or None,
+            "product_id": product_id_filter or None,
+            "country_id": country_id_filter or None,
+            "synced_only": synced_only,
+            "include_raw": include_raw,
+        },
+        "totals": totals,
+        "countries": countries_payload,
+    }
+
+
 def find_open_port(start_port=8765):
     for port in range(start_port, start_port + 50):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -898,12 +1026,20 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
     def is_authenticated(self):
         return valid_auth_token(self.cookies().get(SESSION_COOKIE, ""))
 
+    def ai_authorized(self):
+        if not AI_API_KEY:
+            return False
+        header = self.headers.get("Authorization", "")
+        return hmac.compare_digest(header, f"Bearer {AI_API_KEY}")
+
     def auth_required(self, path):
         if not path.startswith("/api/"):
             return False
         if path in {"/api/health", "/api/auth/login", "/api/auth/logout", "/api/auth/status"}:
             return False
         if path == "/api/reelfarm/sync-all" and cron_authorized(self.headers):
+            return False
+        if path == "/api/ai/materials" and self.ai_authorized():
             return False
         return True
 
@@ -933,6 +1069,11 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
 
         if path == "/api/database":
             self.send_json(200, database_snapshot())
+            return
+
+        if path == "/api/ai/materials":
+            query = parse_qs(urlparse(self.path).query)
+            self.send_json(200, ai_materials_payload(query))
             return
 
         if path == "/api/roaster":
