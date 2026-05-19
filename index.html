@@ -109,6 +109,20 @@
                 <button class="btn ghost" type="button" onclick="openDatabasePanel()">刷新数据库视图</button>
                 <button class="btn ghost" type="button" onclick="copyDatabaseJson()">复制 JSON</button>
             </div>
+            <section class="api-key-panel">
+                <div class="api-key-head">
+                    <div>
+                        <h3>外部 AI API Keys</h3>
+                        <p>生成后给其他 AI 使用 Bearer Token 读取素材数据。</p>
+                    </div>
+                    <form class="api-key-form" onsubmit="createExternalApiKey(event)">
+                        <input id="apiKeyName" class="text-input" type="text" placeholder="Key 名称，例如 AI Classifier">
+                        <button class="btn primary" type="submit">生成 Key</button>
+                    </form>
+                </div>
+                <div id="generatedApiKey" class="generated-api-key"></div>
+                <div id="apiKeyList" class="api-key-list"></div>
+            </section>
             <pre id="databaseJson" class="database-json">正在读取...</pre>
         </div>
     </section>

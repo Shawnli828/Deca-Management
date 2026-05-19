@@ -8,6 +8,8 @@
     const API_AUTH_LOGIN_URL = '/api/auth/login';
     const API_AUTH_LOGOUT_URL = '/api/auth/logout';
     const API_ROASTER_URL = '/api/roaster';
+    const API_KEYS_URL = '/api/api-keys';
+    const API_KEYS_REVOKE_URL = '/api/api-keys/revoke';
     const REELFARM_WINDOW_KEY = 'management_table_reelfarm_window_days';
 
     const countryFlags = {
@@ -30,7 +32,7 @@
         'United States': 'US',
         'United Kingdom': 'UK',
         'Japan': 'JP',
-        'Germany': 'DE',
+        'Germany': 'GE',
         'Brazil': 'BR',
         'India': 'IN',
         'China': 'CN',
@@ -71,6 +73,7 @@
     let countrySearch = '';
     let latestDatabaseSnapshot = null;
     let roasterState = { people: [], assignments: {} };
+    let externalApiKeys = [];
     let dirtyCountryCodeIds = new Set();
     let reelFarmConfigured = false;
     let reelFarmResults = {};
@@ -2088,6 +2091,55 @@
         json.textContent = JSON.stringify(snapshot.data, null, 2);
     }
 
+    function renderExternalApiKeys() {
+        const list = document.getElementById('apiKeyList');
+        if (!list) return;
+
+        if (!externalApiKeys.length) {
+            list.innerHTML = '<div class="item-meta">还没有外部 API Key。</div>';
+            return;
+        }
+
+        list.innerHTML = externalApiKeys.map(key => `
+            <div class="api-key-row ${key.active ? '' : 'is-revoked'}">
+                <div>
+                    <div class="api-key-name">${escapeHtml(key.name || 'External AI')}</div>
+                    <div class="api-key-meta">${escapeHtml(key.prefix || 'deca_...')} · ${(key.permissions || []).map(escapeHtml).join(', ') || '无权限'} · ${key.active ? 'active' : 'revoked'}</div>
+                </div>
+                ${key.active
+                    ? `<button class="btn danger" type="button" onclick="revokeExternalApiKey('${escapeHtml(key.id)}')">停用</button>`
+                    : '<span class="item-meta">已停用</span>'}
+            </div>
+        `).join('');
+    }
+
+    async function loadExternalApiKeys() {
+        const list = document.getElementById('apiKeyList');
+        if (list) list.innerHTML = '<div class="item-meta">正在读取 API Keys...</div>';
+
+        try {
+            const response = await fetch(API_KEYS_URL, { cache: 'no-store' });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(payload.error || 'Failed to load API keys.');
+            externalApiKeys = payload.keys || [];
+            renderExternalApiKeys();
+        } catch (error) {
+            console.error(error);
+            if (list) list.innerHTML = '<div class="item-meta">API Keys 读取失败。</div>';
+        }
+    }
+
+    function showGeneratedApiKey(key) {
+        const container = document.getElementById('generatedApiKey');
+        if (!container) return;
+
+        container.innerHTML = `
+            <div class="generated-api-key-label">新 Key 只显示一次，请现在复制给外部 AI。</div>
+            <code>${escapeHtml(key)}</code>
+            <button class="btn ghost" type="button" onclick="copyText('${escapeHtml(key)}')">复制</button>
+        `;
+    }
+
     window.openDatabasePanel = async function() {
         const modal = document.getElementById('databaseModal');
         const subtitle = document.getElementById('databaseSubtitle');
@@ -2098,6 +2150,8 @@
         subtitle.textContent = '正在读取数据库...';
         stats.innerHTML = '';
         json.textContent = '正在读取...';
+        document.getElementById('generatedApiKey').innerHTML = '';
+        loadExternalApiKeys();
 
         try {
             const response = await fetch(API_DATABASE_URL, { cache: 'no-store' });
@@ -2127,6 +2181,58 @@
         } catch (error) {
             console.error(error);
             setStatus('复制失败，浏览器未授权剪贴板', 'error');
+        }
+    };
+
+    window.copyText = async function(value) {
+        try {
+            await navigator.clipboard.writeText(value);
+            setStatus('已复制');
+        } catch (error) {
+            console.error(error);
+            setStatus('复制失败，浏览器未授权剪贴板', 'error');
+        }
+    };
+
+    window.createExternalApiKey = async function(event) {
+        event.preventDefault();
+        const input = document.getElementById('apiKeyName');
+        const name = input?.value.trim() || 'External AI';
+
+        try {
+            const response = await fetch(API_KEYS_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name })
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(payload.error || 'Failed to create API key.');
+            if (input) input.value = '';
+            showGeneratedApiKey(payload.key);
+            await loadExternalApiKeys();
+            setStatus('API Key 已生成');
+        } catch (error) {
+            console.error(error);
+            setStatus('API Key 生成失败', 'error');
+        }
+    };
+
+    window.revokeExternalApiKey = async function(id) {
+        if (!confirm('确定要停用这个 API Key 吗？停用后外部 AI 将无法继续使用它。')) return;
+
+        try {
+            const response = await fetch(API_KEYS_REVOKE_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id })
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(payload.error || 'Failed to revoke API key.');
+            await loadExternalApiKeys();
+            setStatus('API Key 已停用');
+        } catch (error) {
+            console.error(error);
+            setStatus('API Key 停用失败', 'error');
         }
     };
 

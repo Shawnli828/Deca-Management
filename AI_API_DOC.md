@@ -24,9 +24,17 @@ Recommended for external AI access:
 Authorization: Bearer YOUR_AI_API_KEY
 ```
 
-Set `AI_API_KEY` in Vercel Environment Variables first.
+Generate the API key inside the Deca Growth admin panel:
 
-If `AI_API_KEY` is not set, this endpoint still works for a browser session that is already logged in as admin, but external AI tools should use the Bearer token method.
+1. Log in to the Deca Growth dashboard.
+2. Click `打开数据库`.
+3. In `外部 AI API Keys`, enter a key name.
+4. Click `生成 Key`.
+5. Copy the generated key immediately. It is shown only once.
+
+The generated key is stored in the database as a hash and can be revoked from the same panel.
+
+`AI_API_KEY` in Vercel Environment Variables is still supported as a fallback, but it is no longer required for normal use.
 
 ## Endpoint
 

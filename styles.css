@@ -1729,6 +1729,87 @@
             gap: 10px;
         }
 
+        .api-key-panel {
+            display: grid;
+            gap: 12px;
+            border: 1px solid var(--line);
+            padding: 14px;
+            background: #0d0c0b;
+        }
+
+        .api-key-head {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
+            gap: 14px;
+            align-items: end;
+        }
+
+        .api-key-head h3 {
+            margin: 0;
+            color: var(--text);
+            font-size: 15px;
+            line-height: 1.3;
+        }
+
+        .api-key-head p,
+        .api-key-meta,
+        .generated-api-key-label {
+            margin: 5px 0 0;
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .api-key-form {
+            display: flex;
+            gap: 10px;
+        }
+
+        .api-key-list {
+            display: grid;
+            gap: 8px;
+        }
+
+        .api-key-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            border: 1px solid var(--line);
+            padding: 10px;
+            background: #151310;
+        }
+
+        .api-key-row.is-revoked {
+            opacity: 0.58;
+        }
+
+        .api-key-name {
+            color: var(--text);
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+        .generated-api-key {
+            display: grid;
+            gap: 8px;
+        }
+
+        .generated-api-key:empty {
+            display: none;
+        }
+
+        .generated-api-key code {
+            display: block;
+            overflow: auto;
+            border: 1px solid #474b91;
+            padding: 10px;
+            background: #111330;
+            color: var(--accent-strong);
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
         .database-json {
             margin: 0;
             overflow: auto;
@@ -1848,9 +1929,14 @@
             }
 
             .detail-grid,
+            .api-key-head,
             .concept-group-header,
             .concept-row {
                 grid-template-columns: 1fr;
+            }
+
+            .api-key-form {
+                flex-direction: column;
             }
 
             .logo-upload {

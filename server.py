@@ -5,6 +5,7 @@ import hmac
 import mimetypes
 import os
 import re
+import secrets
 import ssl
 import sqlite3
 import socket
@@ -31,6 +32,7 @@ DATABASE_URL = (
 STATE_KEY = "product_distribution"
 REELFARM_API_KEY = "reel_farm_api_key"
 ROASTER_STATE_KEY = "roaster_state"
+EXTERNAL_API_KEYS_KEY = "external_api_keys"
 REELFARM_BASE_URL = "https://reel.farm/api/v1"
 SEED_DATA_PATH = BASE_DIR / "seed_data.json"
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "Deca888").strip()
@@ -372,6 +374,98 @@ def save_roaster_state(state):
     clean_state = normalize_roaster_state(state)
     save_app_value(ROASTER_STATE_KEY, clean_state)
     return clean_state
+
+
+def hash_api_key(value):
+    return hashlib.sha256(str(value or "").encode("utf-8")).hexdigest()
+
+
+def load_external_api_keys():
+    value = load_app_value(EXTERNAL_API_KEYS_KEY)
+    if not value:
+        return []
+
+    try:
+        keys = json.loads(value)
+    except json.JSONDecodeError:
+        return []
+
+    return keys if isinstance(keys, list) else []
+
+
+def save_external_api_keys(keys):
+    save_app_value(EXTERNAL_API_KEYS_KEY, keys if isinstance(keys, list) else [])
+
+
+def public_external_api_key(key_record):
+    return {
+        "id": key_record.get("id"),
+        "name": key_record.get("name"),
+        "prefix": key_record.get("prefix"),
+        "permissions": key_record.get("permissions", []),
+        "active": bool(key_record.get("active")),
+        "created_at": key_record.get("created_at"),
+        "revoked_at": key_record.get("revoked_at"),
+    }
+
+
+def create_external_api_key(name, permissions=None):
+    now = datetime.now(timezone.utc).isoformat()
+    raw_key = f"deca_{secrets.token_urlsafe(32)}"
+    key_record = {
+        "id": generate_id(),
+        "name": (name or "External AI").strip() or "External AI",
+        "prefix": raw_key[:14],
+        "key_hash": hash_api_key(raw_key),
+        "permissions": permissions or ["materials:read"],
+        "active": True,
+        "created_at": now,
+        "revoked_at": None,
+    }
+    keys = load_external_api_keys()
+    keys.append(key_record)
+    save_external_api_keys(keys)
+    return {"key": raw_key, "record": public_external_api_key(key_record)}
+
+
+def revoke_external_api_key(key_id):
+    keys = load_external_api_keys()
+    now = datetime.now(timezone.utc).isoformat()
+    updated_record = None
+    for key_record in keys:
+        if str(key_record.get("id")) == str(key_id):
+            key_record["active"] = False
+            key_record["revoked_at"] = now
+            updated_record = key_record
+            break
+
+    if updated_record is None:
+        raise ValueError("API key not found.")
+
+    save_external_api_keys(keys)
+    return public_external_api_key(updated_record)
+
+
+def list_external_api_keys():
+    return [public_external_api_key(key_record) for key_record in load_external_api_keys()]
+
+
+def external_api_key_authorized(token, permission):
+    if not token:
+        return False
+    if AI_API_KEY and hmac.compare_digest(token, AI_API_KEY):
+        return True
+
+    token_hash = hash_api_key(token)
+    for key_record in load_external_api_keys():
+        if not key_record.get("active"):
+            continue
+        if permission not in (key_record.get("permissions") or []):
+            continue
+        if hmac.compare_digest(str(key_record.get("key_hash", "")), token_hash):
+            return True
+
+    return False
 
 
 def reelfarm_api_key():
@@ -1027,10 +1121,10 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
         return valid_auth_token(self.cookies().get(SESSION_COOKIE, ""))
 
     def ai_authorized(self):
-        if not AI_API_KEY:
-            return False
         header = self.headers.get("Authorization", "")
-        return hmac.compare_digest(header, f"Bearer {AI_API_KEY}")
+        if not header.startswith("Bearer "):
+            return False
+        return external_api_key_authorized(header.removeprefix("Bearer ").strip(), "materials:read")
 
     def auth_required(self, path):
         if not path.startswith("/api/"):
@@ -1069,6 +1163,10 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
 
         if path == "/api/database":
             self.send_json(200, database_snapshot())
+            return
+
+        if path == "/api/api-keys":
+            self.send_json(200, {"ok": True, "keys": list_external_api_keys()})
             return
 
         if path == "/api/ai/materials":
@@ -1226,6 +1324,32 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
                     "base_url": REELFARM_BASE_URL,
                 },
             )
+            return
+
+        if path == "/api/api-keys":
+            try:
+                payload = self.read_json_body() or {}
+            except json.JSONDecodeError:
+                self.send_json(400, {"error": "Invalid JSON"})
+                return
+
+            name = str(payload.get("name", "") if isinstance(payload, dict) else "").strip()
+            created = create_external_api_key(name, ["materials:read"])
+            self.send_json(200, {"ok": True, **created})
+            return
+
+        if path == "/api/api-keys/revoke":
+            try:
+                payload = self.read_json_body() or {}
+            except json.JSONDecodeError:
+                self.send_json(400, {"error": "Invalid JSON"})
+                return
+
+            key_id = str(payload.get("id", "") if isinstance(payload, dict) else "").strip()
+            try:
+                self.send_json(200, {"ok": True, "record": revoke_external_api_key(key_id)})
+            except ValueError as error:
+                self.send_json(404, {"error": str(error)})
             return
 
         if path == "/api/reelfarm/sync-prefix":
