@@ -85,8 +85,40 @@ export default function DashboardPage() {
       setProducts(payload.data || nextProducts);
       setStatus('已保存到数据库');
       setStatusError(false);
+      return true;
     } catch {
       setStatus('保存失败');
+      setStatusError(true);
+      return false;
+    }
+  }
+
+  function readFileAsDataUrl(file: File) {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(reader.error || new Error('Logo 读取失败'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function changeProductLogo(product: Product, file: File) {
+    if (!file.type.startsWith('image/')) {
+      setStatus('请选择图片文件');
+      setStatusError(true);
+      return;
+    }
+
+    try {
+      const logo = await readFileAsDataUrl(file);
+      const nextProducts = products.map(item => item.id === product.id ? { ...item, logo } : item);
+      const saved = await saveProducts(nextProducts);
+      if (saved) {
+        setStatus(`${product.name || '产品'} Logo 已更新`);
+        setStatusError(false);
+      }
+    } catch {
+      setStatus('Logo 上传失败');
       setStatusError(true);
     }
   }
@@ -313,7 +345,7 @@ export default function DashboardPage() {
             </header>
             <MetricsBar products={products} />
             <section className="page-shell">
-              {page === 'products' ? <ProductList products={products} onSelect={selectProduct} /> : null}
+              {page === 'products' ? <ProductList products={products} onSelect={selectProduct} onLogoChange={changeProductLogo} /> : null}
               {page === 'product' && selectedProduct ? <CountryList product={selectedProduct} onBack={() => setPage('products')} onSelect={selectCountry} /> : null}
               {page === 'country' && selectedProduct && selectedCountry ? (
                 <CountryWorkspace

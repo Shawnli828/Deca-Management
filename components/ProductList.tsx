@@ -3,7 +3,15 @@
 import type { Product } from '@/lib/types';
 import { normalizeProductFolder } from '@/lib/utils';
 
-export function ProductList({ products, onSelect }: { products: Product[]; onSelect: (product: Product) => void }) {
+export function ProductList({
+  products,
+  onSelect,
+  onLogoChange
+}: {
+  products: Product[];
+  onSelect: (product: Product) => void;
+  onLogoChange: (product: Product, file: File) => void;
+}) {
   const groups = products.reduce<Record<string, Product[]>>((map, product) => {
     const folder = normalizeProductFolder(product);
     map[folder] = map[folder] || [];
@@ -24,13 +32,28 @@ export function ProductList({ products, onSelect }: { products: Product[]; onSel
           <h3>{folder}</h3>
           <div className="product-list">
             {items.map(product => (
-              <button className="product-card" type="button" key={product.id} onClick={() => onSelect(product)}>
-                <span className="product-logo">{product.logo ? <img src={product.logo} alt="" /> : product.name?.slice(0, 1)}</span>
-                <span className="product-card-copy">
-                  <strong className="product-card-name">{product.name || '未命名产品'}</strong>
-                  <span className="product-card-meta">{product.countries?.length || 0} 个国家/地区</span>
-                </span>
-              </button>
+              <article className="product-card" key={product.id}>
+                <label className="product-logo product-logo-upload" title="点击更换 Logo">
+                  {product.logo ? <img src={product.logo} alt="" /> : product.name?.slice(0, 1)}
+                  <input
+                    className="product-logo-input"
+                    type="file"
+                    accept="image/*"
+                    onChange={event => {
+                      const file = event.target.files?.[0];
+                      if (file) onLogoChange(product, file);
+                      event.target.value = '';
+                    }}
+                  />
+                  <span className="product-logo-action">更换 Logo</span>
+                </label>
+                <button className="product-card-info" type="button" onClick={() => onSelect(product)}>
+                  <span className="product-card-copy">
+                    <strong className="product-card-name">{product.name || '未命名产品'}</strong>
+                    <span className="product-card-meta">{product.countries?.length || 0} 个国家/地区</span>
+                  </span>
+                </button>
+              </article>
             ))}
           </div>
         </section>
