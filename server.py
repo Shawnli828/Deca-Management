@@ -89,6 +89,11 @@ def generate_id():
     return uuid.uuid4().hex[:9]
 
 
+def stable_id(namespace, *parts):
+    value = "|".join(str(part or "").strip() for part in parts)
+    return uuid.uuid5(uuid.NAMESPACE_URL, f"deca-growth:{namespace}:{value}").hex
+
+
 def slug_part(value):
     cleaned = re.sub(r"[^a-zA-Z0-9]+", " ", str(value or "")).strip()
     if not cleaned:
@@ -208,6 +213,136 @@ def connect_db():
     return conn
 
 
+def init_relational_schema(conn):
+    statements = [
+        """
+        CREATE TABLE IF NOT EXISTS products (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            code TEXT NOT NULL,
+            owner_type TEXT,
+            logo_url TEXT,
+            created_at TEXT,
+            updated_at TEXT
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS markets (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            code TEXT NOT NULL UNIQUE
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS channels (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            code TEXT NOT NULL UNIQUE
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS product_markets (
+            id TEXT PRIMARY KEY,
+            product_id TEXT NOT NULL,
+            market_id TEXT NOT NULL,
+            UNIQUE(product_id, market_id)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS product_market_channels (
+            id TEXT PRIMARY KEY,
+            product_market_id TEXT NOT NULL,
+            channel_id TEXT NOT NULL,
+            UNIQUE(product_market_id, channel_id)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS accounts (
+            id TEXT PRIMARY KEY,
+            product_market_channel_id TEXT NOT NULL,
+            reelfarm_account_id TEXT,
+            username TEXT,
+            display_name TEXT,
+            avatar_url TEXT,
+            status TEXT,
+            UNIQUE(product_market_channel_id, reelfarm_account_id)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS automations (
+            id TEXT PRIMARY KEY,
+            product_market_channel_id TEXT NOT NULL,
+            account_id TEXT,
+            reelfarm_automation_id TEXT NOT NULL UNIQUE,
+            name TEXT,
+            status TEXT,
+            schedule TEXT,
+            settings_json TEXT,
+            created_at TEXT,
+            synced_at TEXT
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS concepts (
+            id TEXT PRIMARY KEY,
+            product_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT,
+            UNIQUE(product_id, name)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS formats (
+            id TEXT PRIMARY KEY,
+            concept_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT,
+            UNIQUE(concept_id, name)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS materials (
+            id TEXT PRIMARY KEY,
+            automation_id TEXT NOT NULL,
+            product_market_channel_id TEXT NOT NULL,
+            account_id TEXT,
+            concept_id TEXT,
+            format_id TEXT,
+            reelfarm_video_id TEXT NOT NULL UNIQUE,
+            video_type TEXT,
+            hook TEXT,
+            prompt TEXT,
+            images_json TEXT,
+            slide_count INTEGER,
+            status TEXT,
+            created_at TEXT,
+            finished_at TEXT,
+            synced_at TEXT
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS posts (
+            id TEXT PRIMARY KEY,
+            material_id TEXT NOT NULL,
+            account_id TEXT,
+            reelfarm_post_id TEXT NOT NULL UNIQUE,
+            status TEXT,
+            title TEXT,
+            published_at TEXT,
+            published_at_readable TEXT,
+            view_count INTEGER,
+            like_count INTEGER,
+            comment_count INTEGER,
+            share_count INTEGER,
+            bookmark_count INTEGER,
+            synced_at TEXT
+        )
+        """,
+    ]
+    for statement in statements:
+        conn.execute(statement)
+
+
 def init_db():
     with connect_db() as conn:
         conn.execute(
@@ -219,6 +354,7 @@ def init_db():
             )
             """
         )
+        init_relational_schema(conn)
         placeholder = db_placeholder()
         row = conn.execute(
             f"SELECT key FROM app_state WHERE key = {placeholder}",
@@ -226,6 +362,7 @@ def init_db():
         ).fetchone()
         if row is None:
             save_data(initial_data(), conn)
+        conn.commit()
 
 
 def save_app_value(key, value, conn=None):
@@ -274,6 +411,337 @@ def delete_app_value(key):
 def save_data(data, conn=None):
     payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     save_app_value(STATE_KEY, payload, conn)
+
+
+def db_json(value):
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def int_or_none(value):
+    try:
+        if value is None or value == "":
+            return None
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def upsert_row(conn, table, values, conflict_cols, update_cols=None):
+    placeholder = db_placeholder()
+    columns = list(values.keys())
+    placeholders = ", ".join([placeholder] * len(columns))
+    column_sql = ", ".join(columns)
+    conflict_sql = ", ".join(conflict_cols)
+    if update_cols is None:
+        update_cols = [column for column in columns if column not in conflict_cols]
+    if update_cols:
+        update_sql = ", ".join(f"{column} = excluded.{column}" for column in update_cols)
+        conflict_action = f"DO UPDATE SET {update_sql}"
+    else:
+        conflict_action = "DO NOTHING"
+    conn.execute(
+        f"""
+        INSERT INTO {table} ({column_sql})
+        VALUES ({placeholders})
+        ON CONFLICT({conflict_sql}) {conflict_action}
+        """,
+        tuple(values[column] for column in columns),
+    )
+
+
+def parse_concept_format_from_automation(title, country_code, product_code):
+    clean_title = str(title or "").strip()
+    prefix = f"{country_code}-{product_code}-".upper()
+    if not clean_title.upper().startswith(prefix):
+        return "", ""
+
+    remainder = clean_title[len(prefix):]
+    parts = [part for part in re.split(r"[-_]+", remainder) if part]
+    if parts and parts[-1].isdigit():
+        parts = parts[:-1]
+    if len(parts) < 2:
+        return "", ""
+
+    return parts[0], "-".join(parts[1:])
+
+
+def delete_relational_data(conn):
+    for table in (
+        "posts",
+        "materials",
+        "formats",
+        "concepts",
+        "automations",
+        "accounts",
+        "product_market_channels",
+        "product_markets",
+        "channels",
+        "markets",
+        "products",
+    ):
+        conn.execute(f"DELETE FROM {table}")
+
+
+def relational_table_counts(conn):
+    counts = {}
+    for table in (
+        "products",
+        "markets",
+        "channels",
+        "product_markets",
+        "product_market_channels",
+        "accounts",
+        "automations",
+        "concepts",
+        "formats",
+        "materials",
+        "posts",
+    ):
+        row = conn.execute(f"SELECT COUNT(*) AS count FROM {table}").fetchone()
+        counts[table] = int(row["count"] if row else 0)
+    return counts
+
+
+def rebuild_relational_data(data=None):
+    data = data if isinstance(data, list) else load_data()
+    now = datetime.now(timezone.utc).isoformat()
+    channel_id = stable_id("channel", "TIKTOK")
+
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        delete_relational_data(conn)
+        upsert_row(
+            conn,
+            "channels",
+            {"id": channel_id, "name": "TikTok", "code": "TIKTOK"},
+            ["code"],
+        )
+
+        for product in data:
+            if not isinstance(product, dict):
+                continue
+
+            product_id = str(product.get("id") or stable_id("product", product.get("name")))
+            product_code = (product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
+            upsert_row(
+                conn,
+                "products",
+                {
+                    "id": product_id,
+                    "name": str(product.get("name") or "Untitled Product"),
+                    "code": product_code,
+                    "owner_type": product.get("folder") or product.get("owner_type"),
+                    "logo_url": product.get("logo") or "",
+                    "created_at": product.get("created_at") or now,
+                    "updated_at": now,
+                },
+                ["id"],
+            )
+
+            for country in product.get("countries", []) or []:
+                if not isinstance(country, dict):
+                    continue
+
+                market_code = (
+                    country.get("reelFarmCode")
+                    or COUNTRY_CODES.get(country.get("name"))
+                    or code_from_name(country.get("name"))
+                ).upper()
+                market_id = stable_id("market", market_code)
+                product_market_id = stable_id("product_market", product_id, market_id)
+                product_market_channel_id = stable_id("product_market_channel", product_market_id, channel_id)
+
+                upsert_row(
+                    conn,
+                    "markets",
+                    {"id": market_id, "name": str(country.get("name") or market_code), "code": market_code},
+                    ["code"],
+                )
+                upsert_row(
+                    conn,
+                    "product_markets",
+                    {"id": product_market_id, "product_id": product_id, "market_id": market_id},
+                    ["product_id", "market_id"],
+                )
+                upsert_row(
+                    conn,
+                    "product_market_channels",
+                    {
+                        "id": product_market_channel_id,
+                        "product_market_id": product_market_id,
+                        "channel_id": channel_id,
+                    },
+                    ["product_market_id", "channel_id"],
+                )
+
+                for concept in country.get("concepts", []) or []:
+                    if not isinstance(concept, dict):
+                        continue
+                    concept_name = str(concept.get("group") or "默认 Topic").strip() or "默认 Topic"
+                    format_name = str(concept.get("name") or "默认 Format").strip() or "默认 Format"
+                    concept_id = stable_id("concept", product_id, concept_name)
+                    format_id = stable_id("format", concept_id, format_name)
+                    upsert_row(
+                        conn,
+                        "concepts",
+                        {"id": concept_id, "product_id": product_id, "name": concept_name, "description": ""},
+                        ["product_id", "name"],
+                    )
+                    upsert_row(
+                        conn,
+                        "formats",
+                        {"id": format_id, "concept_id": concept_id, "name": format_name, "description": ""},
+                        ["concept_id", "name"],
+                    )
+
+                result = country.get("reelFarmResult") if isinstance(country.get("reelFarmResult"), dict) else {}
+                synced_at = country.get("reelFarmSyncedAt") or now
+                for card in result.get("cards", []) or []:
+                    if not isinstance(card, dict):
+                        continue
+
+                    account = card.get("account") if isinstance(card.get("account"), dict) else {}
+                    automation = card.get("automation") if isinstance(card.get("automation"), dict) else {}
+                    automation_reelfarm_id = str(
+                        automation.get("automation_id") or stable_id("automation_source", automation.get("title"))
+                    )
+                    automation_title = str(automation.get("title") or automation_reelfarm_id)
+                    reelfarm_account_id = str(
+                        account.get("tiktok_account_id")
+                        or automation.get("tiktok_account_id")
+                        or account.get("account_username")
+                        or automation_reelfarm_id
+                    )
+                    account_id = stable_id("account", product_market_channel_id, reelfarm_account_id)
+                    automation_id = stable_id("automation", automation_reelfarm_id)
+
+                    upsert_row(
+                        conn,
+                        "accounts",
+                        {
+                            "id": account_id,
+                            "product_market_channel_id": product_market_channel_id,
+                            "reelfarm_account_id": reelfarm_account_id,
+                            "username": account.get("account_username") or account.get("account_name") or "",
+                            "display_name": account.get("account_name") or "",
+                            "avatar_url": account.get("account_image") or "",
+                            "status": account.get("status") or automation.get("status") or "",
+                        },
+                        ["product_market_channel_id", "reelfarm_account_id"],
+                    )
+                    upsert_row(
+                        conn,
+                        "automations",
+                        {
+                            "id": automation_id,
+                            "product_market_channel_id": product_market_channel_id,
+                            "account_id": account_id,
+                            "reelfarm_automation_id": automation_reelfarm_id,
+                            "name": automation_title,
+                            "status": automation.get("status") or "",
+                            "schedule": db_json(automation.get("schedule", [])),
+                            "settings_json": db_json(automation),
+                            "created_at": automation.get("created_at") or "",
+                            "synced_at": synced_at,
+                        },
+                        ["reelfarm_automation_id"],
+                    )
+
+                    concept_name, format_name = parse_concept_format_from_automation(
+                        automation_title,
+                        market_code,
+                        product_code,
+                    )
+                    concept_id = None
+                    format_id = None
+                    if concept_name and format_name:
+                        concept_id = stable_id("concept", product_id, concept_name)
+                        format_id = stable_id("format", concept_id, format_name)
+                        upsert_row(
+                            conn,
+                            "concepts",
+                            {"id": concept_id, "product_id": product_id, "name": concept_name, "description": ""},
+                            ["product_id", "name"],
+                        )
+                        upsert_row(
+                            conn,
+                            "formats",
+                            {"id": format_id, "concept_id": concept_id, "name": format_name, "description": ""},
+                            ["concept_id", "name"],
+                        )
+
+                    posts_by_video = {
+                        str(post.get("video_id")): post
+                        for post in (card.get("posts") or [])
+                        if isinstance(post, dict)
+                    }
+                    for video in card.get("videos", []) or []:
+                        if not isinstance(video, dict):
+                            continue
+                        reelfarm_video_id = str(video.get("video_id") or video.get("id") or "")
+                        if not reelfarm_video_id:
+                            continue
+                        material_id = stable_id("material", reelfarm_video_id)
+                        images = video.get("slideshow_images") if isinstance(video.get("slideshow_images"), list) else []
+                        upsert_row(
+                            conn,
+                            "materials",
+                            {
+                                "id": material_id,
+                                "automation_id": automation_id,
+                                "product_market_channel_id": product_market_channel_id,
+                                "account_id": account_id,
+                                "concept_id": concept_id,
+                                "format_id": format_id,
+                                "reelfarm_video_id": reelfarm_video_id,
+                                "video_type": video.get("video_type") or "",
+                                "hook": video.get("hook") or "",
+                                "prompt": video.get("prompt") or "",
+                                "images_json": db_json(images),
+                                "slide_count": int_or_none(video.get("slide_count")) or len(images),
+                                "status": video.get("status") or "",
+                                "created_at": video.get("created_at") or "",
+                                "finished_at": video.get("finished_at") or "",
+                                "synced_at": synced_at,
+                            },
+                            ["reelfarm_video_id"],
+                        )
+
+                        post = posts_by_video.get(reelfarm_video_id)
+                        if not isinstance(post, dict):
+                            continue
+                        reelfarm_post_id = str(post.get("post_id") or stable_id("post_source", material_id))
+                        upsert_row(
+                            conn,
+                            "posts",
+                            {
+                                "id": stable_id("post", reelfarm_post_id),
+                                "material_id": material_id,
+                                "account_id": account_id,
+                                "reelfarm_post_id": reelfarm_post_id,
+                                "status": post.get("status") or "",
+                                "title": post.get("title") or "",
+                                "published_at": post.get("published_at") or "",
+                                "published_at_readable": post.get("published_at_readable") or "",
+                                "view_count": int_or_none(post.get("view_count")),
+                                "like_count": int_or_none(post.get("like_count")),
+                                "comment_count": int_or_none(post.get("comment_count")),
+                                "share_count": int_or_none(post.get("share_count")),
+                                "bookmark_count": int_or_none(post.get("bookmark_count")),
+                                "synced_at": synced_at,
+                            },
+                            ["reelfarm_post_id"],
+                        )
+
+        counts = relational_table_counts(conn)
+        conn.commit()
+
+    return {
+        "ok": True,
+        "rebuilt_at": now,
+        "database_backend": "postgres" if using_postgres() else "sqlite",
+        "tables": counts,
+    }
 
 
 def load_data():
@@ -915,6 +1383,7 @@ def database_snapshot():
             f"SELECT key, value, updated_at FROM app_state WHERE key = {placeholder}",
             (STATE_KEY,),
         ).fetchone()
+        relational_counts = relational_table_counts(conn)
 
     data = load_data()
     countries_count = sum(len(product.get("countries", [])) for product in data)
@@ -942,6 +1411,7 @@ def database_snapshot():
             "concepts": concepts_count,
             "total_count": total_count,
         },
+        "relational_tables": relational_counts,
         "data": data,
     }
 
@@ -1164,6 +1634,19 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             self.send_json(200, database_snapshot())
             return
 
+        if path == "/api/database/relational":
+            with connect_db() as conn:
+                init_relational_schema(conn)
+                self.send_json(
+                    200,
+                    {
+                        "ok": True,
+                        "database_backend": "postgres" if using_postgres() else "sqlite",
+                        "tables": relational_table_counts(conn),
+                    },
+                )
+            return
+
         if path == "/api/api-keys":
             self.send_json(200, {"ok": True, "keys": list_external_api_keys()})
             return
@@ -1285,6 +1768,10 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             data = default_data()
             save_data(data)
             self.send_json(200, {"ok": True, "data": data})
+            return
+
+        if path == "/api/database/rebuild-relational":
+            self.send_json(200, rebuild_relational_data())
             return
 
         if path == "/api/roaster":

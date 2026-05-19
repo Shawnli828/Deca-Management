@@ -17,13 +17,17 @@ from server import (
     cron_authorized,
     database_snapshot,
     default_data,
+    connect_db,
     external_api_key_authorized,
+    init_relational_schema,
     load_data,
     load_roaster_state,
     make_auth_token,
     password_hash,
     reelfarm_api_key,
     reelfarm_matches,
+    relational_table_counts,
+    rebuild_relational_data,
     revoke_external_api_key,
     save_app_value,
     save_data,
@@ -176,6 +180,24 @@ def post_data(request: Request, payload: dict[str, Any] = Body(default_factory=d
 def get_database(request: Request):
     require_dashboard_auth(request)
     return database_snapshot()
+
+
+@app.get("/api/database/relational")
+def get_relational_database(request: Request):
+    require_dashboard_auth(request)
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        return {
+            "ok": True,
+            "database_backend": "postgres" if using_postgres() else "sqlite",
+            "tables": relational_table_counts(conn),
+        }
+
+
+@app.post("/api/database/rebuild-relational")
+def post_rebuild_relational_database(request: Request):
+    require_dashboard_auth(request)
+    return rebuild_relational_data()
 
 
 @app.post("/api/reset")
