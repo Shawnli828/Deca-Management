@@ -1,6 +1,7 @@
     const API_DATA_URL = '/api/data';
     const API_RESET_URL = '/api/reset';
     const API_DATABASE_URL = '/api/database';
+    const API_DATA_QUERY_URL = '/api/data/query';
     const API_REELFARM_CONFIG_URL = '/api/reelfarm/config';
     const API_REELFARM_MATCHES_URL = '/api/reelfarm/matches';
     const API_REELFARM_STORED_COUNTRY_URL = '/api/reelfarm/stored-country';
@@ -78,6 +79,7 @@
     let dirtyCountryCodeIds = new Set();
     let reelFarmConfigured = false;
     let reelFarmResults = {};
+    let reelFarmAccountPostLoading = {};
     let reelFarmLoadingPrefix = '';
     let materialSlideIndexes = {};
     let expandedTopics = {};
@@ -282,6 +284,13 @@
         return (card?.posts || []).filter(isPostInSelectedWindow);
     }
 
+    function hasVisibleReelFarmCard(card) {
+        if (!card) return false;
+        if (card.summary_metrics) return true;
+        if (reelFarmAccountPostLoading[cardStateKey(card)]) return true;
+        return getWindowedPosts(card).length > 0;
+    }
+
     function getCreatorKey(card) {
         const account = card?.account || {};
         const automation = card?.automation || {};
@@ -322,10 +331,15 @@
         const automation = card?.automation || {};
         const account = card?.account || {};
         return String(
-            automation.automation_id
+            card?.card_key
+            || automation.automation_id
             || automation.title
+            || account.account_id
+            || account.id
             || account.tiktok_account_id
+            || account.reelfarm_account_id
             || account.account_username
+            || account.username
             || generateId()
         );
     }
@@ -356,7 +370,10 @@
     }
 
     function getReelFarmMaterialCount(result) {
-        return (result?.cards || []).reduce((sum, card) => sum + (card?.videos || []).length, 0);
+        return (result?.cards || []).reduce((sum, card) => {
+            if (card?.summary_metrics) return sum + (Number(card.summary_metrics.material_count) || 0);
+            return sum + (card?.videos || []).length;
+        }, 0);
     }
 
     function storeReelFarmResultOnCountry(country, payload) {
@@ -365,6 +382,156 @@
         country.reelFarmSyncedAt = new Date().toLocaleString();
         country.creatorCount = getReelFarmCreatorCount(payload);
         country.materialCount = getReelFarmMaterialCount(payload);
+    }
+
+    async function readJsonResponse(response, fallbackMessage) {
+        const text = await response.text();
+        let payload = {};
+        if (text) {
+            try {
+                payload = JSON.parse(text);
+            } catch (error) {
+                throw new Error(fallbackMessage || '接口返回了无法解析的数据。');
+            }
+        }
+        if (!response.ok || payload.ok === false) {
+            throw new Error(payload.error || fallbackMessage || '请求失败。');
+        }
+        return payload;
+    }
+
+    function countryQueryParams(product, country, extra = {}) {
+        return new URLSearchParams({
+            product_code: getProductReelFarmCode(product),
+            country_code: getCountryReelFarmCode(country),
+            ...extra
+        });
+    }
+
+    function accountSummaryToCard(row) {
+        const accountId = row.account_id || row.reelfarm_account_id || row.username || generateId();
+        return {
+            card_key: `account:${accountId}`,
+            automation: {
+                automation_id: accountId,
+                title: row.username || row.display_name || row.reelfarm_account_id || accountId,
+                status: row.status || 'unknown',
+                schedule: []
+            },
+            account: {
+                id: row.account_id,
+                account_id: row.account_id,
+                tiktok_account_id: row.reelfarm_account_id,
+                reelfarm_account_id: row.reelfarm_account_id,
+                account_name: row.display_name,
+                account_username: row.username,
+                username: row.username,
+                account_image: row.avatar_url,
+                avatar_url: row.avatar_url,
+                status: row.status
+            },
+            videos: [],
+            video_total: Number(row.material_count) || 0,
+            posts: [],
+            post_statistics: {},
+            summary_metrics: {
+                post_count: Number(row.post_count) || 0,
+                material_count: Number(row.material_count) || 0,
+                total_views: Number(row.total_views) || 0,
+                total_likes: Number(row.total_likes) || 0,
+                total_comments: Number(row.total_comments) || 0,
+                total_shares: Number(row.total_shares) || 0,
+                total_bookmarks: Number(row.total_bookmarks) || 0,
+                latest_post_at: row.latest_post_at,
+                last_synced_at: row.last_synced_at
+            },
+            pagination: { limit: 50, offset: 0, has_more: Number(row.post_count) > 50 },
+            errors: { videos: null, posts: null }
+        };
+    }
+
+    function detailedRowsToCardPayload(card, rows, append = false) {
+        const videos = append ? [...(card.videos || [])] : [];
+        const posts = append ? [...(card.posts || [])] : [];
+        const videoIds = new Set(videos.map(video => String(video.video_id)));
+        const postIds = new Set(posts.map(post => String(post.post_id)));
+
+        rows.forEach(row => {
+            const material = row.material || {};
+            const post = row.post || {};
+            const metrics = row.metrics || {};
+            const automation = row.automation || {};
+            const account = row.account || {};
+            const videoId = material.reelfarm_video_id || material.id;
+            const postId = post.reelfarm_post_id || post.id;
+
+            if (automation.id || automation.reelfarm_automation_id || automation.name) {
+                card.automation = {
+                    automation_id: card.automation?.automation_id || automation.reelfarm_automation_id || automation.id,
+                    title: automation.name || card.automation?.title,
+                    status: automation.status || card.automation?.status,
+                    schedule: automation.schedule || card.automation?.schedule || []
+                };
+            }
+            if (account.id || account.username || account.reelfarm_account_id) {
+                card.account = {
+                    ...card.account,
+                    id: account.id || card.account?.id,
+                    account_id: account.id || card.account?.account_id,
+                    tiktok_account_id: account.reelfarm_account_id || card.account?.tiktok_account_id,
+                    reelfarm_account_id: account.reelfarm_account_id || card.account?.reelfarm_account_id,
+                    account_name: account.display_name || card.account?.account_name,
+                    account_username: account.username || card.account?.account_username,
+                    username: account.username || card.account?.username,
+                    account_image: account.avatar_url || card.account?.account_image,
+                    avatar_url: account.avatar_url || card.account?.avatar_url,
+                    status: account.status || card.account?.status
+                };
+            }
+
+            if (videoId && !videoIds.has(String(videoId))) {
+                videos.push({
+                    video_id: videoId,
+                    id: material.id,
+                    video_type: material.video_type,
+                    hook: material.hook,
+                    prompt: material.prompt,
+                    slideshow_images: material.slideshow_images || [],
+                    slide_count: Number(material.slide_count) || (material.slideshow_images || []).length,
+                    status: material.status,
+                    created_at: material.created_at,
+                    finished_at: material.finished_at,
+                    finished: material.status === 'Finished',
+                    failed: false,
+                    video_url: null
+                });
+                videoIds.add(String(videoId));
+            }
+
+            if (postId && !postIds.has(String(postId))) {
+                posts.push({
+                    post_id: postId,
+                    id: post.id,
+                    video_id: videoId,
+                    status: post.status,
+                    title: post.title,
+                    published_at: post.published_at,
+                    published_at_meta: post.published_at,
+                    published_at_readable: post.published_at_readable,
+                    view_count: metrics.view_count,
+                    like_count: metrics.like_count,
+                    comment_count: metrics.comment_count,
+                    share_count: metrics.share_count,
+                    bookmark_count: metrics.bookmark_count
+                });
+                postIds.add(String(postId));
+            }
+        });
+
+        card.videos = videos;
+        card.posts = posts;
+        card.video_total = Math.max(Number(card.video_total) || 0, videos.length);
+        return card;
     }
 
     function findConceptByPrefix(prefix) {
@@ -1202,10 +1369,12 @@
 
         if (isLoading) {
             body = '<div class="empty-state"><div class="empty-title">正在从 ReelFarm 拉取这个国家/地区的全部素材...</div></div>';
+        } else if (result?.loading) {
+            body = '<div class="empty-state"><div class="empty-title">Loading accounts...</div></div>';
         } else if (result?.error) {
             body = `<div class="empty-state"><div class="empty-title">同步失败</div><div>${escapeHtml(result.error)}</div></div>`;
         } else if (result?.cards?.length) {
-            const visibleCards = result.cards.filter(card => getWindowedPosts(card).length > 0);
+            const visibleCards = result.cards.filter(card => hasVisibleReelFarmCard(card));
             body = `
                 <div class="creator-table">
                     <div class="creator-table-head">
@@ -1227,7 +1396,7 @@
         } else if (result) {
             body = '<div class="empty-state"><div class="empty-title">没有找到匹配 automation</div><div>确认 ReelFarm 里 automation name 是否以这个国家/产品 prefix 开头。</div></div>';
         } else {
-            body = '<div class="item-meta">点击左侧「同步当前区」后，会显示这个国家/地区下每个 TikTok 账号和所有素材数据。后续可基于这些数据让 AI 再做创意方向分类。</div>';
+            body = '<div class="empty-state"><div class="empty-title">Loading accounts...</div></div>';
         }
 
         return `
@@ -1315,7 +1484,7 @@
         } else if (result?.error) {
             body = `<div class="empty-state"><div class="empty-title">同步失败</div><div>${escapeHtml(result.error)}</div></div>`;
         } else if (result?.cards?.length) {
-            const visibleCards = result.cards.filter(card => getWindowedPosts(card).length > 0);
+            const visibleCards = result.cards.filter(card => hasVisibleReelFarmCard(card));
             body = `
                 <div class="creator-table">
                     <div class="creator-table-head">
@@ -1373,10 +1542,12 @@
             : escapeHtml(accountInitial);
         const posts = getWindowedPosts(card);
         const videos = card.videos || [];
-        const views = getMetricFromPosts(posts, 'view_count');
-        const likes = getMetricFromPosts(posts, 'like_count');
-        const comments = getMetricFromPosts(posts, 'comment_count');
-        const shares = getMetricFromPosts(posts, 'share_count');
+        const summary = card.summary_metrics || {};
+        const hasLoadedPosts = (card.posts || []).length > 0;
+        const views = hasLoadedPosts ? getMetricFromPosts(posts, 'view_count') : (Number(summary.total_views) || 0);
+        const likes = hasLoadedPosts ? getMetricFromPosts(posts, 'like_count') : (Number(summary.total_likes) || 0);
+        const comments = hasLoadedPosts ? getMetricFromPosts(posts, 'comment_count') : (Number(summary.total_comments) || 0);
+        const shares = hasLoadedPosts ? getMetricFromPosts(posts, 'share_count') : (Number(summary.total_shares) || 0);
         const engagement = views > 0 ? ((likes + comments + shares) / views) * 100 : 0;
         const postsByVideo = new Map(posts.map(post => [String(post.video_id), post]));
         const slideshows = videos.filter(video => {
@@ -1384,9 +1555,11 @@
             return isSlideshow && postsByVideo.has(String(video.video_id));
         });
         const title = automation.title || automation.automation_id || 'Untitled automation';
+        const displayPostCount = hasLoadedPosts ? posts.length : (Number(summary.post_count) || 0);
+        const displaySlideCount = hasLoadedPosts ? slideshows.length : (Number(summary.material_count) || Number(card.video_total) || 0);
         const statRows = [
-            ['Posts', formatNumber(posts.length)],
-            ['Slides', formatNumber(slideshows.length)],
+            ['Posts', formatNumber(displayPostCount)],
+            ['Slides', formatNumber(displaySlideCount)],
             ['Views', formatNumber(views)],
             ['Likes', formatNumber(likes)],
             ['Comments', formatNumber(comments)],
@@ -1397,6 +1570,7 @@
         const totalPages = Math.max(1, Math.ceil(slideshows.length / pageSize));
         const page = Math.min(getMaterialPage(cardKey), totalPages - 1);
         const pageItems = slideshows.slice(page * pageSize, page * pageSize + pageSize);
+        const isLoadingPosts = Boolean(reelFarmAccountPostLoading[cardKey]);
 
         return `
             <article class="reelfarm-card ${isOpen ? 'is-open' : ''}">
@@ -1427,7 +1601,9 @@
                         <div class="creator-toolbar-pill">Recently Published</div>
                     </div>
                     <div class="slideshow-list">
-                        ${pageItems.length
+                        ${isLoadingPosts
+                            ? '<div class="empty-state compact"><div class="empty-title">Loading posts...</div></div>'
+                            : pageItems.length
                             ? pageItems.map(video => renderMaterialItem(video, postsByVideo.get(String(video.video_id)), accountName, avatar)).join('')
                             : '<div class="item-meta" style="color:#bfb7ad;">暂无素材数据</div>'}
                     </div>
@@ -1442,6 +1618,10 @@
                     ${card.errors?.videos || card.errors?.posts
                         ? `<div class="item-meta" style="padding:0 14px 14px; color:#bfb7ad;">${escapeHtml(card.errors.videos || card.errors.posts)}</div>`
                         : ''}
+                    ${card.pagination?.has_more ? `
+                        <div class="post-pager">
+                            <button class="post-page-btn" type="button" data-card="${escapeHtml(cardKey)}" onclick="loadMoreAccountPosts(this.dataset.card)">Load more</button>
+                        </div>` : ''}
                 ` : ''}
             </article>`;
     }
@@ -1919,8 +2099,7 @@
                 country_code: context?.country ? getCountryReelFarmCode(context.country) : ''
             })
         });
-        const payload = await response.json();
-        if (!response.ok) throw new Error(payload.error || 'Failed to sync ReelFarm data.');
+        const payload = await readJsonResponse(response, 'Failed to sync ReelFarm data.');
 
         return payload;
     }
@@ -1938,8 +2117,7 @@
                 country_code: getCountryReelFarmCode(country)
             })
         });
-        const payload = await response.json();
-        if (!response.ok) throw new Error(payload.error || 'Failed to sync ReelFarm country data.');
+        const payload = await readJsonResponse(response, 'Failed to sync ReelFarm country data.');
 
         country.reelFarmSyncedAt = new Date().toLocaleString();
         country.creatorCount = Number(payload.creator_count) || 0;
@@ -1958,23 +2136,66 @@
         }
 
         try {
-            const params = new URLSearchParams({
-                product_code: getProductReelFarmCode(product),
-                country_code: getCountryReelFarmCode(country)
-            });
-            const response = await fetch(`${API_REELFARM_STORED_COUNTRY_URL}?${params.toString()}`, { cache: 'no-store' });
-            const payload = await response.json().catch(() => ({}));
-            if (!response.ok) throw new Error(payload.error || 'Failed to load stored ReelFarm data.');
-            if (payload && payload.prefix && Array.isArray(payload.cards)) {
-                reelFarmResults[prefix] = payload;
-                storeReelFarmResultOnCountry(country, payload);
-                renderFormats();
-                renderCountries();
-            }
-            return payload;
+            reelFarmResults[prefix] = { prefix, count: 0, cards: [], loading: true };
+            renderFormats();
+            const params = countryQueryParams(product, country, { resource: 'accounts' });
+            const response = await fetch(`${API_DATA_QUERY_URL}?${params.toString()}`, { cache: 'no-store' });
+            const payload = await readJsonResponse(response, 'Failed to load account summaries.');
+            const cards = (payload.data || []).map(accountSummaryToCard);
+            reelFarmResults[prefix] = { prefix, count: cards.length, cards };
+            storeReelFarmResultOnCountry(country, reelFarmResults[prefix]);
+            renderFormats();
+            renderCountries();
+            return reelFarmResults[prefix];
         } catch (error) {
             console.error(error);
+            reelFarmResults[prefix] = { prefix, count: 0, cards: [], error: error.message || '账号数据加载失败' };
+            renderFormats();
             return null;
+        }
+    }
+
+    function findCardByKey(cardKey) {
+        for (const result of Object.values(reelFarmResults)) {
+            const card = (result?.cards || []).find(item => cardStateKey(item) === cardKey);
+            if (card) return card;
+        }
+        return null;
+    }
+
+    async function loadAccountPosts(cardKey, append = false) {
+        const product = getSelectedProduct();
+        const country = getSelectedCountry();
+        const card = findCardByKey(cardKey);
+        if (!product || !country || !card || window.location.protocol === 'file:') return;
+        if (!append && card.posts?.length) return;
+
+        const account = card.account || {};
+        const offset = append ? (card.posts || []).length : 0;
+        reelFarmAccountPostLoading[cardKey] = true;
+        renderFormats();
+
+        try {
+            const params = countryQueryParams(product, country, {
+                resource: 'account_posts',
+                account_id: account.id || account.account_id || account.reelfarm_account_id || account.tiktok_account_id || account.username || account.account_username || '',
+                limit: 50,
+                offset
+            });
+            const response = await fetch(`${API_DATA_QUERY_URL}?${params.toString()}`, { cache: 'no-store' });
+            const payload = await readJsonResponse(response, 'Failed to load account posts.');
+            detailedRowsToCardPayload(card, payload.data || [], append);
+            card.pagination = payload.pagination || { limit: 50, offset: 0, has_more: false };
+            if (append && card.pagination) {
+                card.pagination.offset = offset;
+            }
+            card.errors = { videos: null, posts: null };
+        } catch (error) {
+            console.error(error);
+            card.errors = { videos: null, posts: error.message || 'Posts loading failed.' };
+        } finally {
+            delete reelFarmAccountPostLoading[cardKey];
+            renderFormats();
         }
     }
 
@@ -2053,8 +2274,13 @@
             delete expandedReelFarmCards[cardKey];
         } else {
             expandedReelFarmCards[cardKey] = true;
+            loadAccountPosts(cardKey);
         }
         renderFormats();
+    };
+
+    window.loadMoreAccountPosts = function(cardKey) {
+        loadAccountPosts(cardKey, true);
     };
 
     window.moveMaterialPage = function(cardKey, direction) {
