@@ -34,6 +34,7 @@ from server import (
     sync_all_reelfarm_records,
     sync_reelfarm_country,
     sync_reelfarm_prefix,
+    stored_reelfarm_country,
     delete_app_value,
     REELFARM_API_KEY,
     using_postgres,
@@ -283,6 +284,20 @@ def get_reelfarm_matches(request: Request, prefix: str = ""):
         raise HTTPException(status_code=400, detail=str(error)) from error
     except RuntimeError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@app.get("/api/reelfarm/stored-country")
+def get_reelfarm_stored_country(
+    request: Request,
+    product_code: str = "",
+    country_code: str = "",
+    market_code: str = "",
+):
+    require_dashboard_auth(request)
+    try:
+        return stored_reelfarm_country(product_code, country_code or market_code)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @app.post("/api/reelfarm/sync-prefix")

@@ -3,6 +3,7 @@
     const API_DATABASE_URL = '/api/database';
     const API_REELFARM_CONFIG_URL = '/api/reelfarm/config';
     const API_REELFARM_MATCHES_URL = '/api/reelfarm/matches';
+    const API_REELFARM_STORED_COUNTRY_URL = '/api/reelfarm/stored-country';
     const API_REELFARM_SYNC_PREFIX_URL = '/api/reelfarm/sync-prefix';
     const API_REELFARM_SYNC_COUNTRY_URL = '/api/reelfarm/sync-country';
     const API_AUTH_LOGIN_URL = '/api/auth/login';
@@ -474,7 +475,7 @@
             const payload = await response.json();
             dbData = Array.isArray(payload.data) ? payload.data : createDefaultData();
             ensureSelection();
-            setStatus('已连接 SQLite 数据库');
+            setStatus('已连接数据库');
         } catch (error) {
             console.error(error);
             dbData = createDefaultData();
@@ -711,7 +712,7 @@
             });
 
             if (!response.ok) throw new Error('Failed to save database data.');
-            setStatus('已保存到 SQLite 数据库');
+            setStatus('已保存到数据库');
         } catch (error) {
             console.error(error);
             setStatus('保存失败，请确认后端服务正在运行', 'error');
@@ -1560,6 +1561,7 @@
         selectedCountryId = countryId;
         currentPage = 'country';
         renderApp();
+        loadStoredReelFarmCountry(getSelectedProduct(), getSelectedCountry());
     };
 
     window.toggleTopic = function(groupName) {
@@ -1960,6 +1962,35 @@
         return result;
     }
 
+    async function loadStoredReelFarmCountry(product, country) {
+        if (!product || !country || window.location.protocol === 'file:') return null;
+
+        const prefix = buildCountryAutomationPrefix(product, country);
+        if (reelFarmResults[prefix] || country.reelFarmResult?.prefix === prefix) {
+            return reelFarmResults[prefix] || country.reelFarmResult;
+        }
+
+        try {
+            const params = new URLSearchParams({
+                product_code: getProductReelFarmCode(product),
+                country_code: getCountryReelFarmCode(country)
+            });
+            const response = await fetch(`${API_REELFARM_STORED_COUNTRY_URL}?${params.toString()}`, { cache: 'no-store' });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(payload.error || 'Failed to load stored ReelFarm data.');
+            if (payload.cards?.length) {
+                reelFarmResults[prefix] = payload;
+                storeReelFarmResultOnCountry(country, payload);
+                renderFormats();
+                renderCountries();
+            }
+            return payload;
+        } catch (error) {
+            console.error(error);
+            return null;
+        }
+    }
+
     window.syncReelFarmPrefix = async function(prefix) {
         if (window.location.protocol === 'file:') {
             setStatus('当前是 file:// 页面，不能调 ReelFarm API', 'error');
@@ -2260,7 +2291,7 @@
             selectedCountryId = null;
             ensureSelection();
             renderApp();
-            setStatus('示例数据已写入 SQLite');
+            setStatus('示例数据已写入数据库');
         } catch (error) {
             console.error(error);
             dbData = createDefaultData();

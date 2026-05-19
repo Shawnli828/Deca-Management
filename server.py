@@ -409,8 +409,22 @@ def delete_app_value(key):
 
 
 def save_data(data, conn=None):
-    payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    payload = json.dumps(strip_reelfarm_state(data), ensure_ascii=False, separators=(",", ":"))
     save_app_value(STATE_KEY, payload, conn)
+
+
+def strip_reelfarm_state(value):
+    if isinstance(value, list):
+        return [strip_reelfarm_state(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+
+    clean = {}
+    for key, item in value.items():
+        if key == "reelFarmResult":
+            continue
+        clean[key] = strip_reelfarm_state(item)
+    return clean
 
 
 def db_json(value):
@@ -758,6 +772,155 @@ def project_synced_country_to_relational(product, country):
     )
 
 
+def parse_json_list(value):
+    if isinstance(value, list):
+        return value
+    try:
+        parsed = json.loads(value or "[]")
+    except (TypeError, json.JSONDecodeError):
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
+def stored_reelfarm_country(product_code, market_code):
+    product_code = str(product_code or "").strip().upper()
+    market_code = str(market_code or "").strip().upper()
+    if not product_code or not market_code:
+        raise ValueError("Missing product_code or country_code.")
+
+    placeholder = db_placeholder()
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        rows = conn.execute(
+            f"""
+            SELECT
+                a.id AS automation_internal_id,
+                a.reelfarm_automation_id,
+                a.name AS automation_name,
+                a.status AS automation_status,
+                a.schedule AS automation_schedule,
+                a.created_at AS automation_created_at,
+                acc.reelfarm_account_id,
+                acc.username AS account_username,
+                acc.display_name AS account_name,
+                acc.avatar_url AS account_image,
+                mat.reelfarm_video_id,
+                mat.created_at AS material_created_at,
+                mat.finished_at AS material_finished_at,
+                mat.status AS material_status,
+                mat.video_type,
+                mat.hook,
+                mat.prompt,
+                mat.images_json,
+                mat.slide_count,
+                post.reelfarm_post_id,
+                post.status AS post_status,
+                post.title AS post_title,
+                post.published_at,
+                post.published_at_readable,
+                post.view_count,
+                post.like_count,
+                post.comment_count,
+                post.share_count,
+                post.bookmark_count
+            FROM products p
+            JOIN product_markets pm ON pm.product_id = p.id
+            JOIN markets m ON m.id = pm.market_id
+            JOIN product_market_channels pmc ON pmc.product_market_id = pm.id
+            JOIN channels ch ON ch.id = pmc.channel_id
+            JOIN automations a ON a.product_market_channel_id = pmc.id
+            LEFT JOIN accounts acc ON acc.id = a.account_id
+            LEFT JOIN materials mat ON mat.automation_id = a.id
+            LEFT JOIN posts post ON post.material_id = mat.id
+            WHERE p.code = {placeholder}
+              AND m.code = {placeholder}
+              AND ch.code = {placeholder}
+            ORDER BY a.name, mat.created_at DESC, post.published_at DESC
+            """,
+            (product_code, market_code, "TIKTOK"),
+        ).fetchall()
+
+    cards_by_id = {}
+    for row in rows:
+        automation_id = row["reelfarm_automation_id"]
+        if not automation_id:
+            continue
+
+        if automation_id not in cards_by_id:
+            account_id = row["reelfarm_account_id"] or ""
+            cards_by_id[automation_id] = {
+                "automation": {
+                    "automation_id": automation_id,
+                    "title": row["automation_name"],
+                    "status": row["automation_status"],
+                    "tiktok_account_id": account_id,
+                    "schedule": parse_json_list(row["automation_schedule"]),
+                    "created_at": row["automation_created_at"],
+                },
+                "account": {
+                    "tiktok_account_id": account_id,
+                    "account_name": row["account_name"],
+                    "account_username": row["account_username"],
+                    "account_image": row["account_image"],
+                },
+                "videos": [],
+                "video_total": 0,
+                "posts": [],
+                "post_statistics": {},
+                "errors": {"videos": None, "posts": None},
+            }
+
+        card = cards_by_id[automation_id]
+        video_id = row["reelfarm_video_id"]
+        if video_id and not any(str(video.get("video_id")) == str(video_id) for video in card["videos"]):
+            card["videos"].append(
+                {
+                    "video_id": video_id,
+                    "created_at": row["material_created_at"],
+                    "finished_at": row["material_finished_at"],
+                    "status": row["material_status"],
+                    "finished": row["material_status"] == "Finished",
+                    "failed": False,
+                    "video_type": row["video_type"],
+                    "video_url": None,
+                    "slideshow_images": parse_json_list(row["images_json"]),
+                    "slide_count": int_or_none(row["slide_count"]) or 0,
+                    "hook": row["hook"] or "",
+                    "prompt": row["prompt"] or "",
+                }
+            )
+
+        post_id = row["reelfarm_post_id"]
+        if post_id and not any(str(post.get("post_id")) == str(post_id) for post in card["posts"]):
+            card["posts"].append(
+                {
+                    "post_id": post_id,
+                    "video_id": video_id,
+                    "status": row["post_status"],
+                    "title": row["post_title"],
+                    "account_username": row["account_username"],
+                    "published_at": row["published_at"],
+                    "published_at_meta": row["published_at"],
+                    "published_at_readable": row["published_at_readable"],
+                    "view_count": row["view_count"],
+                    "like_count": row["like_count"],
+                    "comment_count": row["comment_count"],
+                    "share_count": row["share_count"],
+                    "bookmark_count": row["bookmark_count"],
+                }
+            )
+
+    cards = list(cards_by_id.values())
+    for card in cards:
+        card["video_total"] = len(card["videos"])
+
+    return {
+        "prefix": f"{market_code}-{product_code}",
+        "count": len(cards),
+        "cards": cards,
+    }
+
+
 def load_data():
     init_db()
     value = load_app_value(STATE_KEY)
@@ -774,7 +937,13 @@ def load_data():
         save_data(data)
         return data
 
-    return data if isinstance(data, list) else default_data()
+    if not isinstance(data, list):
+        return default_data()
+
+    clean_data = strip_reelfarm_state(data)
+    if clean_data != data:
+        save_data(clean_data)
+    return clean_data
 
 
 def default_roaster_state():
@@ -1439,114 +1608,113 @@ def database_snapshot():
 
 
 def ai_materials_payload(query):
-    data = load_data()
     product_filter = (query.get("product_code", [""])[0] or "").strip().upper()
     country_filter = (query.get("country_code", [""])[0] or "").strip().upper()
     product_id_filter = (query.get("product_id", [""])[0] or "").strip()
     country_id_filter = (query.get("country_id", [""])[0] or "").strip()
     synced_only = (query.get("synced_only", [""])[0] or "").strip().lower() in {"1", "true", "yes"}
     include_raw = (query.get("include_raw", [""])[0] or "").strip().lower() in {"1", "true", "yes"}
+    placeholder = db_placeholder()
+    where = []
+    params = []
+    if product_filter:
+        where.append(f"p.code = {placeholder}")
+        params.append(product_filter)
+    if country_filter:
+        where.append(f"m.code = {placeholder}")
+        params.append(country_filter)
+    if product_id_filter:
+        where.append(f"p.id = {placeholder}")
+        params.append(product_id_filter)
+    if country_id_filter:
+        where.append(f"m.id = {placeholder}")
+        params.append(country_id_filter)
+    where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        pairs = conn.execute(
+            f"""
+            SELECT DISTINCT
+                p.id AS product_id,
+                p.name AS product_name,
+                p.owner_type,
+                p.code AS product_code,
+                m.id AS market_id,
+                m.name AS market_name,
+                m.code AS market_code
+            FROM products p
+            JOIN product_markets pm ON pm.product_id = p.id
+            JOIN markets m ON m.id = pm.market_id
+            JOIN product_market_channels pmc ON pmc.product_market_id = pm.id
+            JOIN channels ch ON ch.id = pmc.channel_id
+            {where_sql}
+            ORDER BY p.name, m.code
+            """,
+            tuple(params),
+        ).fetchall()
 
     countries_payload = []
-    totals = {
-        "products": 0,
-        "countries": 0,
-        "creators": 0,
-        "materials": 0,
-        "posts": 0,
-    }
-
-    for product in data:
-        product_code = (product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
-        if product_filter and product_code != product_filter:
-            continue
-        if product_id_filter and str(product.get("id")) != product_id_filter:
+    product_ids = set()
+    totals = {"products": 0, "countries": 0, "creators": 0, "materials": 0, "posts": 0}
+    for pair in pairs:
+        result = stored_reelfarm_country(pair["product_code"], pair["market_code"])
+        cards = result.get("cards", [])
+        if synced_only and not cards:
             continue
 
-        product_included = False
-        for country in product.get("countries", []) or []:
-            country_code = (
-                country.get("reelFarmCode")
-                or COUNTRY_CODES.get(country.get("name"))
-                or code_from_name(country.get("name"))
-            ).upper()
-            if country_filter and country_code != country_filter:
-                continue
-            if country_id_filter and str(country.get("id")) != country_id_filter:
-                continue
+        creators = []
+        country_material_count = 0
+        country_post_count = 0
+        for card in cards:
+            videos = card.get("videos") if isinstance(card.get("videos"), list) else []
+            posts = card.get("posts") if isinstance(card.get("posts"), list) else []
+            posts_by_video = {str(post.get("video_id")): post for post in posts if isinstance(post, dict)}
+            materials = [
+                {"video": video, "post": posts_by_video.get(str(video.get("video_id") or video.get("id") or ""))}
+                for video in videos
+                if isinstance(video, dict)
+            ]
+            country_material_count += len(materials)
+            country_post_count += len(posts)
+            creators.append(
+                {
+                    "account": card.get("account", {}),
+                    "automation": card.get("automation", {}),
+                    "material_count": len(materials),
+                    "post_count": len(posts),
+                    "materials": materials,
+                }
+            )
 
-            result = country.get("reelFarmResult") if isinstance(country.get("reelFarmResult"), dict) else {}
-            cards = result.get("cards", []) if isinstance(result.get("cards"), list) else []
-            if synced_only and not cards:
-                continue
-
-            creators = []
-            country_material_count = 0
-            country_post_count = 0
-            for card in cards:
-                if not isinstance(card, dict):
-                    continue
-                account = card.get("account") if isinstance(card.get("account"), dict) else {}
-                automation = card.get("automation") if isinstance(card.get("automation"), dict) else {}
-                videos = card.get("videos") if isinstance(card.get("videos"), list) else []
-                posts = card.get("posts") if isinstance(card.get("posts"), list) else []
-                posts_by_video = {str(post.get("video_id")): post for post in posts if isinstance(post, dict)}
-                materials = []
-
-                for video in videos:
-                    if not isinstance(video, dict):
-                        continue
-                    video_id = str(video.get("video_id") or video.get("id") or "")
-                    materials.append(
-                        {
-                            "video": video,
-                            "post": posts_by_video.get(video_id),
-                        }
-                    )
-
-                country_material_count += len(materials)
-                country_post_count += len(posts)
-                creators.append(
-                    {
-                        "account": account,
-                        "automation": automation,
-                        "material_count": len(materials),
-                        "post_count": len(posts),
-                        "materials": materials,
-                    }
-                )
-
-            country_payload = {
+        product_ids.add(pair["product_id"])
+        countries_payload.append(
+            {
                 "product": {
-                    "id": product.get("id"),
-                    "name": product.get("name"),
-                    "folder": product.get("folder"),
-                    "reelFarmCode": product_code,
+                    "id": pair["product_id"],
+                    "name": pair["product_name"],
+                    "folder": pair["owner_type"],
+                    "reelFarmCode": pair["product_code"],
                 },
                 "country": {
-                    "id": country.get("id"),
-                    "name": country.get("name"),
-                    "reelFarmCode": country_code,
+                    "id": pair["market_id"],
+                    "name": pair["market_name"],
+                    "reelFarmCode": pair["market_code"],
                 },
-                "automation_prefix": build_country_automation_prefix(product, country),
-                "synced_at": country.get("reelFarmSyncedAt"),
-                "creator_count": country.get("creatorCount", reelfarm_creator_count(result)),
-                "material_count": country.get("materialCount", country_material_count),
+                "automation_prefix": f"{pair['market_code']}-{pair['product_code']}",
+                "synced_at": None,
+                "creator_count": len(creators),
+                "material_count": country_material_count,
                 "post_count": country_post_count,
                 "creators": creators,
             }
-            if include_raw:
-                country_payload["raw_reelfarm_result"] = result
+        )
+        totals["countries"] += 1
+        totals["creators"] += len(creators)
+        totals["materials"] += country_material_count
+        totals["posts"] += country_post_count
 
-            countries_payload.append(country_payload)
-            totals["countries"] += 1
-            totals["creators"] += len(creators)
-            totals["materials"] += country_material_count
-            totals["posts"] += country_post_count
-            product_included = True
-
-        if product_included:
-            totals["products"] += 1
+    totals["products"] = len(product_ids)
 
     return {
         "ok": True,
@@ -1559,6 +1727,7 @@ def ai_materials_payload(query):
             "country_id": country_id_filter or None,
             "synced_only": synced_only,
             "include_raw": include_raw,
+            "source": "relational",
         },
         "totals": totals,
         "countries": countries_payload,
@@ -1711,6 +1880,20 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
                 self.send_json(400, {"error": str(error)})
             except RuntimeError as error:
                 self.send_json(502, {"error": str(error)})
+            return
+
+        if path == "/api/reelfarm/stored-country":
+            query = parse_qs(urlparse(self.path).query)
+            try:
+                self.send_json(
+                    200,
+                    stored_reelfarm_country(
+                        query.get("product_code", [""])[0],
+                        query.get("country_code", query.get("market_code", [""]))[0],
+                    ),
+                )
+            except ValueError as error:
+                self.send_json(400, {"error": str(error)})
             return
 
         if path == "/":
