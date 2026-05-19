@@ -758,6 +758,27 @@ def rebuild_relational_data(data=None, product_code_filter="", market_code_filte
     }
 
 
+def project_synced_country_to_relational(product, country, reset=False):
+    if not isinstance(product, dict) or not isinstance(country, dict):
+        return None
+
+    scoped_product = dict(product)
+    scoped_country = dict(country)
+    scoped_product["countries"] = [scoped_country]
+    product_code = (scoped_product.get("reelFarmCode") or code_from_name(scoped_product.get("name"))).upper()
+    market_code = (
+        scoped_country.get("reelFarmCode")
+        or COUNTRY_CODES.get(scoped_country.get("name"))
+        or code_from_name(scoped_country.get("name"))
+    ).upper()
+    return rebuild_relational_data(
+        data=[scoped_product],
+        product_code_filter=product_code,
+        market_code_filter=market_code,
+        reset=reset,
+    )
+
+
 def load_data():
     init_db()
     value = load_app_value(STATE_KEY)
@@ -1231,6 +1252,7 @@ def sync_all_reelfarm_records():
     synced_at = datetime.now(timezone.utc).isoformat()
     successes = 0
     errors = []
+    relational_projection = None
 
     for product in data:
         for country in product.get("countries", []) or []:
@@ -1241,6 +1263,11 @@ def sync_all_reelfarm_records():
                 country["reelFarmSyncedAt"] = synced_at
                 country["creatorCount"] = reelfarm_creator_count(result)
                 country["materialCount"] = reelfarm_material_count(result)
+                relational_projection = project_synced_country_to_relational(
+                    product,
+                    country,
+                    reset=successes == 0,
+                )
                 successes += 1
             except RuntimeError as error:
                 errors.append({"prefix": prefix, "error": str(error)})
@@ -1252,6 +1279,7 @@ def sync_all_reelfarm_records():
         "synced_count": successes,
         "error_count": len(errors),
         "errors": errors[:20],
+        "relational_projection": relational_projection,
     }
 
 
@@ -1285,6 +1313,7 @@ def sync_reelfarm_country(prefix, product_id="", country_id="", product_code="",
             country["reelFarmSyncedAt"] = synced_at
             country["creatorCount"] = reelfarm_creator_count(result)
             country["materialCount"] = reelfarm_material_count(result)
+            relational_projection = project_synced_country_to_relational(product, country, reset=False)
             save_data(data)
             return {
                 "ok": True,
@@ -1293,6 +1322,7 @@ def sync_reelfarm_country(prefix, product_id="", country_id="", product_code="",
                 "result": result,
                 "creator_count": country["creatorCount"],
                 "material_count": country["materialCount"],
+                "relational_projection": relational_projection,
             }
 
     raise ValueError("No matching country found for this prefix.")

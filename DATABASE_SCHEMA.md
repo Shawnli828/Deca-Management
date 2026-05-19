@@ -48,6 +48,8 @@ POST /api/database/rebuild-relational
 
 This does not delete `app_state`; it only rebuilds the relational projection tables.
 
+Normal ReelFarm sync now also writes into these relational tables automatically. The rebuild endpoint is only for backfilling or repairing old saved JSON data.
+
 For large datasets, rebuild one product/market at a time:
 
 ```http
