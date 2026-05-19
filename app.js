@@ -1945,15 +1945,15 @@
         country.creatorCount = Number(payload.creator_count) || 0;
         country.materialCount = Number(payload.material_count) || 0;
 
-        const stored = await loadStoredReelFarmCountry(product, country);
+        const stored = await loadStoredReelFarmCountry(product, country, true);
         return stored || payload;
     }
 
-    async function loadStoredReelFarmCountry(product, country) {
+    async function loadStoredReelFarmCountry(product, country, force = false) {
         if (!product || !country || window.location.protocol === 'file:') return null;
 
         const prefix = buildCountryAutomationPrefix(product, country);
-        if (reelFarmResults[prefix]) {
+        if (!force && reelFarmResults[prefix]) {
             return reelFarmResults[prefix];
         }
 
@@ -1965,7 +1965,7 @@
             const response = await fetch(`${API_REELFARM_STORED_COUNTRY_URL}?${params.toString()}`, { cache: 'no-store' });
             const payload = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(payload.error || 'Failed to load stored ReelFarm data.');
-            if (payload.cards?.length) {
+            if (payload && payload.prefix && Array.isArray(payload.cards)) {
                 reelFarmResults[prefix] = payload;
                 storeReelFarmResultOnCountry(country, payload);
                 renderFormats();
