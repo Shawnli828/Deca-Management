@@ -122,6 +122,16 @@ def build_automation_prefix(product, country, concept):
     return f"{country_code}-{product_code}-{topic}-{format_name}"
 
 
+def build_country_automation_prefix(product, country):
+    country_code = (
+        country.get("reelFarmCode")
+        or COUNTRY_CODES.get(country.get("name"))
+        or code_from_name(country.get("name"))
+    ).upper()
+    product_code = (product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
+    return f"{country_code}-{product_code}"
+
+
 def default_data():
     return [
         {
@@ -628,6 +638,15 @@ def reelfarm_creator_count(result):
     return len(creator_keys)
 
 
+def reelfarm_material_count(result):
+    cards = result.get("cards", []) if isinstance(result, dict) else []
+    return sum(
+        len(card.get("videos", []) or [])
+        for card in cards
+        if isinstance(card, dict)
+    )
+
+
 def sync_all_reelfarm_records():
     if not reelfarm_api_key():
         raise RuntimeError("ReelFarm API key is not configured.")
@@ -639,16 +658,16 @@ def sync_all_reelfarm_records():
 
     for product in data:
         for country in product.get("countries", []) or []:
-            for concept in country.get("concepts", []) or []:
-                prefix = build_automation_prefix(product, country, concept)
-                try:
-                    result = reelfarm_matches(prefix)
-                    concept["reelFarmResult"] = result
-                    concept["reelFarmSyncedAt"] = synced_at
-                    concept["count"] = reelfarm_creator_count(result)
-                    successes += 1
-                except RuntimeError as error:
-                    errors.append({"prefix": prefix, "error": str(error)})
+            prefix = build_country_automation_prefix(product, country)
+            try:
+                result = reelfarm_matches(prefix)
+                country["reelFarmResult"] = result
+                country["reelFarmSyncedAt"] = synced_at
+                country["creatorCount"] = reelfarm_creator_count(result)
+                country["materialCount"] = reelfarm_material_count(result)
+                successes += 1
+            except RuntimeError as error:
+                errors.append({"prefix": prefix, "error": str(error)})
 
     save_data(data)
     return {
@@ -658,6 +677,49 @@ def sync_all_reelfarm_records():
         "error_count": len(errors),
         "errors": errors[:20],
     }
+
+
+def sync_reelfarm_country(prefix, product_id="", country_id="", product_code="", country_code=""):
+    clean_prefix = (prefix or "").strip()
+    if not clean_prefix:
+        raise ValueError("Missing automation prefix.")
+
+    data = load_data()
+    synced_at = datetime.now(timezone.utc).isoformat()
+
+    for product in data:
+        for country in product.get("countries", []) or []:
+            id_match = (
+                country_id
+                and product_id
+                and str(country.get("id")) == str(country_id)
+                and str(product.get("id")) == str(product_id)
+            )
+            prefix_match = build_country_automation_prefix(product, country) == clean_prefix
+            if not id_match and not prefix_match:
+                continue
+
+            if product_code:
+                product["reelFarmCode"] = str(product_code).strip().upper()
+            if country_code:
+                country["reelFarmCode"] = str(country_code).strip().upper()
+
+            result = reelfarm_matches(clean_prefix)
+            country["reelFarmResult"] = result
+            country["reelFarmSyncedAt"] = synced_at
+            country["creatorCount"] = reelfarm_creator_count(result)
+            country["materialCount"] = reelfarm_material_count(result)
+            save_data(data)
+            return {
+                "ok": True,
+                "prefix": clean_prefix,
+                "synced_at": synced_at,
+                "result": result,
+                "creator_count": country["creatorCount"],
+                "material_count": country["materialCount"],
+            }
+
+    raise ValueError("No matching country found for this prefix.")
 
 
 def sync_reelfarm_prefix(prefix, product_id="", country_id="", concept_id="", product_code="", country_code=""):
@@ -1041,6 +1103,31 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
                         str(payload.get("product_id", "") if isinstance(payload, dict) else "").strip(),
                         str(payload.get("country_id", "") if isinstance(payload, dict) else "").strip(),
                         str(payload.get("concept_id", "") if isinstance(payload, dict) else "").strip(),
+                        str(payload.get("product_code", "") if isinstance(payload, dict) else "").strip(),
+                        str(payload.get("country_code", "") if isinstance(payload, dict) else "").strip(),
+                    ),
+                )
+            except ValueError as error:
+                self.send_json(400, {"error": str(error)})
+            except RuntimeError as error:
+                self.send_json(502, {"error": str(error)})
+            return
+
+        if path == "/api/reelfarm/sync-country":
+            try:
+                payload = self.read_json_body()
+            except json.JSONDecodeError:
+                self.send_json(400, {"error": "Invalid JSON"})
+                return
+
+            prefix = str(payload.get("prefix", "") if isinstance(payload, dict) else "").strip()
+            try:
+                self.send_json(
+                    200,
+                    sync_reelfarm_country(
+                        prefix,
+                        str(payload.get("product_id", "") if isinstance(payload, dict) else "").strip(),
+                        str(payload.get("country_id", "") if isinstance(payload, dict) else "").strip(),
                         str(payload.get("product_code", "") if isinstance(payload, dict) else "").strip(),
                         str(payload.get("country_code", "") if isinstance(payload, dict) else "").strip(),
                     ),

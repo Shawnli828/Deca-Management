@@ -4,6 +4,7 @@
     const API_REELFARM_CONFIG_URL = '/api/reelfarm/config';
     const API_REELFARM_MATCHES_URL = '/api/reelfarm/matches';
     const API_REELFARM_SYNC_PREFIX_URL = '/api/reelfarm/sync-prefix';
+    const API_REELFARM_SYNC_COUNTRY_URL = '/api/reelfarm/sync-country';
     const API_AUTH_LOGIN_URL = '/api/auth/login';
     const API_AUTH_LOGOUT_URL = '/api/auth/logout';
     const API_ROASTER_URL = '/api/roaster';
@@ -218,6 +219,12 @@
         return `${countryCode}-${productCode}-${topic}-${format}`;
     }
 
+    function buildCountryAutomationPrefix(product, country) {
+        const countryCode = getCountryReelFarmCode(country);
+        const productCode = getProductReelFarmCode(product);
+        return `${countryCode}-${productCode}`;
+    }
+
     function formatNumber(value) {
         const number = Number(value) || 0;
         return number.toLocaleString();
@@ -334,12 +341,36 @@
         return null;
     }
 
+    function getCachedCountryReelFarmResult(country, prefix) {
+        const liveResult = reelFarmResults[prefix];
+        if (liveResult) return liveResult;
+
+        if (country?.reelFarmResult?.prefix === prefix) {
+            return country.reelFarmResult;
+        }
+
+        return null;
+    }
+
     function storeReelFarmResultOnConcept(concept, payload) {
         if (!concept) return;
 
         concept.reelFarmResult = payload;
         concept.reelFarmSyncedAt = new Date().toLocaleString();
         concept.count = getReelFarmCreatorCount(payload);
+    }
+
+    function getReelFarmMaterialCount(result) {
+        return (result?.cards || []).reduce((sum, card) => sum + (card?.videos || []).length, 0);
+    }
+
+    function storeReelFarmResultOnCountry(country, payload) {
+        if (!country) return;
+
+        country.reelFarmResult = payload;
+        country.reelFarmSyncedAt = new Date().toLocaleString();
+        country.creatorCount = getReelFarmCreatorCount(payload);
+        country.materialCount = getReelFarmMaterialCount(payload);
     }
 
     function findConceptByPrefix(prefix) {
@@ -1080,8 +1111,11 @@
         }
 
         list.innerHTML = filtered.map(country => {
-            const concepts = country.concepts || [];
-            const total = concepts.reduce((sum, concept) => sum + (Number(concept.count) || 0), 0);
+            const product = getSelectedProduct();
+            const prefix = product ? buildCountryAutomationPrefix(product, country) : '';
+            const result = getCachedCountryReelFarmResult(country, prefix);
+            const creatorCount = result?.cards ? getReelFarmCreatorCount(result) : (Number(country.creatorCount) || 0);
+            const materialCount = result?.cards ? getReelFarmMaterialCount(result) : (Number(country.materialCount) || 0);
             const flag = countryFlags[country.name] || '🌐';
 
             return `
@@ -1090,7 +1124,7 @@
                         <span class="flag-chip">${flag}</span>
                         <span class="item-main">
                             <span class="item-name">${escapeHtml(country.name || 'New Country')}</span>
-                            <span class="item-meta">${concepts.length} 个创意 · ${total} 数量</span>
+                            <span class="item-meta">${creatorCount} 个账号 · ${materialCount} 个素材</span>
                         </span>
                     </div>
                 </button>`;
@@ -1104,7 +1138,7 @@
         const country = getSelectedCountry();
 
         if (!product) {
-            context.innerHTML = '<div class="country-sidebar-head"><h2 class="country-sidebar-title">创意</h2><div class="context-meta">先选择一个产品。</div></div>';
+            context.innerHTML = '<div class="country-sidebar-head"><h2 class="country-sidebar-title">素材库</h2><div class="context-meta">先选择一个产品。</div></div>';
             list.innerHTML = '<div class="empty-state"><div class="empty-title">暂无上下文</div></div>';
             return;
         }
@@ -1112,7 +1146,7 @@
         if (!country) {
             context.innerHTML = `
                 <div class="country-sidebar-head">
-                    <h2 class="country-sidebar-title">${escapeHtml(product.name)} 的创意</h2>
+                    <h2 class="country-sidebar-title">${escapeHtml(product.name)} 的素材库</h2>
                     <div class="context-meta">先为这个产品添加国家/地区。</div>
                 </div>
                 <button class="btn primary" type="button" onclick="addCountryToSelected()">添加国家/地区</button>`;
@@ -1120,10 +1154,10 @@
             return;
         }
 
-        const concepts = country.concepts || [];
-        normalizeFormatGroups(country);
-        const total = concepts.reduce((sum, concept) => sum + getFormatAutoCount(product, country, concept), 0);
-        const groups = getFormatGroups(concepts);
+        const prefix = buildCountryAutomationPrefix(product, country);
+        const result = getCachedCountryReelFarmResult(country, prefix);
+        const creatorCount = result?.cards ? getReelFarmCreatorCount(result) : (Number(country.creatorCount) || 0);
+        const materialCount = result?.cards ? getReelFarmMaterialCount(result) : (Number(country.materialCount) || 0);
         const countrySyncKey = `country:${country.id}`;
         const isCountrySyncing = reelFarmLoadingPrefix === countrySyncKey;
         const windowOptions = [7, 14, 30];
@@ -1131,10 +1165,10 @@
         context.innerHTML = `
             <div class="country-sidebar-head">
                 <div class="country-title-row">
-                    <h2 class="country-sidebar-title">${escapeHtml(country.name)} 的创意</h2>
+                    <h2 class="country-sidebar-title">${escapeHtml(country.name)} 素材库</h2>
                     <button class="btn primary" type="button" onclick="syncCurrentCountryReelFarm()" ${isCountrySyncing ? 'disabled' : ''}>${isCountrySyncing ? '同步中...' : '同步当前区'}</button>
                 </div>
-                <div class="context-meta">${escapeHtml(product.name)} · ${groups.length} 个 Topic · ${concepts.length} 个 Format · ${total} 数量</div>
+                <div class="context-meta">${escapeHtml(product.name)} · ${creatorCount} 个账号 · ${materialCount} 个素材</div>
                 <div class="time-filter" role="group" aria-label="ReelFarm 时间维度">
                     <span class="time-filter-label">观察窗口</span>
                     <div class="time-filter-options">
@@ -1163,16 +1197,58 @@
                 <button class="btn danger" type="button" onclick="deleteCountry('${country.id}')">删除国家/地区</button>
             </div>`;
 
-        if (concepts.length === 0) {
-            list.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-title">这个国家/地区还没有创意</div>
-                    <button class="btn primary" type="button" onclick="addFormatGroupToSelected()">添加第一个 Topic</button>
-                </div>`;
-            return;
+        list.innerHTML = renderCountryReelFarm(product, country);
+    }
+
+    function renderCountryReelFarm(product, country) {
+        const prefix = buildCountryAutomationPrefix(product, country);
+        const result = getCachedCountryReelFarmResult(country, prefix);
+        const isLoading = reelFarmLoadingPrefix === `country:${country.id}`;
+        let body = '';
+
+        if (isLoading) {
+            body = '<div class="empty-state"><div class="empty-title">正在从 ReelFarm 拉取这个国家/地区的全部素材...</div></div>';
+        } else if (result?.error) {
+            body = `<div class="empty-state"><div class="empty-title">同步失败</div><div>${escapeHtml(result.error)}</div></div>`;
+        } else if (result?.cards?.length) {
+            const visibleCards = result.cards.filter(card => getWindowedPosts(card).length > 0);
+            body = `
+                <div class="creator-table">
+                    <div class="creator-table-head">
+                        <div>Creator ↕</div>
+                        <div>Posts ↕</div>
+                        <div>Slides ↕</div>
+                        <div>Views ↕</div>
+                        <div>Likes ↕</div>
+                        <div>Comments ↕</div>
+                        <div>Shares ↕</div>
+                        <div>% Engagement ↕</div>
+                        <div></div>
+                    </div>
+                    <div class="reelfarm-cards">${visibleCards.map(renderReelFarmCard).join('')}</div>
+                </div>
+                ${visibleCards.length
+                    ? ''
+                    : `<div class="empty-state compact"><div class="empty-title">最近 ${Number(reelFarmWindowDays) || 30} 天没有素材</div><div>这个国家/地区有同步记录，但没有匹配当前观察窗口的 posted 素材。</div></div>`}`;
+        } else if (result) {
+            body = '<div class="empty-state"><div class="empty-title">没有找到匹配 automation</div><div>确认 ReelFarm 里 automation name 是否以这个国家/产品 prefix 开头。</div></div>';
+        } else {
+            body = '<div class="item-meta">点击左侧「同步当前区」后，会显示这个国家/地区下每个 TikTok 账号和所有素材数据。后续可基于这些数据让 AI 再做创意方向分类。</div>';
         }
 
-        list.innerHTML = groups.map(renderFormatGroup).join('');
+        return `
+            <section class="reelfarm-format">
+                <div class="reelfarm-format-head">
+                    <div>
+                        <span class="automation-prefix">${escapeHtml(prefix)}</span>
+                        <div class="item-meta">国家/地区素材池 · 暂不按 Topic / Format 分类</div>
+                        ${country.reelFarmSyncedAt && country.reelFarmResult?.prefix === prefix
+                            ? `<div class="item-meta">上次同步：${escapeHtml(country.reelFarmSyncedAt)}</div>`
+                            : ''}
+                    </div>
+                </div>
+                ${body}
+            </section>`;
     }
 
     function renderFormatGroup(group) {
@@ -1859,6 +1935,28 @@
         return result;
     }
 
+    async function fetchAndStoreReelFarmCountry(product, country) {
+        const prefix = buildCountryAutomationPrefix(product, country);
+        const response = await fetch(API_REELFARM_SYNC_COUNTRY_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                prefix,
+                product_id: product?.id || '',
+                country_id: country?.id || '',
+                product_code: getProductReelFarmCode(product),
+                country_code: getCountryReelFarmCode(country)
+            })
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || 'Failed to sync ReelFarm country data.');
+
+        const result = payload.result || payload;
+        reelFarmResults[prefix] = result;
+        storeReelFarmResultOnCountry(country, result);
+        return result;
+    }
+
     window.syncReelFarmPrefix = async function(prefix) {
         if (window.location.protocol === 'file:') {
             setStatus('当前是 file:// 页面，不能调 ReelFarm API', 'error');
@@ -1905,29 +2003,17 @@
         const country = getSelectedCountry();
         if (!product || !country) return;
 
-        const prefixes = [...new Set((country.concepts || []).map(concept => buildAutomationPrefix(product, country, concept)))];
-        if (prefixes.length === 0) {
-            setStatus('这个国家/地区还没有 Format', 'error');
-            return;
-        }
-
         reelFarmLoadingPrefix = `country:${country.id}`;
         renderFormats();
 
-        let successCount = 0;
-        let errorCount = 0;
         try {
-            for (const prefix of prefixes) {
-                try {
-                    await fetchAndStoreReelFarmPrefix(prefix);
-                    successCount += 1;
-                } catch (error) {
-                    console.error(error);
-                    reelFarmResults[prefix] = { error: error.message || '同步失败' };
-                    errorCount += 1;
-                }
-            }
-            setStatus(`当前区同步完成：${successCount} 个成功${errorCount ? `，${errorCount} 个失败` : ''}`);
+            const result = await fetchAndStoreReelFarmCountry(product, country);
+            setStatus(`当前区同步完成：${getReelFarmCreatorCount(result)} 个账号，${getReelFarmMaterialCount(result)} 个素材`);
+        } catch (error) {
+            console.error(error);
+            const prefix = buildCountryAutomationPrefix(product, country);
+            reelFarmResults[prefix] = { error: error.message || '同步失败' };
+            setStatus('ReelFarm 同步失败', 'error');
         } finally {
             reelFarmLoadingPrefix = '';
             renderFormats();
