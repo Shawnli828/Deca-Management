@@ -2,6 +2,18 @@
 
 This document describes the read-only API for external AI tools to access Deca Growth material data.
 
+The production backend is now served by FastAPI. Interactive API docs are available at:
+
+```text
+https://deca-management.vercel.app/api/docs
+```
+
+The OpenAPI schema is available at:
+
+```text
+https://deca-management.vercel.app/api/openapi.json
+```
+
 ## Base URL
 
 Production:
