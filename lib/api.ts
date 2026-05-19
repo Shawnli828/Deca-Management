@@ -62,7 +62,7 @@ export const api = {
       })
     ),
   syncCountry: (payload: Record<string, unknown>) =>
-    apiFetch<{ ok: boolean; creator_count: number; material_count: number }>('/api/reelfarm/sync-country', {
+    apiFetch<{ ok: boolean; creator_count: number; material_count: number; synced_at?: string }>('/api/reelfarm/sync-country', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)

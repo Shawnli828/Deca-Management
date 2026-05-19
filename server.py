@@ -991,6 +991,89 @@ def load_data():
     return clean_data
 
 
+def enrich_data_with_relational_rollups(data):
+    if not isinstance(data, list):
+        return data
+
+    enriched = json.loads(json.dumps(data, ensure_ascii=False))
+    rollups = {}
+    product_rollups = {}
+    placeholder = db_placeholder()
+
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        rows = conn.execute(
+            f"""
+            SELECT
+                p.code AS product_code,
+                m.code AS market_code,
+                COUNT(DISTINCT acc.id) AS creator_count,
+                COUNT(DISTINCT a.id) AS automation_count,
+                COUNT(DISTINCT mat.id) AS material_count,
+                COUNT(DISTINCT post.id) AS post_count,
+                MAX(COALESCE(post.synced_at, mat.synced_at, a.synced_at)) AS last_synced_at
+            FROM products p
+            JOIN product_markets pm ON pm.product_id = p.id
+            JOIN markets m ON m.id = pm.market_id
+            JOIN product_market_channels pmc ON pmc.product_market_id = pm.id
+            JOIN channels ch ON ch.id = pmc.channel_id
+            LEFT JOIN automations a ON a.product_market_channel_id = pmc.id
+            LEFT JOIN accounts acc ON acc.id = a.account_id
+            LEFT JOIN materials mat ON mat.automation_id = a.id
+            LEFT JOIN posts post ON post.material_id = mat.id
+            WHERE ch.code = {placeholder}
+            GROUP BY p.code, m.code
+            """,
+            ("TIKTOK",),
+        ).fetchall()
+
+    for row in rows:
+        product_code = str(row["product_code"] or "").upper()
+        market_code = str(row["market_code"] or "").upper()
+        item = {
+            "creatorCount": int(row["creator_count"] or 0),
+            "automationCount": int(row["automation_count"] or 0),
+            "materialCount": int(row["material_count"] or 0),
+            "postCount": int(row["post_count"] or 0),
+            "reelFarmSyncedAt": row["last_synced_at"] or "",
+        }
+        rollups[(product_code, market_code)] = item
+        product_rollup = product_rollups.setdefault(
+            product_code,
+            {"creatorCount": 0, "automationCount": 0, "materialCount": 0, "postCount": 0},
+        )
+        for key in ("creatorCount", "automationCount", "materialCount", "postCount"):
+            product_rollup[key] += item[key]
+
+    for product in enriched:
+        if not isinstance(product, dict):
+            continue
+        product_code = (product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
+        product.update(product_rollups.get(product_code, {
+            "creatorCount": 0,
+            "automationCount": 0,
+            "materialCount": 0,
+            "postCount": 0,
+        }))
+        product["countryCount"] = len(product.get("countries", []) or [])
+        for country in product.get("countries", []) or []:
+            if not isinstance(country, dict):
+                continue
+            market_code = (
+                country.get("reelFarmCode")
+                or COUNTRY_CODES.get(country.get("name"))
+                or code_from_name(country.get("name"))
+            ).upper()
+            country.update(rollups.get((product_code, market_code), {
+                "creatorCount": 0,
+                "automationCount": 0,
+                "materialCount": 0,
+                "postCount": 0,
+            }))
+
+    return enriched
+
+
 def default_roaster_state():
     return {
         "people": [

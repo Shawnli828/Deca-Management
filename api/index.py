@@ -37,6 +37,7 @@ from server import (
     sync_reelfarm_prefix,
     stored_reelfarm_country,
     delete_app_value,
+    enrich_data_with_relational_rollups,
     REELFARM_API_KEY,
     using_postgres,
     valid_auth_token,
@@ -172,7 +173,7 @@ def auth_logout(response: Response):
 @app.get("/api/data")
 def get_data(request: Request):
     require_dashboard_auth(request)
-    return {"data": load_data()}
+    return {"data": enrich_data_with_relational_rollups(load_data())}
 
 
 @app.post("/api/data")
@@ -183,7 +184,7 @@ def post_data(request: Request, payload: dict[str, Any] = Body(default_factory=d
         raise HTTPException(status_code=400, detail="Expected { data: [...] }")
 
     save_data(data)
-    return {"ok": True, "data": data}
+    return {"ok": True, "data": enrich_data_with_relational_rollups(data)}
 
 
 @app.get("/api/database")

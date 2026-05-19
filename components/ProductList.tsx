@@ -50,7 +50,9 @@ export function ProductList({
                 <button className="product-card-info" type="button" onClick={() => onSelect(product)}>
                   <span className="product-card-copy">
                     <strong className="product-card-name">{product.name || '未命名产品'}</strong>
-                    <span className="product-card-meta">{product.countries?.length || 0} 个国家/地区</span>
+                    <span className="product-card-meta">
+                      {product.countries?.length || 0} 个国家/地区 · {product.creatorCount || 0} 个账号 · {product.materialCount || 0} 个素材
+                    </span>
                   </span>
                 </button>
               </article>

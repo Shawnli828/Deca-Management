@@ -37,6 +37,8 @@ export function CountryWorkspace({
 }) {
   const prefix = buildCountryAutomationPrefix(product, country);
   const isSyncing = loadingPrefix === `country:${country.id}`;
+  const displayedCreatorCount = Math.max(Number(result?.count) || 0, Number(country.creatorCount) || 0);
+  const displayedMaterialCount = Number(country.materialCount) || 0;
 
   return (
     <section className="page active">
@@ -52,7 +54,7 @@ export function CountryWorkspace({
               <h2 className="country-sidebar-title">{country.name} 素材库</h2>
               <button className="btn primary" type="button" onClick={onSync} disabled={isSyncing}>{isSyncing ? '同步中...' : '同步当前区'}</button>
             </div>
-            <div className="context-meta">{product.name} · {result?.count || 0} 个账号 · {country.materialCount || 0} 个素材</div>
+            <div className="context-meta">{product.name} · {displayedCreatorCount} 个账号 · {displayedMaterialCount} 个素材</div>
             <div className="time-filter" role="group" aria-label="ReelFarm 时间维度">
               <span className="time-filter-label">观察窗口</span>
               <div className="time-filter-options">

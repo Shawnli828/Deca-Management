@@ -13,7 +13,9 @@ export type Country = {
   concepts?: Concept[];
   reelFarmSyncedAt?: string;
   creatorCount?: number;
+  automationCount?: number;
   materialCount?: number;
+  postCount?: number;
 };
 
 export type Product = {
@@ -24,6 +26,11 @@ export type Product = {
   owner_type?: string;
   reelFarmCode?: string;
   countries?: Country[];
+  countryCount?: number;
+  creatorCount?: number;
+  automationCount?: number;
+  materialCount?: number;
+  postCount?: number;
 };
 
 export type AccountSummary = {

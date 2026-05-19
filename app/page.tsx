@@ -263,6 +263,25 @@ export default function DashboardPage() {
         product_code: getProductReelFarmCode(selectedProduct),
         country_code: getCountryReelFarmCode(selectedCountry)
       });
+      setProducts(prev => prev.map(product => {
+        if (product.id !== selectedProduct.id) return product;
+        const countries = (product.countries || []).map(country => (
+          country.id === selectedCountry.id
+            ? {
+                ...country,
+                creatorCount: Number(payload.creator_count) || 0,
+                materialCount: Number(payload.material_count) || 0,
+                reelFarmSyncedAt: payload.synced_at || country.reelFarmSyncedAt
+              }
+            : country
+        ));
+        return {
+          ...product,
+          countries,
+          creatorCount: countries.reduce((sum, country) => sum + (Number(country.creatorCount) || 0), 0),
+          materialCount: countries.reduce((sum, country) => sum + (Number(country.materialCount) || 0), 0)
+        };
+      }));
       setPostCache({});
       setExpandedCards({});
       await loadAccounts(selectedProduct, selectedCountry, true);
