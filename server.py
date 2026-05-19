@@ -558,7 +558,6 @@ def compact_video(video):
         "slide_count": len(images),
         "hook": hook_match.group(1) if hook_match else "",
         "prompt": prompt,
-        "prompt_preview": prompt[:360],
     }
 
 

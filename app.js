@@ -1456,7 +1456,7 @@
     }
 
     function renderMaterialItem(video, post, accountName, avatarHtml) {
-        const title = video.hook || post?.title || video.prompt_preview || video.video_id || video.id || 'Slideshow';
+        const title = video.hook || post?.title || video.video_id || video.id || 'Slideshow';
         const images = Array.isArray(video.slideshow_images) ? video.slideshow_images : [];
         const imageCount = video.slide_count || images.length;
         const publishedReadable = post?.published_at_readable || formatUtcReadable(post?.published_at_meta || post?.published_at || '');
