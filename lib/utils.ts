@@ -55,6 +55,28 @@ export function getCountryReelFarmCode(country?: Country | null) {
   return (country?.reelFarmCode || countryCodes[country?.name || ''] || codeFromName(country?.name)).toUpperCase();
 }
 
+export function countryFlag(country?: Country | null) {
+  const code = getCountryReelFarmCode(country);
+  const flags: Record<string, string> = {
+    US: '🇺🇸',
+    UK: '🇬🇧',
+    GB: '🇬🇧',
+    GE: '🇩🇪',
+    DE: '🇩🇪',
+    FR: '🇫🇷',
+    IT: '🇮🇹',
+    CA: '🇨🇦',
+    BR: '🇧🇷',
+    IN: '🇮🇳',
+    CN: '🇨🇳',
+    JP: '🇯🇵',
+    KR: '🇰🇷',
+    AU: '🇦🇺',
+    AT: '🇦🇹'
+  };
+  return flags[code] || '🌐';
+}
+
 export function buildCountryAutomationPrefix(product?: Product | null, country?: Country | null) {
   return `${getCountryReelFarmCode(country)}-${getProductReelFarmCode(product)}`;
 }

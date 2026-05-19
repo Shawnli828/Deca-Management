@@ -6,11 +6,13 @@ import { normalizeProductFolder } from '@/lib/utils';
 export function ProductList({
   products,
   onSelect,
-  onLogoChange
+  onAddProduct,
+  onEditProduct
 }: {
   products: Product[];
   onSelect: (product: Product) => void;
-  onLogoChange: (product: Product, file: File) => void;
+  onAddProduct: () => void;
+  onEditProduct: (product: Product) => void;
 }) {
   const groups = products.reduce<Record<string, Product[]>>((map, product) => {
     const folder = normalizeProductFolder(product);
@@ -26,6 +28,7 @@ export function ProductList({
           <h2>产品总览</h2>
           <p>先从甲方 / 乙方文件夹选择产品，再继续进入国家和 Format。</p>
         </div>
+        <button className="btn primary" type="button" onClick={onAddProduct}>添加产品</button>
       </div>
       {Object.entries(groups).map(([folder, items]) => (
         <section className="product-folder" key={folder}>
@@ -33,20 +36,18 @@ export function ProductList({
           <div className="product-list">
             {items.map(product => (
               <article className="product-card" key={product.id}>
-                <label className="product-logo product-logo-upload" title="点击更换 Logo">
+                <button
+                  className="product-settings-btn"
+                  type="button"
+                  onClick={() => onEditProduct(product)}
+                  title="产品设置"
+                  aria-label={`${product.name || '产品'} 设置`}
+                >
+                  ⚙
+                </button>
+                <button className="product-logo product-logo-display" type="button" onClick={() => onSelect(product)} title="打开产品">
                   {product.logo ? <img src={product.logo} alt="" /> : product.name?.slice(0, 1)}
-                  <input
-                    className="product-logo-input"
-                    type="file"
-                    accept="image/*"
-                    onChange={event => {
-                      const file = event.target.files?.[0];
-                      if (file) onLogoChange(product, file);
-                      event.target.value = '';
-                    }}
-                  />
-                  <span className="product-logo-action">更换 Logo</span>
-                </label>
+                </button>
                 <button className="product-card-info" type="button" onClick={() => onSelect(product)}>
                   <span className="product-card-copy">
                     <strong className="product-card-name">{product.name || '未命名产品'}</strong>

@@ -7,6 +7,7 @@ import { CountryWorkspace } from '@/components/CountryWorkspace';
 import { DatabaseModal } from '@/components/DatabaseModal';
 import { MetricsBar } from '@/components/MetricsBar';
 import { ProductList } from '@/components/ProductList';
+import { ProductSettingsModal } from '@/components/ProductSettingsModal';
 import { RoasterBoard } from '@/components/RoasterBoard';
 import { SideMenu } from '@/components/SideMenu';
 import { accountSummaryToCard, api, mergePostRowsIntoCard } from '@/lib/api';
@@ -44,12 +45,14 @@ export default function DashboardPage() {
   const [syncPrefix, setSyncPrefix] = useState('');
   const [roaster, setRoaster] = useState<RoasterState>(defaultRoaster);
   const [databaseOpen, setDatabaseOpen] = useState(false);
+  const [editingProductId, setEditingProductId] = useState('');
   const [snapshot, setSnapshot] = useState<DatabaseSnapshot | null>(null);
   const [apiKeys, setApiKeys] = useState<ExternalApiKey[]>([]);
   const [generatedKey, setGeneratedKey] = useState('');
 
   const selectedProduct = useMemo(() => products.find(product => product.id === selectedProductId) || products[0] || null, [products, selectedProductId]);
   const selectedCountry = useMemo(() => selectedProduct?.countries?.find(country => country.id === selectedCountryId) || selectedProduct?.countries?.[0] || null, [selectedProduct, selectedCountryId]);
+  const editingProduct = useMemo(() => products.find(product => product.id === editingProductId) || null, [products, editingProductId]);
   const currentPrefix = selectedProduct && selectedCountry ? buildCountryAutomationPrefix(selectedProduct, selectedCountry) : '';
 
   useEffect(() => {
@@ -102,24 +105,59 @@ export default function DashboardPage() {
     });
   }
 
-  async function changeProductLogo(product: Product, file: File) {
+  async function readProductLogo(file: File) {
     if (!file.type.startsWith('image/')) {
       setStatus('请选择图片文件');
       setStatusError(true);
-      return;
+      throw new Error('请选择图片文件');
     }
 
-    try {
-      const logo = await readFileAsDataUrl(file);
-      const nextProducts = products.map(item => item.id === product.id ? { ...item, logo } : item);
-      const saved = await saveProducts(nextProducts);
-      if (saved) {
-        setStatus(`${product.name || '产品'} Logo 已更新`);
-        setStatusError(false);
-      }
-    } catch {
-      setStatus('Logo 上传失败');
-      setStatusError(true);
+    return readFileAsDataUrl(file);
+  }
+
+  async function addProduct() {
+    const name = window.prompt('输入产品名称');
+    if (!name?.trim()) return;
+    const newProduct: Product = {
+      id: crypto.randomUUID(),
+      name: name.trim(),
+      folder: '甲方',
+      owner_type: '甲方',
+      logo: '',
+      reelFarmCode: codeFromName(name),
+      countries: [],
+      creatorCount: 0,
+      materialCount: 0,
+      postCount: 0
+    };
+    const saved = await saveProducts([...products, newProduct]);
+    if (saved) {
+      setSelectedProductId(newProduct.id);
+      setEditingProductId(newProduct.id);
+      setPage('products');
+      setStatus(`${newProduct.name} 已添加`);
+      setStatusError(false);
+    }
+  }
+
+  async function saveProductSettings(value: { name: string; folder: string; logo?: string }) {
+    const product = editingProduct;
+    if (!product) return;
+    const nextProducts = products.map(item => (
+      item.id === product.id
+        ? {
+            ...item,
+            name: value.name,
+            folder: value.folder,
+            owner_type: value.folder,
+            logo: value.logo || ''
+          }
+        : item
+    ));
+    const saved = await saveProducts(nextProducts);
+    if (saved) {
+      setStatus(`${value.name} 设置已保存`);
+      setStatusError(false);
     }
   }
 
@@ -395,7 +433,7 @@ export default function DashboardPage() {
             </header>
             <MetricsBar products={products} />
             <section className="page-shell">
-              {page === 'products' ? <ProductList products={products} onSelect={selectProduct} onLogoChange={changeProductLogo} /> : null}
+              {page === 'products' ? <ProductList products={products} onSelect={selectProduct} onAddProduct={addProduct} onEditProduct={product => setEditingProductId(product.id)} /> : null}
               {page === 'product' && selectedProduct ? <CountryList product={selectedProduct} onBack={() => setPage('products')} onSelect={selectCountry} onAdd={addCountry} /> : null}
               {page === 'country' && selectedProduct && selectedCountry ? (
                 <CountryWorkspace
@@ -439,6 +477,13 @@ export default function DashboardPage() {
         onCreateKey={createKey}
         onRevokeKey={revokeKey}
         onCopy={copy}
+      />
+      <ProductSettingsModal
+        open={Boolean(editingProductId)}
+        product={editingProduct}
+        onClose={() => setEditingProductId('')}
+        onSave={saveProductSettings}
+        readLogo={readProductLogo}
       />
     </div>
   );
