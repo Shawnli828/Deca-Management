@@ -11,7 +11,7 @@ import { RoasterBoard } from '@/components/RoasterBoard';
 import { SideMenu } from '@/components/SideMenu';
 import { accountSummaryToCard, api, mergePostRowsIntoCard } from '@/lib/api';
 import type { Country, DatabaseSnapshot, ExternalApiKey, Product, ReelFarmResult, RoasterState } from '@/lib/types';
-import { buildCountryAutomationPrefix, cardStateKey, getCountryReelFarmCode, getProductReelFarmCode } from '@/lib/utils';
+import { buildCountryAutomationPrefix, cardStateKey, codeFromName, countryCodes, getCountryReelFarmCode, getProductReelFarmCode } from '@/lib/utils';
 
 const defaultRoaster: RoasterState = {
   people: [
@@ -158,6 +158,37 @@ export default function DashboardPage() {
     setPostLoading({});
     setExpandedCards({});
     setSlideIndexes({});
+  }
+
+  async function addCountry(product: Product) {
+    const name = window.prompt('输入国家/地区名称，例如 Germany / France / Australia');
+    if (!name?.trim()) return;
+    const suggestedCode = countryCodes[name.trim()] || codeFromName(name);
+    const code = window.prompt('输入 ReelFarm 国家代码，例如 GE / FR / AU', suggestedCode);
+    if (!code?.trim()) return;
+
+    const newCountry: Country = {
+      id: crypto.randomUUID(),
+      name: name.trim(),
+      reelFarmCode: code.trim().toUpperCase(),
+      concepts: [],
+      creatorCount: 0,
+      materialCount: 0,
+      postCount: 0
+    };
+    const nextProducts = products.map(item => (
+      item.id === product.id
+        ? { ...item, countries: [...(item.countries || []), newCountry] }
+        : item
+    ));
+    const saved = await saveProducts(nextProducts);
+    if (saved) {
+      setSelectedProductId(product.id);
+      setSelectedCountryId(newCountry.id);
+      setPage('product');
+      setStatus(`${newCountry.name} 已添加`);
+      setStatusError(false);
+    }
   }
 
   function changeDays(nextDays: number) {
@@ -365,7 +396,7 @@ export default function DashboardPage() {
             <MetricsBar products={products} />
             <section className="page-shell">
               {page === 'products' ? <ProductList products={products} onSelect={selectProduct} onLogoChange={changeProductLogo} /> : null}
-              {page === 'product' && selectedProduct ? <CountryList product={selectedProduct} onBack={() => setPage('products')} onSelect={selectCountry} /> : null}
+              {page === 'product' && selectedProduct ? <CountryList product={selectedProduct} onBack={() => setPage('products')} onSelect={selectCountry} onAdd={addCountry} /> : null}
               {page === 'country' && selectedProduct && selectedCountry ? (
                 <CountryWorkspace
                   product={selectedProduct}
