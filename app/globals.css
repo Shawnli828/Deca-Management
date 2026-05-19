@@ -944,21 +944,20 @@
             background:
                 radial-gradient(circle at 30% 30%, rgba(124, 131, 255, 0.12), transparent 28%),
                 radial-gradient(circle at 72% 58%, rgba(15, 118, 110, 0.10), transparent 24%),
+                linear-gradient(rgba(5, 5, 5, 0.70), rgba(5, 5, 5, 0.70)),
+                url("https://upload.wikimedia.org/wikipedia/commons/8/83/Equirectangular_projection_SW.jpg") center / cover no-repeat,
                 #070707;
         }
 
-        .world-map-svg {
+        .world-map::after {
+            content: "";
             position: absolute;
-            inset: 8%;
-            width: 84%;
-            height: 84%;
-            opacity: 0.45;
-        }
-
-        .world-map-svg path {
-            fill: #1d1a16;
-            stroke: #34302a;
-            stroke-width: 3;
+            inset: 0;
+            pointer-events: none;
+            background:
+                linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px);
+            background-size: 10% 20%;
         }
 
         .country-map-pin {

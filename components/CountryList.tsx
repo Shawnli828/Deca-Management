@@ -3,25 +3,30 @@
 import type { Country, Product } from '@/lib/types';
 import { getCountryReelFarmCode } from '@/lib/utils';
 
-const countryMapPins: Record<string, { x: number; y: number; flag: string }> = {
-  US: { x: 22, y: 42, flag: '🇺🇸' },
-  UK: { x: 46, y: 34, flag: '🇬🇧' },
-  GE: { x: 49, y: 38, flag: '🇩🇪' },
-  DE: { x: 49, y: 38, flag: '🇩🇪' },
-  FR: { x: 47, y: 42, flag: '🇫🇷' },
-  IT: { x: 50, y: 47, flag: '🇮🇹' },
-  CA: { x: 20, y: 28, flag: '🇨🇦' },
-  BR: { x: 34, y: 68, flag: '🇧🇷' },
-  IN: { x: 67, y: 55, flag: '🇮🇳' },
-  CN: { x: 72, y: 45, flag: '🇨🇳' },
-  JP: { x: 82, y: 44, flag: '🇯🇵' },
-  KR: { x: 78, y: 43, flag: '🇰🇷' },
-  AU: { x: 79, y: 76, flag: '🇦🇺' }
+const countryMapPins: Record<string, { lat: number; lon: number; flag: string }> = {
+  US: { lat: 39.8, lon: -98.6, flag: '🇺🇸' },
+  UK: { lat: 54.4, lon: -2.6, flag: '🇬🇧' },
+  GE: { lat: 51.2, lon: 10.4, flag: '🇩🇪' },
+  DE: { lat: 51.2, lon: 10.4, flag: '🇩🇪' },
+  FR: { lat: 46.2, lon: 2.2, flag: '🇫🇷' },
+  IT: { lat: 42.8, lon: 12.5, flag: '🇮🇹' },
+  CA: { lat: 56.1, lon: -106.3, flag: '🇨🇦' },
+  BR: { lat: -14.2, lon: -51.9, flag: '🇧🇷' },
+  IN: { lat: 20.6, lon: 78.9, flag: '🇮🇳' },
+  CN: { lat: 35.9, lon: 104.2, flag: '🇨🇳' },
+  JP: { lat: 36.2, lon: 138.3, flag: '🇯🇵' },
+  KR: { lat: 36.5, lon: 127.9, flag: '🇰🇷' },
+  AU: { lat: -25.3, lon: 133.8, flag: '🇦🇺' }
 };
 
 function mapPinFor(country: Country) {
   const code = getCountryReelFarmCode(country);
-  return countryMapPins[code] || { x: 52, y: 50, flag: '🌐' };
+  const pin = countryMapPins[code] || { lat: 0, lon: 0, flag: '🌐' };
+  return {
+    x: ((pin.lon + 180) / 360) * 100,
+    y: ((90 - pin.lat) / 180) * 100,
+    flag: pin.flag
+  };
 }
 
 export function CountryList({
@@ -53,14 +58,6 @@ export function CountryList({
       </div>
       <section className="country-map-panel" aria-label="国家/地区地图">
         <div className="world-map">
-          <svg className="world-map-svg" viewBox="0 0 1000 500" aria-hidden="true">
-            <path d="M116 150 205 108 310 130 338 203 270 246 158 230 92 190Z" />
-            <path d="M242 260 322 282 354 372 316 448 250 410 220 326Z" />
-            <path d="M430 138 514 110 602 146 578 214 468 210 390 178Z" />
-            <path d="M520 218 598 236 640 330 594 410 526 336Z" />
-            <path d="M622 150 748 128 874 184 810 252 690 230 592 194Z" />
-            <path d="M734 315 844 338 906 410 820 454 710 410Z" />
-          </svg>
           {countries.map(country => {
             const pin = mapPinFor(country);
             return (
