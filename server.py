@@ -1880,6 +1880,21 @@ def query_days_window(query):
     if days <= 0:
         return "", ""
     days = min(days, 366)
+    beijing = timezone(timedelta(hours=8))
+    current = datetime.now(timezone.utc).astimezone(beijing)
+    start_local = datetime(current.year, current.month, current.day, tzinfo=beijing) - timedelta(days=days - 1)
+    end_local = datetime(current.year, current.month, current.day, tzinfo=beijing) + timedelta(days=1)
+    return start_local.astimezone(timezone.utc).isoformat(), end_local.astimezone(timezone.utc).isoformat()
+
+
+def query_days_snapshot_window(query):
+    try:
+        days = int(query_value(query, "days", 0))
+    except ValueError:
+        days = 0
+    if days <= 0:
+        return "", ""
+    days = min(days, 366)
     end = datetime.now(timezone.utc).date()
     start = end - timedelta(days=days - 1)
     return start.isoformat(), end.isoformat()
@@ -1917,11 +1932,13 @@ def compact_filters(filters):
     return {key: value for key, value in filters.items() if value not in ("", None)}
 
 
-def pagination_payload(limit, offset, rows):
+def pagination_payload(limit, offset, rows, total=None):
+    total_value = int(total if total is not None else max(offset + min(len(rows), limit), offset + limit + (1 if len(rows) > limit else 0)))
     return {
         "limit": limit,
         "offset": offset,
-        "has_more": len(rows) > limit,
+        "has_more": offset + limit < total_value,
+        "total": total_value,
     }
 
 
@@ -2055,7 +2072,21 @@ def query_countries(query):
 
 
 def query_accounts(query):
-    where_sql, params = common_where(query, include_post_dates=True)
+    where_sql, params = common_where(query, include_post_dates=False)
+    date_from = query_value(query, "date_from")
+    date_to = query_value(query, "date_to")
+    if not date_from and not date_to:
+        date_from, date_to = query_days_window(query)
+    metric_condition = "1 = 1"
+    metric_params = []
+    placeholder = db_placeholder()
+    if date_from:
+        metric_condition += f" AND post.published_at >= {placeholder}"
+        metric_params.append(post_datetime_bound(date_from))
+    if date_to:
+        metric_condition += f" AND post.published_at <= {placeholder}"
+        metric_params.append(post_datetime_bound(date_to, end=True))
+    metric_condition_count = 8
     with connect_db() as conn:
         init_relational_schema(conn)
         rows = conn.execute(
@@ -2068,21 +2099,21 @@ def query_accounts(query):
                 acc.avatar_url,
                 acc.status,
                 COUNT(DISTINCT a.id) AS automation_count,
-                COUNT(DISTINCT mat.id) AS material_count,
-                COUNT(DISTINCT post.id) AS post_count,
-                COALESCE(SUM(post.view_count), 0) AS total_views,
-                COALESCE(SUM(post.like_count), 0) AS total_likes,
-                COALESCE(SUM(post.comment_count), 0) AS total_comments,
-                COALESCE(SUM(post.share_count), 0) AS total_shares,
-                COALESCE(SUM(post.bookmark_count), 0) AS total_bookmarks,
-                MAX(post.published_at) AS latest_post_at,
+                COUNT(DISTINCT CASE WHEN {metric_condition} THEN mat.id END) AS material_count,
+                COUNT(DISTINCT CASE WHEN {metric_condition} THEN post.id END) AS post_count,
+                COALESCE(SUM(CASE WHEN {metric_condition} THEN post.view_count ELSE 0 END), 0) AS total_views,
+                COALESCE(SUM(CASE WHEN {metric_condition} THEN post.like_count ELSE 0 END), 0) AS total_likes,
+                COALESCE(SUM(CASE WHEN {metric_condition} THEN post.comment_count ELSE 0 END), 0) AS total_comments,
+                COALESCE(SUM(CASE WHEN {metric_condition} THEN post.share_count ELSE 0 END), 0) AS total_shares,
+                COALESCE(SUM(CASE WHEN {metric_condition} THEN post.bookmark_count ELSE 0 END), 0) AS total_bookmarks,
+                MAX(CASE WHEN {metric_condition} THEN post.published_at END) AS latest_post_at,
                 MAX(COALESCE(post.synced_at, mat.synced_at, a.synced_at)) AS last_synced_at
             {relational_base_from()}
             WHERE {where_sql} AND acc.id IS NOT NULL
             GROUP BY acc.id, acc.reelfarm_account_id, acc.username, acc.display_name, acc.avatar_url, acc.status
             ORDER BY total_views DESC, post_count DESC
             """,
-            tuple(params),
+            tuple(metric_params * metric_condition_count + params),
         ).fetchall()
     return [row_dict(row) for row in rows]
 
@@ -2447,6 +2478,14 @@ def query_posts(query, top_metric=""):
     placeholder = db_placeholder()
     with connect_db() as conn:
         init_relational_schema(conn)
+        total_row = conn.execute(
+            f"""
+            SELECT COUNT(DISTINCT post.id) AS total
+            {relational_base_from()}
+            WHERE {where_sql} AND post.id IS NOT NULL
+            """,
+            tuple(params),
+        ).fetchone()
         rows = conn.execute(
             f"""
             SELECT {detailed_select()}
@@ -2455,9 +2494,9 @@ def query_posts(query, top_metric=""):
             ORDER BY {order_sql}
             LIMIT {placeholder} OFFSET {placeholder}
             """,
-            tuple(params + [limit + 1, offset]),
+            tuple(params + [limit, offset]),
         ).fetchall()
-    return [detailed_row(row) for row in rows], pagination_payload(limit, offset, rows)
+    return [detailed_row(row) for row in rows], pagination_payload(limit, offset, rows, row_dict(total_row).get("total", 0))
 
 
 def query_materials(query):
@@ -2466,6 +2505,14 @@ def query_materials(query):
     placeholder = db_placeholder()
     with connect_db() as conn:
         init_relational_schema(conn)
+        total_row = conn.execute(
+            f"""
+            SELECT COUNT(DISTINCT mat.id) AS total
+            {relational_base_from()}
+            WHERE {where_sql} AND mat.id IS NOT NULL
+            """,
+            tuple(params),
+        ).fetchone()
         rows = conn.execute(
             f"""
             SELECT {detailed_select()}
@@ -2474,15 +2521,15 @@ def query_materials(query):
             ORDER BY mat.created_at DESC, post.published_at DESC
             LIMIT {placeholder} OFFSET {placeholder}
             """,
-            tuple(params + [limit + 1, offset]),
+            tuple(params + [limit, offset]),
         ).fetchall()
-    return [detailed_row(row) for row in rows], pagination_payload(limit, offset, rows)
+    return [detailed_row(row) for row in rows], pagination_payload(limit, offset, rows, row_dict(total_row).get("total", 0))
 
 
 def query_daily_metrics(query):
     filters = query_filters(query)
     if not filters.get("date_from") and not filters.get("date_to"):
-        date_from, date_to = query_days_window(query)
+        date_from, date_to = query_days_snapshot_window(query)
         filters["date_from"] = date_from or filters.get("date_from")
         filters["date_to"] = date_to or filters.get("date_to")
 

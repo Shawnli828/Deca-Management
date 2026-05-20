@@ -39,7 +39,8 @@ export function ReelFarmAccountCard({
   const slideshows = videos.filter(video => postMap.has(String(video.video_id)));
   const pageSize = Number(card.pagination?.limit) || 4;
   const page = Math.max(0, Math.floor((Number(card.pagination?.offset) || 0) / pageSize));
-  const totalPages = Math.max(1, page + (card.pagination?.has_more ? 2 : 1));
+  const total = Number(card.pagination?.total ?? summary.post_count ?? posts.length) || 0;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const stats: Array<[string, string]> = [
     ['Posts', formatNumber(Number(summary.post_count) || posts.length)],
     ['Slides', formatNumber(Number(summary.material_count) || Number(card.video_total) || slideshows.length)],

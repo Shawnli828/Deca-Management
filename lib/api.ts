@@ -52,7 +52,7 @@ export const api = {
       new URLSearchParams({ resource: 'accounts', product_code: productCode, country_code: countryCode, days: String(days) })
     ),
   accountPosts: (productCode: string, countryCode: string, accountId: string, days: number, limit: number, offset: number) =>
-    api.dataQuery<{ ok: boolean; data: DetailedPostRow[]; pagination: { limit: number; offset: number; has_more: boolean } }>(
+    api.dataQuery<{ ok: boolean; data: DetailedPostRow[]; pagination: { limit: number; offset: number; has_more: boolean; total?: number } }>(
       new URLSearchParams({
         resource: 'account_posts',
         product_code: productCode,
@@ -141,7 +141,7 @@ export function accountSummaryToCard(row: AccountSummary): ReelFarmResult['cards
       total_shares: Number(row.total_shares) || 0,
       total_bookmarks: Number(row.total_bookmarks) || 0
     },
-    pagination: { limit: 4, offset: 0, has_more: Number(row.post_count) > 4 },
+    pagination: { limit: 4, offset: 0, has_more: Number(row.post_count) > 4, total: Number(row.post_count) || 0 },
     errors: { videos: null, posts: null }
   };
 }

@@ -166,6 +166,7 @@ export type ReelFarmCard = {
     limit: number;
     offset: number;
     has_more: boolean;
+    total?: number;
   };
   errors?: {
     videos?: string | null;

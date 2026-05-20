@@ -42,9 +42,11 @@ export default function DashboardPage() {
   const [reelFarmResults, setReelFarmResults] = useState<Record<string, ReelFarmResult>>({});
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
   const [postLoading, setPostLoading] = useState<Record<string, boolean>>({});
-  const [postCache, setPostCache] = useState<Record<string, { data: any[]; pagination: { limit: number; offset: number; has_more: boolean } }>>({});
+  const [postCache, setPostCache] = useState<Record<string, { data: any[]; pagination: { limit: number; offset: number; has_more: boolean; total?: number } }>>({});
   const [slideIndexes, setSlideIndexes] = useState<Record<string, number>>({});
   const [syncPrefix, setSyncPrefix] = useState('');
+  const [syncAllRunning, setSyncAllRunning] = useState(false);
+  const [syncAllProgress, setSyncAllProgress] = useState('');
   const [roaster, setRoaster] = useState<RoasterState>(defaultRoaster);
   const [publishCheck, setPublishCheck] = useState<PublishCheckState>({ assignments: [], last_result: null });
   const [publishCheckRunning, setPublishCheckRunning] = useState(false);
@@ -195,14 +197,14 @@ export default function DashboardPage() {
     }
   }
 
-  async function loadAccounts(product = selectedProduct, country = selectedCountry, force = false) {
+  async function loadAccounts(product = selectedProduct, country = selectedCountry, force = false, daysOverride = days) {
     if (!product || !country) return;
     const prefix = buildCountryAutomationPrefix(product, country);
     if (!force && reelFarmResults[prefix]) return;
 
     setReelFarmResults(prev => ({ ...prev, [prefix]: { prefix, count: 0, cards: [], loading: true } }));
     try {
-      const payload = await api.accounts(getProductReelFarmCode(product), getCountryReelFarmCode(country), days);
+      const payload = await api.accounts(getProductReelFarmCode(product), getCountryReelFarmCode(country), daysOverride);
       const cards = (payload.data || []).map(accountSummaryToCard);
       setReelFarmResults(prev => ({ ...prev, [prefix]: { prefix, count: cards.length, cards } }));
     } catch (error: any) {
@@ -239,7 +241,7 @@ export default function DashboardPage() {
     setPostCache({});
     setExpandedCards({});
     setSlideIndexes({});
-    setTimeout(() => loadAccounts(selectedProduct, selectedCountry, true), 0);
+    setTimeout(() => loadAccounts(selectedProduct, selectedCountry, true, nextDays), 0);
   }
 
   function findCard(cardKey: string) {
@@ -260,7 +262,7 @@ export default function DashboardPage() {
     const cacheKey = [getProductReelFarmCode(product), getCountryReelFarmCode(country), accountId, days, offset].join('|');
     const cached = postCache[cacheKey];
 
-    function updateCard(data: any[], pagination: { limit: number; offset: number; has_more: boolean }) {
+    function updateCard(data: any[], pagination: { limit: number; offset: number; has_more: boolean; total?: number }) {
       const prefix = buildCountryAutomationPrefix(product, country);
       setReelFarmResults(prev => {
         const result = prev[prefix];
@@ -284,7 +286,7 @@ export default function DashboardPage() {
     setPostLoading(prev => ({ ...prev, [cardKey]: true }));
     try {
       const payload = await api.accountPosts(getProductReelFarmCode(product), getCountryReelFarmCode(country), String(accountId), days, 4, offset);
-      const pagination = payload.pagination || { limit: 4, offset, has_more: false };
+      const pagination = payload.pagination || { limit: 4, offset, has_more: false, total: payload.data?.length || 0 };
       setPostCache(prev => ({ ...prev, [cacheKey]: { data: payload.data || [], pagination } }));
       updateCard(payload.data || [], pagination);
     } catch (error: any) {
@@ -323,6 +325,32 @@ export default function DashboardPage() {
     setSlideIndexes(prev => ({ ...prev, [videoId]: ((prev[videoId] || 0) + direction + total) % total }));
   }
 
+  function applySyncResult(productId: string, countryId: string, payload: { creator_count?: number; material_count?: number; synced_at?: string }) {
+    setProducts(prev => prev.map(product => {
+      if (product.id !== productId) return product;
+      const countries = (product.countries || []).map(country => (
+        country.id === countryId
+          ? {
+              ...country,
+              creatorCount: Number(payload.creator_count) || 0,
+              materialCount: Number(payload.material_count) || 0,
+              reelFarmSyncedAt: payload.synced_at || country.reelFarmSyncedAt
+            }
+          : country
+      ));
+      return {
+        ...product,
+        countries,
+        creatorCount: countries.reduce((sum, country) => sum + (Number(country.creatorCount) || 0), 0),
+        materialCount: countries.reduce((sum, country) => sum + (Number(country.materialCount) || 0), 0)
+      };
+    }));
+  }
+
+  function wait(ms: number) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
   async function syncCountry() {
     if (!selectedProduct || !selectedCountry) return;
     const prefix = buildCountryAutomationPrefix(selectedProduct, selectedCountry);
@@ -335,25 +363,7 @@ export default function DashboardPage() {
         product_code: getProductReelFarmCode(selectedProduct),
         country_code: getCountryReelFarmCode(selectedCountry)
       });
-      setProducts(prev => prev.map(product => {
-        if (product.id !== selectedProduct.id) return product;
-        const countries = (product.countries || []).map(country => (
-          country.id === selectedCountry.id
-            ? {
-                ...country,
-                creatorCount: Number(payload.creator_count) || 0,
-                materialCount: Number(payload.material_count) || 0,
-                reelFarmSyncedAt: payload.synced_at || country.reelFarmSyncedAt
-              }
-            : country
-        ));
-        return {
-          ...product,
-          countries,
-          creatorCount: countries.reduce((sum, country) => sum + (Number(country.creatorCount) || 0), 0),
-          materialCount: countries.reduce((sum, country) => sum + (Number(country.materialCount) || 0), 0)
-        };
-      }));
+      applySyncResult(selectedProduct.id, selectedCountry.id, payload);
       setPostCache({});
       setExpandedCards({});
       await loadAccounts(selectedProduct, selectedCountry, true);
@@ -364,6 +374,51 @@ export default function DashboardPage() {
       setStatusError(true);
     } finally {
       setSyncPrefix('');
+    }
+  }
+
+  async function syncAllCountries() {
+    if (syncAllRunning) return;
+    const jobs = products.flatMap(product => (product.countries || []).map(country => ({ product, country })));
+    if (!jobs.length) return;
+    setSyncAllRunning(true);
+    setPostCache({});
+    setExpandedCards({});
+    setReelFarmResults({});
+    let failed = 0;
+    try {
+      for (let index = 0; index < jobs.length; index += 1) {
+        const { product, country } = jobs[index];
+        const progress = `${index + 1}/${jobs.length}`;
+        setSyncAllProgress(progress);
+        setStatus(`同步全部中：${progress} ${product.name} · ${country.name}`);
+        setStatusError(false);
+        setSyncPrefix(`country:${country.id}`);
+        try {
+          const payload = await api.syncCountry({
+            prefix: buildCountryAutomationPrefix(product, country),
+            product_id: product.id,
+            country_id: country.id,
+            product_code: getProductReelFarmCode(product),
+            country_code: getCountryReelFarmCode(country)
+          });
+          applySyncResult(product.id, country.id, payload);
+        } catch (error: any) {
+          failed += 1;
+          setStatus(`${product.name} · ${country.name} 同步失败：${error?.message || '未知错误'}`);
+          setStatusError(true);
+        }
+        if (index < jobs.length - 1) await wait(1800);
+      }
+      setStatus(failed ? `同步全部完成：${failed} 个地区失败，可单独重试` : '同步全部完成');
+      setStatusError(Boolean(failed));
+      if (page === 'country') {
+        await loadAccounts(selectedProduct, selectedCountry, true);
+      }
+    } finally {
+      setSyncPrefix('');
+      setSyncAllProgress('');
+      setSyncAllRunning(false);
     }
   }
 
@@ -468,6 +523,9 @@ export default function DashboardPage() {
               </div>
               <div className="top-actions">
                 <span className={`status-pill ${statusError ? 'error' : ''}`}>{status}</span>
+                <button className="btn ghost" type="button" onClick={syncAllCountries} disabled={syncAllRunning || !products.length}>
+                  {syncAllRunning ? `同步全部 ${syncAllProgress}` : '同步全部'}
+                </button>
                 <button className="btn ghost" type="button" onClick={openDatabase}>打开数据库</button>
                 <button className="btn ghost" type="button" onClick={async () => {
                   const payload = await api.reset();
