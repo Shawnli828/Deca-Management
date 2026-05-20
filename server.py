@@ -141,6 +141,46 @@ def build_country_automation_prefix(product, country):
     return f"{country_code}-{product_code}"
 
 
+def automation_prefix_candidates(prefix):
+    clean = str(prefix or "").strip()
+    if not clean:
+        return []
+
+    candidates = [clean]
+    parts = [part for part in re.split(r"[-_]+", clean) if part]
+    if len(parts) >= 2:
+        reversed_first_pair = "-".join([parts[1], parts[0], *parts[2:]])
+        candidates.append(reversed_first_pair)
+
+    deduped = []
+    seen = set()
+    for candidate in candidates:
+        key = candidate.upper()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(candidate)
+    return deduped
+
+
+def automation_title_matches_prefix(title, prefix):
+    clean_title = str(title or "").strip().upper()
+    clean_prefix = str(prefix or "").strip().upper()
+    if not clean_title or not clean_prefix:
+        return False
+    return (
+        clean_title == clean_prefix
+        or clean_title.startswith(f"{clean_prefix}-")
+        or clean_title.startswith(f"{clean_prefix}_")
+    )
+
+
+def prefixes_equivalent(left, right):
+    left_values = {candidate.upper() for candidate in automation_prefix_candidates(left)}
+    right_value = str(right or "").strip().upper()
+    return bool(right_value and right_value in left_values)
+
+
 def default_data():
     return [
         {
@@ -530,11 +570,19 @@ def upsert_row(conn, table, values, conflict_cols, update_cols=None):
 
 def parse_concept_format_from_automation(title, country_code, product_code):
     clean_title = str(title or "").strip()
-    prefix = f"{country_code}-{product_code}-".upper()
-    if not clean_title.upper().startswith(prefix):
+    prefixes = [
+        f"{country_code}-{product_code}",
+        f"{product_code}-{country_code}",
+    ]
+    matched_prefix = ""
+    for prefix in prefixes:
+        if automation_title_matches_prefix(clean_title, prefix):
+            matched_prefix = prefix.upper()
+            break
+    if not matched_prefix:
         return "", ""
 
-    remainder = clean_title[len(prefix):]
+    remainder = clean_title[len(matched_prefix):].lstrip("-_")
     parts = [part for part in re.split(r"[-_]+", remainder) if part]
     if parts and parts[-1].isdigit():
         parts = parts[:-1]
@@ -1424,13 +1472,20 @@ def reelfarm_matches(prefix):
     if not clean_prefix:
         raise ValueError("Missing automation prefix.")
 
+    candidates = automation_prefix_candidates(clean_prefix)
     automations_payload = reelfarm_request("/automations")
     automations = list_payload(automations_payload, "automations")
-    matched = [
-        automation
-        for automation in automations
-        if str(automation.get("title", "")).lower().startswith(clean_prefix.lower())
-    ]
+    matched = []
+    seen_automation_keys = set()
+    for automation in automations:
+        title = str(automation.get("title", "") or "")
+        if not any(automation_title_matches_prefix(title, candidate) for candidate in candidates):
+            continue
+        key = str(automation.get("automation_id") or title).strip()
+        if key in seen_automation_keys:
+            continue
+        seen_automation_keys.add(key)
+        matched.append(automation)
 
     accounts_by_id = {}
     try:
@@ -1528,7 +1583,7 @@ def reelfarm_matches(prefix):
     with ThreadPoolExecutor(max_workers=min(6, max(1, len(matched)))) as executor:
         cards = list(executor.map(build_card, matched))
 
-    return {"prefix": clean_prefix, "count": len(cards), "cards": cards}
+    return {"prefix": clean_prefix, "matched_prefixes": candidates, "count": len(cards), "cards": cards}
 
 
 def reelfarm_creator_count(result):
@@ -1620,7 +1675,7 @@ def sync_reelfarm_country(prefix, product_id="", country_id="", product_code="",
                 and str(country.get("id")) == str(country_id)
                 and str(product.get("id")) == str(product_id)
             )
-            prefix_match = build_country_automation_prefix(product, country) == clean_prefix
+            prefix_match = prefixes_equivalent(build_country_automation_prefix(product, country), clean_prefix)
             if not id_match and not prefix_match:
                 continue
 
@@ -1668,7 +1723,7 @@ def sync_reelfarm_prefix(prefix, product_id="", country_id="", concept_id="", pr
                     and str(country.get("id")) == str(country_id)
                     and str(product.get("id")) == str(product_id)
                 )
-                prefix_match = build_automation_prefix(product, country, concept) == clean_prefix
+                prefix_match = prefixes_equivalent(build_automation_prefix(product, country, concept), clean_prefix)
                 if not id_match and not prefix_match:
                     continue
 
