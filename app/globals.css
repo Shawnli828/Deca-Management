@@ -3209,6 +3209,17 @@
             align-items: center;
             justify-content: space-between;
             gap: 14px;
+            width: 100%;
+            border: 0;
+            padding: 0;
+            background: transparent;
+            color: inherit;
+            cursor: pointer;
+            text-align: left;
+        }
+
+        .publish-result-card-head:hover .publish-result-count {
+            border-color: #777dff;
         }
 
         .publish-result-card-head div {

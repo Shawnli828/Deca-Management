@@ -35,6 +35,7 @@ export function PublishCheckBoard({
   const selectedProduct = products.find(product => product.id === productId) || products[0];
   const [countryId, setCountryId] = useState(selectedProduct?.countries?.[0]?.id || '');
   const [assignmentSort, setAssignmentSort] = useState<'person' | 'product' | 'country'>('person');
+  const [expandedResultCards, setExpandedResultCards] = useState<Record<string, boolean>>({});
   const result = state.last_result;
 
   const peopleById = useMemo(() => new Map(roaster.people.map(person => [person.id, person])), [roaster.people]);
@@ -180,14 +181,18 @@ export function PublishCheckBoard({
         <div className="publish-result-grid">
           {result?.groups?.length ? result.groups.map(group => (
             <article className={`publish-result-card ${group.missing_account_count ? 'has-missing' : 'is-clear'}`} key={group.assignment_id}>
-              <div className="publish-result-card-head">
+              <button
+                className="publish-result-card-head"
+                type="button"
+                onClick={() => setExpandedResultCards(prev => ({ ...prev, [String(group.assignment_id || '')]: !prev[String(group.assignment_id || '')] }))}
+              >
                 <div>
                   <strong>{group.person_name}</strong>
                   <span>{group.product?.name} · {group.country?.name}</span>
                 </div>
                 <span className="publish-result-count">{group.missing_account_count ? `${group.missing_account_count} 未发布` : '已发布'}</span>
-              </div>
-              {group.missing_accounts.length ? (
+              </button>
+              {expandedResultCards[String(group.assignment_id || '')] && group.missing_accounts.length ? (
                 <div className="missing-account-list">
                   {group.missing_accounts.map(account => (
                     <div className="missing-account-row" key={`${account.account_id}-${account.automation_id}`}>
@@ -199,7 +204,8 @@ export function PublishCheckBoard({
                     </div>
                   ))}
                 </div>
-              ) : <div className="empty-state">这个范围今天都有发布。</div>}
+              ) : null}
+              {expandedResultCards[String(group.assignment_id || '')] && !group.missing_accounts.length ? <div className="empty-state">这个范围今天都有发布。</div> : null}
             </article>
           )) : <div className="empty-state">还没有检查结果，点击「立即检查」生成今天的巡检。</div>}
         </div>
