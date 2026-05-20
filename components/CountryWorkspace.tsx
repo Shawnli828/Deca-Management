@@ -1,12 +1,14 @@
 'use client';
 
-import type { Country, Product, ReelFarmResult } from '@/lib/types';
+import type { Country, Product, ProductKpis, ReelFarmResult } from '@/lib/types';
 import { buildCountryAutomationPrefix, cardStateKey, getCountryReelFarmCode } from '@/lib/utils';
+import { ProductKpiBoard } from './ProductKpiBoard';
 import { ReelFarmAccountCard } from './ReelFarmAccountCard';
 
 export function CountryWorkspace({
   product,
   country,
+  kpis,
   result,
   days,
   loadingPrefix,
@@ -22,6 +24,7 @@ export function CountryWorkspace({
 }: {
   product: Product;
   country: Country;
+  kpis?: ProductKpis | null;
   result?: ReelFarmResult;
   days: number;
   loadingPrefix: string;
@@ -47,6 +50,7 @@ export function CountryWorkspace({
         <span>/</span>
         <strong>{country.name}</strong>
       </nav>
+      <ProductKpiBoard kpis={kpis} />
       <div className="country-workspace">
         <aside className="country-sidebar">
           <div className="country-sidebar-head">

@@ -1,7 +1,8 @@
 'use client';
 
 import type { Country, Product, ProductKpis } from '@/lib/types';
-import { countryFlag, formatNumber, formatPercent } from '@/lib/utils';
+import { countryFlag } from '@/lib/utils';
+import { ProductKpiBoard } from './ProductKpiBoard';
 
 export function CountryList({
   product,
@@ -17,9 +18,6 @@ export function CountryList({
   onOpenSettings: () => void;
 }) {
   const countries = product.countries || [];
-  const todayAverageViews = Number(kpis?.today?.average_views) || 0;
-  const sevenAverageViews = Number(kpis?.seven_day?.average_views) || 0;
-  const sevenAverageEr = Number(kpis?.seven_day?.average_er) || 0;
 
   return (
     <section className="page active">
@@ -28,26 +26,13 @@ export function CountryList({
         <span>/</span>
         <strong>{product.name}</strong>
       </nav>
+      <ProductKpiBoard kpis={kpis} />
       <div className="section-head">
         <div>
           <h2>{product.name}</h2>
           <p>选择国家/地区后查看账号和素材。</p>
         </div>
         <button className="product-settings-btn inline" type="button" onClick={onOpenSettings} title="国家/地区设置" aria-label="国家/地区设置">⚙</button>
-      </div>
-      <div className="product-kpi-board">
-        <div className="product-kpi-card today">
-          <span>当日均播</span>
-          <strong>{formatNumber(todayAverageViews)}</strong>
-        </div>
-        <div className="product-kpi-card views">
-          <span>过去 7 日均播</span>
-          <strong>{formatNumber(sevenAverageViews)}</strong>
-        </div>
-        <div className="product-kpi-card er">
-          <span>过去 7 日平均 ER</span>
-          <strong>{formatPercent(sevenAverageEr)}</strong>
-        </div>
       </div>
       <div className="country-list">
         {countries.map(country => (

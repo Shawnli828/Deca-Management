@@ -58,6 +58,7 @@ export default function DashboardPage() {
   const [apiKeys, setApiKeys] = useState<ExternalApiKey[]>([]);
   const [generatedKey, setGeneratedKey] = useState('');
   const [productKpis, setProductKpis] = useState<Record<string, ProductKpis | null>>({});
+  const [countryKpis, setCountryKpis] = useState<Record<string, ProductKpis | null>>({});
 
   const selectedProduct = useMemo(() => products.find(product => product.id === selectedProductId) || products[0] || null, [products, selectedProductId]);
   const selectedCountry = useMemo(() => selectedProduct?.countries?.find(country => country.id === selectedCountryId) || selectedProduct?.countries?.[0] || null, [selectedProduct, selectedCountryId]);
@@ -229,6 +230,17 @@ export default function DashboardPage() {
     }
   }
 
+  async function loadCountryKpis(product = selectedProduct, country = selectedCountry) {
+    if (!product || !country) return;
+    const key = `${product.id}:${country.id}`;
+    try {
+      const payload = await api.productKpis(getProductReelFarmCode(product), getCountryReelFarmCode(country));
+      setCountryKpis(prev => ({ ...prev, [key]: payload.data || null }));
+    } catch {
+      setCountryKpis(prev => ({ ...prev, [key]: null }));
+    }
+  }
+
   function selectProduct(product: Product) {
     setSelectedProductId(product.id);
     setSelectedCountryId(product.countries?.[0]?.id || '');
@@ -239,6 +251,7 @@ export default function DashboardPage() {
   function selectCountry(country: Country) {
     setSelectedCountryId(country.id);
     setPage('country');
+    loadCountryKpis(selectedProduct, country);
     setReelFarmResults({});
     setPostCache({});
     setPostLoading({});
@@ -380,6 +393,7 @@ export default function DashboardPage() {
       setExpandedCards({});
       await loadAccounts(selectedProduct, selectedCountry, true);
       await loadProductKpis(selectedProduct);
+      await loadCountryKpis(selectedProduct, selectedCountry);
       setStatus(`当前区同步完成：${payload.creator_count} 个账号，${payload.material_count} 个素材`);
       setStatusError(false);
     } catch (error: any) {
@@ -426,6 +440,7 @@ export default function DashboardPage() {
       setStatus(failed ? `同步全部完成：${failed} 个地区失败，可单独重试` : '同步全部完成');
       setStatusError(Boolean(failed));
       await Promise.all(products.map(product => loadProductKpis(product)));
+      if (page === 'country') await loadCountryKpis(selectedProduct, selectedCountry);
       if (page === 'country') {
         await loadAccounts(selectedProduct, selectedCountry, true);
       }
@@ -556,6 +571,7 @@ export default function DashboardPage() {
                 <CountryWorkspace
                   product={selectedProduct}
                   country={selectedCountry}
+                  kpis={countryKpis[`${selectedProduct.id}:${selectedCountry.id}`]}
                   result={reelFarmResults[currentPrefix]}
                   days={days}
                   loadingPrefix={syncPrefix}

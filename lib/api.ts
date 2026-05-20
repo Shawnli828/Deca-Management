@@ -48,9 +48,9 @@ export const api = {
     }, 'Failed to save data'),
   reset: () => apiFetch<{ data: Product[] }>('/api/reset', { method: 'POST' }, 'Failed to reset'),
   dataQuery: <T>(params: URLSearchParams) => apiFetch<T>(`/api/data/query?${params.toString()}`),
-  productKpis: (productCode: string) =>
+  productKpis: (productCode: string, countryCode?: string) =>
     api.dataQuery<{ ok: boolean; data: ProductKpis }>(
-      new URLSearchParams({ resource: 'product_kpis', product_code: productCode })
+      new URLSearchParams({ resource: 'product_kpis', product_code: productCode, ...(countryCode ? { country_code: countryCode } : {}) })
     ),
   accounts: (productCode: string, countryCode: string, days: number) =>
     api.dataQuery<{ ok: boolean; data: AccountSummary[] }>(

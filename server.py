@@ -2074,6 +2074,7 @@ def query_countries(query):
 
 def query_product_kpis(query):
     product_code = query_value(query, "product_code").upper()
+    country_code = (query_value(query, "country_code") or query_value(query, "market_code")).upper()
     if not product_code:
         raise ValueError("product_code is required.")
     placeholder = db_placeholder()
@@ -2085,6 +2086,11 @@ def query_product_kpis(query):
     seven_end_local = datetime(current_local.year, current_local.month, current_local.day, tzinfo=beijing) + timedelta(days=1)
     seven_start = seven_start_local.astimezone(timezone.utc).isoformat()
     seven_end = seven_end_local.astimezone(timezone.utc).isoformat()
+    market_filter = ""
+    filter_params = ["TIKTOK", product_code]
+    if country_code:
+        market_filter = f" AND m.code = {placeholder}"
+        filter_params.append(country_code)
     with connect_db() as conn:
         init_relational_schema(conn)
         row = conn.execute(
@@ -2099,7 +2105,7 @@ def query_product_kpis(query):
                 COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.share_count ELSE 0 END), 0) AS seven_day_shares,
                 COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.bookmark_count ELSE 0 END), 0) AS seven_day_bookmarks
             {relational_base_from()}
-            WHERE ch.code = {placeholder} AND p.code = {placeholder} AND post.id IS NOT NULL
+            WHERE ch.code = {placeholder} AND p.code = {placeholder}{market_filter} AND post.id IS NOT NULL
             """,
             (
                 today["utc_start"], today["utc_end"],
@@ -2110,7 +2116,7 @@ def query_product_kpis(query):
                 seven_start, seven_end,
                 seven_start, seven_end,
                 seven_start, seven_end,
-                "TIKTOK", product_code,
+                *filter_params,
             ),
         ).fetchone()
     data = row_dict(row)
@@ -2126,6 +2132,7 @@ def query_product_kpis(query):
     )
     return {
         "product_code": product_code,
+        "country_code": country_code or None,
         "today": {
             "posts": today_posts,
             "views": today_views,
