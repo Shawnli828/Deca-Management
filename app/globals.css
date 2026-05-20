@@ -1890,13 +1890,13 @@
         }
 
         .database-panel {
-            width: min(980px, 100%);
+            width: min(1180px, 100%);
             max-height: min(760px, 90vh);
             overflow: hidden;
-            border: 1px solid rgba(199, 211, 223, 0.9);
+            border: 1px solid var(--line);
             border-radius: var(--radius);
-            background: #fff;
-            box-shadow: 0 24px 70px rgba(15, 23, 42, 0.24);
+            background: #0d0c0b;
+            box-shadow: 0 24px 70px rgba(0, 0, 0, 0.46);
         }
 
         .database-header {
@@ -1906,12 +1906,12 @@
             gap: 16px;
             padding: 18px 20px;
             border-bottom: 1px solid var(--line);
-            background: #f8fafc;
+            background: #11100e;
         }
 
         .database-title {
             margin: 0;
-            color: #111827;
+            color: var(--text);
             font-size: 18px;
             line-height: 1.35;
         }
@@ -1932,7 +1932,7 @@
             height: 36px;
             border: 1px solid var(--line);
             border-radius: var(--radius);
-            background: #fff;
+            background: #151310;
             color: var(--muted);
             cursor: pointer;
             font-size: 22px;
@@ -2141,6 +2141,246 @@
             border: 1px solid var(--line);
             padding: 10px;
             background: #151310;
+        }
+
+        .api-reference {
+            display: grid;
+            gap: 16px;
+        }
+
+        .api-reference-nav {
+            position: sticky;
+            top: -18px;
+            z-index: 2;
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            border: 1px solid var(--line);
+            padding: 8px;
+            background: rgba(13, 12, 11, 0.96);
+            backdrop-filter: blur(16px);
+        }
+
+        .api-reference-nav a {
+            flex: 0 0 auto;
+            border: 1px solid transparent;
+            padding: 8px 10px;
+            background: #151310;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 850;
+            text-decoration: none;
+        }
+
+        .api-reference-nav a:hover {
+            border-color: #474b91;
+            color: var(--text);
+        }
+
+        .api-reference-hero,
+        .api-reference-section,
+        .api-reference-footer {
+            display: grid;
+            grid-template-columns: minmax(0, 0.92fr) minmax(360px, 1.08fr);
+            gap: 26px;
+            align-items: stretch;
+            border: 1px solid var(--line);
+            padding: 24px;
+            background:
+                radial-gradient(circle at 15% 0%, rgba(85, 91, 216, 0.14), transparent 36%),
+                #11100e;
+        }
+
+        .api-reference-hero {
+            min-height: 230px;
+            align-items: center;
+        }
+
+        .api-reference-footer {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        .api-reference-kicker {
+            margin: 0 0 10px;
+            color: var(--accent-strong);
+            font-size: 12px;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .api-reference-hero h3,
+        .api-reference-copy h3,
+        .api-reference-footer h3 {
+            margin: 0;
+            color: var(--text);
+            line-height: 1.05;
+        }
+
+        .api-reference-hero h3 {
+            max-width: 580px;
+            font-size: clamp(36px, 5vw, 72px);
+        }
+
+        .api-reference-copy h3,
+        .api-reference-footer h3 {
+            font-size: 26px;
+        }
+
+        .api-reference-hero p,
+        .api-reference-copy p,
+        .api-reference-footer p {
+            margin: 12px 0 0;
+            color: var(--muted);
+            font-size: 15px;
+            line-height: 1.7;
+        }
+
+        .api-reference-pills {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 18px;
+        }
+
+        .api-reference-pills span,
+        .api-method {
+            display: inline-flex;
+            align-items: center;
+            min-height: 28px;
+            border: 1px solid #474b91;
+            padding: 0 10px;
+            background: #151735;
+            color: var(--accent-strong);
+            font-size: 12px;
+            font-weight: 900;
+        }
+
+        .api-base-card,
+        .api-code-card {
+            display: grid;
+            align-content: start;
+            gap: 12px;
+            border: 1px solid #2f2d28;
+            background: #080807;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+        }
+
+        .api-base-card {
+            padding: 18px;
+        }
+
+        .api-base-card span,
+        .api-code-head {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .api-base-card code,
+        .api-endpoint {
+            display: block;
+            overflow-x: auto;
+            border: 1px solid #2f2d28;
+            padding: 12px;
+            background: #151310;
+            color: var(--text);
+            font-size: 13px;
+            line-height: 1.5;
+            white-space: nowrap;
+        }
+
+        .api-base-card small {
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .api-resource-catalog {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .api-resource-card {
+            display: grid;
+            gap: 6px;
+            min-height: 82px;
+            border: 1px solid var(--line);
+            padding: 14px;
+            background: #151310;
+        }
+
+        .api-resource-card code {
+            color: var(--text);
+            font-size: 13px;
+            font-weight: 900;
+        }
+
+        .api-resource-card span {
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.45;
+        }
+
+        .api-reference-copy {
+            display: grid;
+            align-content: start;
+            gap: 12px;
+        }
+
+        .api-code-card {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .api-code-head {
+            border-bottom: 1px solid #2f2d28;
+            padding: 12px 14px;
+            background: #151310;
+        }
+
+        .api-code-card pre {
+            overflow: auto;
+            margin: 0;
+            padding: 18px;
+            color: #e8e3da;
+            font-size: 13px;
+            line-height: 1.7;
+            white-space: pre;
+        }
+
+        .api-code-card .btn {
+            justify-self: end;
+            margin: 0 14px 14px;
+        }
+
+        .api-param-list {
+            display: grid;
+            gap: 8px;
+            margin-top: 2px;
+        }
+
+        .api-param-list div {
+            display: grid;
+            grid-template-columns: 150px minmax(0, 1fr);
+            gap: 12px;
+            align-items: center;
+            border-top: 1px solid var(--line);
+            padding-top: 8px;
+        }
+
+        .api-param-list strong {
+            color: var(--text);
+            font-size: 12px;
+        }
+
+        .api-param-list span {
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.45;
         }
 
         .product-settings-panel,
@@ -3347,6 +3587,25 @@
         }
 
         @media (max-width: 900px) {
+            .api-reference-hero,
+            .api-reference-section {
+                grid-template-columns: minmax(0, 1fr);
+                padding: 18px;
+            }
+
+            .api-reference-hero h3 {
+                font-size: 38px;
+            }
+
+            .api-resource-catalog {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            .api-param-list div {
+                grid-template-columns: minmax(0, 1fr);
+                gap: 4px;
+            }
+
             .roaster-toolbar {
                 align-items: stretch;
                 flex-direction: column;
