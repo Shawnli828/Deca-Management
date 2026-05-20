@@ -3009,7 +3009,19 @@
             gap: 10px;
         }
 
-        .assignment-row,
+        .assignment-row {
+            display: grid;
+            grid-template-columns: minmax(130px, 0.8fr) minmax(180px, 1.1fr) minmax(180px, 1.1fr) auto;
+            gap: 12px;
+            align-items: stretch;
+            border: 1px solid var(--line);
+            padding: 11px 12px;
+            background: #151310;
+            color: var(--muted);
+            font-size: 13px;
+            font-weight: 700;
+        }
+
         .missing-account-row {
             display: flex;
             align-items: center;
@@ -3023,10 +3035,38 @@
             font-weight: 700;
         }
 
-        .assignment-person {
-            min-width: 96px;
+        .assignment-cell {
+            display: grid;
+            align-content: center;
+            gap: 5px;
+            min-width: 0;
+            border-right: 1px solid var(--line);
+            padding-right: 12px;
+        }
+
+        .assignment-cell strong {
+            overflow: hidden;
             color: var(--text);
+            font-size: 15px;
             font-weight: 850;
+            line-height: 1.25;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .assignment-label {
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            line-height: 1;
+            text-transform: uppercase;
+        }
+
+        .assignment-actions {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
         }
 
         .publish-check-summary {
@@ -3121,10 +3161,23 @@
 
             .publish-check-hero,
             .publish-check-panel-head,
-            .assignment-row,
             .missing-account-row {
                 align-items: stretch;
                 flex-direction: column;
+            }
+
+            .assignment-row {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            .assignment-cell {
+                border-right: 0;
+                border-bottom: 1px solid var(--line);
+                padding: 0 0 10px;
+            }
+
+            .assignment-actions {
+                justify-content: flex-start;
             }
 
             .assignment-form {

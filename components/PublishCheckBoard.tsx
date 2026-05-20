@@ -118,9 +118,21 @@ export function PublishCheckBoard({
             const country = product?.countries?.find(entry => entry.id === item.country_id);
             return (
               <div className="assignment-row" key={item.id}>
-                <span className="assignment-person">{item.person_name || peopleById.get(item.person_id)?.name || '未命名'}</span>
-                <span>{product?.name || '未知产品'} · {country ? countryFlag(country) : '🌐'} {country?.name || '未知地区'}</span>
-                <button className="btn danger" type="button" onClick={() => removeAssignment(item.id)}>删除</button>
+                <div className="assignment-cell">
+                  <span className="assignment-label">负责人</span>
+                  <strong>{item.person_name || peopleById.get(item.person_id)?.name || '未命名'}</strong>
+                </div>
+                <div className="assignment-cell">
+                  <span className="assignment-label">产品</span>
+                  <strong>{product?.name || '未知产品'}</strong>
+                </div>
+                <div className="assignment-cell">
+                  <span className="assignment-label">国家/地区</span>
+                  <strong>{country ? countryFlag(country) : '🌐'} {country?.name || '未知地区'}</strong>
+                </div>
+                <div className="assignment-actions">
+                  <button className="btn danger" type="button" onClick={() => removeAssignment(item.id)}>删除</button>
+                </div>
               </div>
             );
           }) : <div className="empty-state">还没有配置负责范围。</div>}
