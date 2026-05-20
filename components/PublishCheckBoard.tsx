@@ -124,7 +124,12 @@ export function PublishCheckBoard({
                 </div>
                 <div className="assignment-cell">
                   <span className="assignment-label">产品</span>
-                  <strong>{product?.name || '未知产品'}</strong>
+                  <span className="assignment-product-value">
+                    <span className="assignment-product-logo">
+                      {product?.logo ? <img src={product.logo} alt="" /> : product?.name?.slice(0, 1) || '?'}
+                    </span>
+                    <strong>{product?.name || '未知产品'}</strong>
+                  </span>
                 </div>
                 <div className="assignment-cell">
                   <span className="assignment-label">国家/地区</span>
