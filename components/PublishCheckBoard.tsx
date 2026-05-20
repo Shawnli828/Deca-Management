@@ -20,15 +20,19 @@ export function PublishCheckBoard({
   roaster,
   state,
   running,
+  sendingReminder,
   onSave,
-  onRun
+  onRun,
+  onSendReminder
 }: {
   products: Product[];
   roaster: RoasterState;
   state: PublishCheckState;
   running: boolean;
+  sendingReminder: boolean;
   onSave: (state: PublishCheckState) => Promise<void>;
   onRun: () => Promise<void>;
+  onSendReminder: () => Promise<void>;
 }) {
   const [personId, setPersonId] = useState(roaster.people[0]?.id || '');
   const [productId, setProductId] = useState(products[0]?.id || '');
@@ -173,9 +177,14 @@ export function PublishCheckBoard({
             <h3>检查结果</h3>
             <p>只展示没有在北京时间当天发布的账号；全部正常的范围会显示通过。</p>
           </div>
-          <div className="publish-check-summary">
-            <strong>{result?.totals?.missing_accounts || 0}</strong>
-            <span>未发布账号</span>
+          <div className="publish-result-actions">
+            <button className="btn ghost" type="button" onClick={onSendReminder} disabled={sendingReminder || !result}>
+              {sendingReminder ? '发送中...' : '发送飞书提醒'}
+            </button>
+            <div className="publish-check-summary">
+              <strong>{result?.totals?.missing_accounts || 0}</strong>
+              <span>未发布账号</span>
+            </div>
           </div>
         </div>
         <div className="publish-result-grid">

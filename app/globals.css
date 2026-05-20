@@ -3511,6 +3511,13 @@
             line-height: 1;
         }
 
+        .publish-result-actions {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 14px;
+        }
+
         .publish-result-card {
             display: grid;
             gap: 12px;
@@ -3617,6 +3624,7 @@
 
             .publish-check-hero,
             .publish-check-panel-head,
+            .publish-result-actions,
             .missing-account-row {
                 align-items: stretch;
                 flex-direction: column;

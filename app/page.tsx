@@ -48,6 +48,7 @@ export default function DashboardPage() {
   const [roaster, setRoaster] = useState<RoasterState>(defaultRoaster);
   const [publishCheck, setPublishCheck] = useState<PublishCheckState>({ assignments: [], last_result: null });
   const [publishCheckRunning, setPublishCheckRunning] = useState(false);
+  const [publishReminderSending, setPublishReminderSending] = useState(false);
   const [databaseOpen, setDatabaseOpen] = useState(false);
   const [editingProductId, setEditingProductId] = useState('');
   const [countrySettingsOpen, setCountrySettingsOpen] = useState(false);
@@ -407,6 +408,20 @@ export default function DashboardPage() {
     }
   }
 
+  async function sendPublishReminderNow() {
+    setPublishReminderSending(true);
+    try {
+      const result = await api.sendPublishCheckReminder();
+      setStatus(`飞书提醒已发送：${result.missing_accounts || 0} 个账号未发布`);
+      setStatusError(false);
+    } catch (error: any) {
+      setStatus(error?.message || '飞书提醒发送失败');
+      setStatusError(true);
+    } finally {
+      setPublishReminderSending(false);
+    }
+  }
+
   async function openDatabase() {
     setDatabaseOpen(true);
     setGeneratedKey('');
@@ -508,8 +523,10 @@ export default function DashboardPage() {
               roaster={roaster}
               state={publishCheck}
               running={publishCheckRunning}
+              sendingReminder={publishReminderSending}
               onSave={savePublishCheck}
               onRun={runPublishCheckNow}
+              onSendReminder={sendPublishReminderNow}
             />
           </section>
         </main>

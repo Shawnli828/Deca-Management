@@ -34,6 +34,7 @@ from server import (
     save_data,
     save_publish_check_state,
     save_roaster_state,
+    send_publish_check_reminder,
     sync_all_reelfarm_records,
     sync_reelfarm_country,
     sync_reelfarm_prefix,
@@ -254,6 +255,15 @@ def post_publish_check_run(request: Request):
         require_dashboard_auth(request)
 
     return run_publish_check()
+
+
+@app.post("/api/publish-check/send-reminder")
+def post_publish_check_send_reminder(request: Request):
+    require_dashboard_auth(request)
+    result = send_publish_check_reminder()
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("error") or "Failed to send Feishu reminder.")
+    return result
 
 
 @app.get("/api/reelfarm/config")

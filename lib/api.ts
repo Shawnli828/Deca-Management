@@ -84,6 +84,12 @@ export const api = {
       body: JSON.stringify({ state })
     }, 'Failed to save publish check'),
   runPublishCheck: () => apiFetch<PublishCheckResult>('/api/publish-check/run', { method: 'POST' }, 'Failed to run publish check'),
+  sendPublishCheckReminder: () =>
+    apiFetch<{ ok: boolean; sent_at?: string; missing_accounts?: number; message_preview?: string }>(
+      '/api/publish-check/send-reminder',
+      { method: 'POST' },
+      'Failed to send Feishu reminder'
+    ),
   database: () => apiFetch<DatabaseSnapshot>('/api/database', undefined, 'Failed to load database'),
   apiKeys: () => apiFetch<{ ok: boolean; keys: ExternalApiKey[] }>('/api/api-keys'),
   createApiKey: (name: string) =>

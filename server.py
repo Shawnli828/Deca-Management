@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import base64
 import hashlib
 import hmac
 import mimetypes
@@ -35,6 +36,8 @@ ROASTER_STATE_KEY = "roaster_state"
 PUBLISH_CHECK_STATE_KEY = "publish_check_state"
 EXTERNAL_API_KEYS_KEY = "external_api_keys"
 REELFARM_BASE_URL = "https://reel.farm/api/v1"
+FEISHU_WEBHOOK_URL = os.environ.get("FEISHU_WEBHOOK_URL", "").strip()
+FEISHU_WEBHOOK_SECRET = os.environ.get("FEISHU_WEBHOOK_SECRET", "").strip()
 SEED_DATA_PATH = BASE_DIR / "seed_data.json"
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "Deca888").strip()
 ADMIN_PASSWORD_HASH = os.environ.get(
@@ -2235,6 +2238,109 @@ def run_publish_check():
     state["last_result"] = result
     save_publish_check_state(state)
     return result
+
+
+def publish_check_reminder_text(result):
+    totals = result.get("totals") if isinstance(result, dict) else {}
+    groups = result.get("groups") if isinstance(result, dict) else []
+    missing_total = int((totals or {}).get("missing_accounts") or 0)
+    beijing_date = result.get("beijing_date") or "未生成日期"
+    lines = [
+        f"Deca Growth 发布检查提醒",
+        f"北京时间日期：{beijing_date}",
+        f"未发布账号：{missing_total}",
+        "",
+    ]
+    if missing_total <= 0:
+        lines.append("全部负责范围今天都有发布。")
+        return "\n".join(lines)
+
+    shown = 0
+    for group in groups if isinstance(groups, list) else []:
+        if not isinstance(group, dict):
+            continue
+        missing_count = int(group.get("missing_account_count") or 0)
+        if missing_count <= 0:
+            continue
+        product = group.get("product") if isinstance(group.get("product"), dict) else {}
+        country = group.get("country") if isinstance(group.get("country"), dict) else {}
+        lines.append(f"{group.get('person_name') or '未命名负责人'}｜{product.get('name') or '-'} · {country.get('name') or '-'}：{missing_count} 个账号未发布")
+        for account in (group.get("missing_accounts") or [])[:8]:
+            if not isinstance(account, dict):
+                continue
+            username = account.get("username") or account.get("display_name") or account.get("reelfarm_account_id") or account.get("account_id") or "unknown"
+            automation = account.get("automation_name") or account.get("reelfarm_automation_id") or "无 automation 名称"
+            lines.append(f"  - @{str(username).lstrip('@')}｜{automation}")
+            shown += 1
+        if missing_count > 8:
+            lines.append(f"  - 还有 {missing_count - 8} 个账号未展示")
+        lines.append("")
+        if shown >= 40:
+            lines.append("更多未发布账号请打开中台查看。")
+            break
+    return "\n".join(lines).strip()
+
+
+def feishu_signed_payload(message):
+    payload = {
+        "msg_type": "text",
+        "content": {"text": message},
+    }
+    if FEISHU_WEBHOOK_SECRET:
+        timestamp = str(int(time.time()))
+        string_to_sign = f"{timestamp}\n{FEISHU_WEBHOOK_SECRET}"
+        sign = base64.b64encode(hmac.new(string_to_sign.encode("utf-8"), digestmod=hashlib.sha256).digest()).decode("utf-8")
+        payload["timestamp"] = timestamp
+        payload["sign"] = sign
+    return payload
+
+
+def send_feishu_message(message):
+    if not FEISHU_WEBHOOK_URL:
+        return {"ok": False, "error": "FEISHU_WEBHOOK_URL is not configured."}
+    body = json.dumps(feishu_signed_payload(message), ensure_ascii=False).encode("utf-8")
+    request = Request(
+        FEISHU_WEBHOOK_URL,
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=12, context=make_ssl_context()) as response:
+            raw = response.read().decode("utf-8", errors="replace")
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        return {"ok": False, "error": f"Feishu returned HTTP {exc.code}: {detail[:300]}"}
+    except URLError as exc:
+        return {"ok": False, "error": f"Could not reach Feishu webhook: {exc.reason}"}
+    except Exception as exc:
+        return {"ok": False, "error": f"Feishu send failed: {exc}"}
+
+    try:
+        payload = json.loads(raw) if raw else {}
+    except json.JSONDecodeError:
+        payload = {"raw": raw}
+    code = payload.get("code", payload.get("StatusCode", 0))
+    if code not in (0, "0", None):
+        return {"ok": False, "error": payload.get("msg") or payload.get("StatusMessage") or raw[:300], "response": payload}
+    return {"ok": True, "response": payload}
+
+
+def send_publish_check_reminder():
+    state = load_publish_check_state()
+    result = state.get("last_result") if isinstance(state, dict) else None
+    if not isinstance(result, dict):
+        return {"ok": False, "error": "No publish check result yet. Run check first."}
+    message = publish_check_reminder_text(result)
+    sent = send_feishu_message(message)
+    if not sent.get("ok"):
+        return sent
+    return {
+        "ok": True,
+        "sent_at": datetime.now(timezone.utc).isoformat(),
+        "missing_accounts": (result.get("totals") or {}).get("missing_accounts", 0),
+        "message_preview": message[:500],
+    }
 
 
 def detailed_select():
