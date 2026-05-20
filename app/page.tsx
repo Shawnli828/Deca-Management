@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AuthGate } from '@/components/AuthGate';
 import { CountryList } from '@/components/CountryList';
+import { CountrySettingsModal } from '@/components/CountrySettingsModal';
 import { CountryWorkspace } from '@/components/CountryWorkspace';
 import { DatabaseModal } from '@/components/DatabaseModal';
 import { MetricsBar } from '@/components/MetricsBar';
@@ -13,7 +14,7 @@ import { RoasterBoard } from '@/components/RoasterBoard';
 import { SideMenu } from '@/components/SideMenu';
 import { accountSummaryToCard, api, mergePostRowsIntoCard } from '@/lib/api';
 import type { Country, DatabaseSnapshot, ExternalApiKey, Product, PublishCheckState, ReelFarmResult, RoasterState } from '@/lib/types';
-import { buildCountryAutomationPrefix, cardStateKey, codeFromName, countryCodes, getCountryReelFarmCode, getProductReelFarmCode } from '@/lib/utils';
+import { buildCountryAutomationPrefix, cardStateKey, codeFromName, getCountryReelFarmCode, getProductReelFarmCode } from '@/lib/utils';
 
 const defaultRoaster: RoasterState = {
   people: [
@@ -49,6 +50,7 @@ export default function DashboardPage() {
   const [publishCheckRunning, setPublishCheckRunning] = useState(false);
   const [databaseOpen, setDatabaseOpen] = useState(false);
   const [editingProductId, setEditingProductId] = useState('');
+  const [countrySettingsOpen, setCountrySettingsOpen] = useState(false);
   const [snapshot, setSnapshot] = useState<DatabaseSnapshot | null>(null);
   const [apiKeys, setApiKeys] = useState<ExternalApiKey[]>([]);
   const [generatedKey, setGeneratedKey] = useState('');
@@ -149,7 +151,7 @@ export default function DashboardPage() {
     }
   }
 
-  async function saveProductSettings(value: { name: string; folder: string; logo?: string }) {
+  async function saveProductSettings(value: { name: string; folder: string; reelFarmCode: string; logo?: string }) {
     const product = editingProduct;
     if (!product) return;
     const nextProducts = products.map(item => (
@@ -159,6 +161,7 @@ export default function DashboardPage() {
             name: value.name,
             folder: value.folder,
             owner_type: value.folder,
+            reelFarmCode: value.reelFarmCode || item.reelFarmCode || codeFromName(value.name),
             logo: value.logo || ''
           }
         : item
@@ -166,6 +169,27 @@ export default function DashboardPage() {
     const saved = await saveProducts(nextProducts);
     if (saved) {
       setStatus(`${value.name} 设置已保存`);
+      setStatusError(false);
+    }
+  }
+
+  async function saveCountrySettings(countries: Country[]) {
+    const product = selectedProduct;
+    if (!product) return;
+    const nextProducts = products.map(item => (
+      item.id === product.id
+        ? { ...item, countries }
+        : item
+    ));
+    const saved = await saveProducts(nextProducts);
+    if (saved) {
+      const stillSelected = countries.some(country => country.id === selectedCountryId);
+      setSelectedCountryId(stillSelected ? selectedCountryId : (countries[0]?.id || ''));
+      setReelFarmResults({});
+      setPostCache({});
+      setExpandedCards({});
+      setSlideIndexes({});
+      setStatus(`${product.name} 国家/地区设置已保存`);
       setStatusError(false);
     }
   }
@@ -205,37 +229,6 @@ export default function DashboardPage() {
     setPostLoading({});
     setExpandedCards({});
     setSlideIndexes({});
-  }
-
-  async function addCountry(product: Product) {
-    const name = window.prompt('输入国家/地区名称，例如 Germany / France / Australia');
-    if (!name?.trim()) return;
-    const suggestedCode = countryCodes[name.trim()] || codeFromName(name);
-    const code = window.prompt('输入 ReelFarm 国家代码，例如 GE / FR / AU', suggestedCode);
-    if (!code?.trim()) return;
-
-    const newCountry: Country = {
-      id: crypto.randomUUID(),
-      name: name.trim(),
-      reelFarmCode: code.trim().toUpperCase(),
-      concepts: [],
-      creatorCount: 0,
-      materialCount: 0,
-      postCount: 0
-    };
-    const nextProducts = products.map(item => (
-      item.id === product.id
-        ? { ...item, countries: [...(item.countries || []), newCountry] }
-        : item
-    ));
-    const saved = await saveProducts(nextProducts);
-    if (saved) {
-      setSelectedProductId(product.id);
-      setSelectedCountryId(newCountry.id);
-      setPage('product');
-      setStatus(`${newCountry.name} 已添加`);
-      setStatusError(false);
-    }
   }
 
   function changeDays(nextDays: number) {
@@ -471,7 +464,7 @@ export default function DashboardPage() {
             <MetricsBar products={products} />
             <section className="page-shell">
               {page === 'products' ? <ProductList products={products} onSelect={selectProduct} onAddProduct={addProduct} onEditProduct={product => setEditingProductId(product.id)} /> : null}
-              {page === 'product' && selectedProduct ? <CountryList product={selectedProduct} onBack={() => setPage('products')} onSelect={selectCountry} onAdd={addCountry} /> : null}
+              {page === 'product' && selectedProduct ? <CountryList product={selectedProduct} onBack={() => setPage('products')} onSelect={selectCountry} onOpenSettings={() => setCountrySettingsOpen(true)} /> : null}
               {page === 'country' && selectedProduct && selectedCountry ? (
                 <CountryWorkspace
                   product={selectedProduct}
@@ -538,6 +531,12 @@ export default function DashboardPage() {
         onClose={() => setEditingProductId('')}
         onSave={saveProductSettings}
         readLogo={readProductLogo}
+      />
+      <CountrySettingsModal
+        open={countrySettingsOpen}
+        product={selectedProduct}
+        onClose={() => setCountrySettingsOpen(false)}
+        onSave={saveCountrySettings}
       />
     </div>
   );

@@ -7,6 +7,7 @@ import { FormEvent, useEffect, useState } from 'react';
 type ProductSettingsValue = {
   name: string;
   folder: string;
+  reelFarmCode: string;
   logo?: string;
 };
 
@@ -25,6 +26,7 @@ export function ProductSettingsModal({
 }) {
   const [name, setName] = useState('');
   const [folder, setFolder] = useState('甲方');
+  const [reelFarmCode, setReelFarmCode] = useState('');
   const [logo, setLogo] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -32,6 +34,7 @@ export function ProductSettingsModal({
     if (!product || !open) return;
     setName(product.name || '');
     setFolder(normalizeProductFolder(product));
+    setReelFarmCode(product.reelFarmCode || '');
     setLogo(product.logo || '');
   }, [product, open]);
 
@@ -42,7 +45,7 @@ export function ProductSettingsModal({
     if (!name.trim()) return;
     setSaving(true);
     try {
-      await onSave({ name: name.trim(), folder, logo });
+      await onSave({ name: name.trim(), folder, reelFarmCode: reelFarmCode.trim().toUpperCase(), logo });
       onClose();
     } finally {
       setSaving(false);
@@ -57,7 +60,7 @@ export function ProductSettingsModal({
         <header className="database-header">
           <div>
             <h2 id="productSettingsTitle" className="database-title">产品设置</h2>
-            <p className="database-subtitle">修改产品名称、所属文件夹和 Logo。</p>
+            <p className="database-subtitle">修改产品名称、Product Code、所属文件夹和 Logo。</p>
           </div>
           <button className="icon-btn" type="button" onClick={onClose} title="关闭">×</button>
         </header>
@@ -82,6 +85,10 @@ export function ProductSettingsModal({
           <label className="settings-field">
             <span>产品名称</span>
             <input className="text-input" value={name} onChange={event => setName(event.target.value)} />
+          </label>
+          <label className="settings-field">
+            <span>Product Code</span>
+            <input className="text-input" value={reelFarmCode} onChange={event => setReelFarmCode(event.target.value.toUpperCase())} placeholder="例如 DL / DB / DM" />
           </label>
           <label className="settings-field">
             <span>产品所属</span>

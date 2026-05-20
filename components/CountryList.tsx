@@ -7,12 +7,12 @@ export function CountryList({
   product,
   onBack,
   onSelect,
-  onAdd
+  onOpenSettings
 }: {
   product: Product;
   onBack: () => void;
   onSelect: (country: Country) => void;
-  onAdd: (product: Product) => void;
+  onOpenSettings: () => void;
 }) {
   const countries = product.countries || [];
 
@@ -28,7 +28,7 @@ export function CountryList({
           <h2>{product.name}</h2>
           <p>选择国家/地区后查看账号和素材。</p>
         </div>
-        <button className="btn primary" type="button" onClick={() => onAdd(product)}>添加地区</button>
+        <button className="product-settings-btn inline" type="button" onClick={onOpenSettings} title="国家/地区设置" aria-label="国家/地区设置">⚙</button>
       </div>
       <div className="country-list">
         {countries.map(country => (

@@ -875,6 +875,13 @@
             transform: translateY(-1px);
         }
 
+        .product-settings-btn.inline {
+            position: static;
+            width: 42px;
+            height: 42px;
+            border-radius: var(--radius);
+        }
+
         .product-logo-upload {
             cursor: pointer;
         }
@@ -2053,7 +2060,8 @@
             white-space: nowrap;
         }
 
-        .product-settings-panel {
+        .product-settings-panel,
+        .country-settings-panel {
             width: min(520px, 100%);
             overflow: hidden;
             border: 1px solid var(--line);
@@ -2062,11 +2070,17 @@
             box-shadow: 0 24px 70px rgba(0, 0, 0, 0.46);
         }
 
-        .product-settings-panel .database-header {
+        .country-settings-panel {
+            width: min(760px, 100%);
+        }
+
+        .product-settings-panel .database-header,
+        .country-settings-panel .database-header {
             background: #11100e;
         }
 
-        .product-settings-body {
+        .product-settings-body,
+        .country-settings-body {
             display: grid;
             gap: 16px;
             padding: 18px 20px 20px;
@@ -2114,6 +2128,33 @@
             justify-content: flex-end;
             gap: 10px;
             padding-top: 2px;
+        }
+
+        .settings-actions.spread {
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .settings-actions.spread > span {
+            display: flex;
+            gap: 10px;
+        }
+
+        .country-settings-list {
+            display: grid;
+            gap: 10px;
+            max-height: min(520px, 58vh);
+            overflow: auto;
+        }
+
+        .country-settings-row {
+            display: grid;
+            grid-template-columns: minmax(180px, 1fr) minmax(130px, 180px) auto;
+            gap: 10px;
+            align-items: end;
+            border: 1px solid var(--line);
+            padding: 12px;
+            background: #151310;
         }
 
         .database-json {
@@ -3182,5 +3223,15 @@
 
             .assignment-form {
                 grid-template-columns: minmax(0, 1fr);
+            }
+
+            .country-settings-row {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            .settings-actions.spread,
+            .settings-actions.spread > span {
+                align-items: stretch;
+                flex-direction: column;
             }
         }
