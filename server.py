@@ -1839,6 +1839,7 @@ def database_snapshot():
 
 DATA_QUERY_RESOURCES = {
     "summary",
+    "product_kpis",
     "country_cards",
     "countries",
     "accounts",
@@ -2069,6 +2070,77 @@ def query_countries(query):
             tuple(params),
         ).fetchall()
     return [row_dict(row) for row in rows]
+
+
+def query_product_kpis(query):
+    product_code = query_value(query, "product_code").upper()
+    if not product_code:
+        raise ValueError("product_code is required.")
+    placeholder = db_placeholder()
+    now_utc = datetime.now(timezone.utc)
+    today = beijing_day_window(now_utc)
+    beijing = timezone(timedelta(hours=8))
+    current_local = now_utc.astimezone(beijing)
+    seven_start_local = datetime(current_local.year, current_local.month, current_local.day, tzinfo=beijing) - timedelta(days=6)
+    seven_end_local = datetime(current_local.year, current_local.month, current_local.day, tzinfo=beijing) + timedelta(days=1)
+    seven_start = seven_start_local.astimezone(timezone.utc).isoformat()
+    seven_end = seven_end_local.astimezone(timezone.utc).isoformat()
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        row = conn.execute(
+            f"""
+            SELECT
+                COUNT(DISTINCT CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.id END) AS today_posts,
+                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.view_count ELSE 0 END), 0) AS today_views,
+                COUNT(DISTINCT CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.id END) AS seven_day_posts,
+                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.view_count ELSE 0 END), 0) AS seven_day_views,
+                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.like_count ELSE 0 END), 0) AS seven_day_likes,
+                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.comment_count ELSE 0 END), 0) AS seven_day_comments,
+                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.share_count ELSE 0 END), 0) AS seven_day_shares,
+                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.bookmark_count ELSE 0 END), 0) AS seven_day_bookmarks
+            {relational_base_from()}
+            WHERE ch.code = {placeholder} AND p.code = {placeholder} AND post.id IS NOT NULL
+            """,
+            (
+                today["utc_start"], today["utc_end"],
+                today["utc_start"], today["utc_end"],
+                seven_start, seven_end,
+                seven_start, seven_end,
+                seven_start, seven_end,
+                seven_start, seven_end,
+                seven_start, seven_end,
+                seven_start, seven_end,
+                "TIKTOK", product_code,
+            ),
+        ).fetchone()
+    data = row_dict(row)
+    today_posts = int(data.get("today_posts") or 0)
+    today_views = int(data.get("today_views") or 0)
+    seven_posts = int(data.get("seven_day_posts") or 0)
+    seven_views = int(data.get("seven_day_views") or 0)
+    interactions = (
+        int(data.get("seven_day_likes") or 0)
+        + int(data.get("seven_day_comments") or 0)
+        + int(data.get("seven_day_shares") or 0)
+        + int(data.get("seven_day_bookmarks") or 0)
+    )
+    return {
+        "product_code": product_code,
+        "today": {
+            "posts": today_posts,
+            "views": today_views,
+            "average_views": round(today_views / today_posts) if today_posts else 0,
+            "utc_window": {"start": today["utc_start"], "end": today["utc_end"]},
+        },
+        "seven_day": {
+            "posts": seven_posts,
+            "views": seven_views,
+            "average_views": round(seven_views / seven_posts) if seven_posts else 0,
+            "average_er": (interactions / seven_views * 100) if seven_views else 0,
+            "interactions": interactions,
+            "utc_window": {"start": seven_start, "end": seven_end},
+        },
+    }
 
 
 def query_accounts(query):
@@ -2603,6 +2675,8 @@ def data_query_payload(query):
 
     if resource == "summary":
         response["data"] = query_summary(query)
+    elif resource == "product_kpis":
+        response["data"] = query_product_kpis(query)
     elif resource == "country_cards":
         response["data"] = query_country_cards(query)
     elif resource == "countries":

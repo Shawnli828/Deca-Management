@@ -13,7 +13,7 @@ import { PublishCheckBoard } from '@/components/PublishCheckBoard';
 import { RoasterBoard } from '@/components/RoasterBoard';
 import { SideMenu } from '@/components/SideMenu';
 import { accountSummaryToCard, api, mergePostRowsIntoCard } from '@/lib/api';
-import type { Country, DatabaseSnapshot, ExternalApiKey, Product, PublishCheckState, ReelFarmResult, RoasterState } from '@/lib/types';
+import type { Country, DatabaseSnapshot, ExternalApiKey, Product, ProductKpis, PublishCheckState, ReelFarmResult, RoasterState } from '@/lib/types';
 import { buildCountryAutomationPrefix, cardStateKey, codeFromName, getCountryReelFarmCode, getProductReelFarmCode } from '@/lib/utils';
 
 const defaultRoaster: RoasterState = {
@@ -57,6 +57,7 @@ export default function DashboardPage() {
   const [snapshot, setSnapshot] = useState<DatabaseSnapshot | null>(null);
   const [apiKeys, setApiKeys] = useState<ExternalApiKey[]>([]);
   const [generatedKey, setGeneratedKey] = useState('');
+  const [productKpis, setProductKpis] = useState<Record<string, ProductKpis | null>>({});
 
   const selectedProduct = useMemo(() => products.find(product => product.id === selectedProductId) || products[0] || null, [products, selectedProductId]);
   const selectedCountry = useMemo(() => selectedProduct?.countries?.find(country => country.id === selectedCountryId) || selectedProduct?.countries?.[0] || null, [selectedProduct, selectedCountryId]);
@@ -218,10 +219,21 @@ export default function DashboardPage() {
     }
   }, [authenticated, page, selectedProductId, selectedCountryId]);
 
+  async function loadProductKpis(product = selectedProduct) {
+    if (!product) return;
+    try {
+      const payload = await api.productKpis(getProductReelFarmCode(product));
+      setProductKpis(prev => ({ ...prev, [product.id]: payload.data || null }));
+    } catch {
+      setProductKpis(prev => ({ ...prev, [product.id]: null }));
+    }
+  }
+
   function selectProduct(product: Product) {
     setSelectedProductId(product.id);
     setSelectedCountryId(product.countries?.[0]?.id || '');
     setPage('product');
+    loadProductKpis(product);
   }
 
   function selectCountry(country: Country) {
@@ -367,6 +379,7 @@ export default function DashboardPage() {
       setPostCache({});
       setExpandedCards({});
       await loadAccounts(selectedProduct, selectedCountry, true);
+      await loadProductKpis(selectedProduct);
       setStatus(`当前区同步完成：${payload.creator_count} 个账号，${payload.material_count} 个素材`);
       setStatusError(false);
     } catch (error: any) {
@@ -412,6 +425,7 @@ export default function DashboardPage() {
       }
       setStatus(failed ? `同步全部完成：${failed} 个地区失败，可单独重试` : '同步全部完成');
       setStatusError(Boolean(failed));
+      await Promise.all(products.map(product => loadProductKpis(product)));
       if (page === 'country') {
         await loadAccounts(selectedProduct, selectedCountry, true);
       }
@@ -537,7 +551,7 @@ export default function DashboardPage() {
             <MetricsBar products={products} />
             <section className="page-shell">
               {page === 'products' ? <ProductList products={products} onSelect={selectProduct} onAddProduct={addProduct} onEditProduct={product => setEditingProductId(product.id)} /> : null}
-              {page === 'product' && selectedProduct ? <CountryList product={selectedProduct} onBack={() => setPage('products')} onSelect={selectCountry} onOpenSettings={() => setCountrySettingsOpen(true)} /> : null}
+              {page === 'product' && selectedProduct ? <CountryList product={selectedProduct} kpis={productKpis[selectedProduct.id]} onBack={() => setPage('products')} onSelect={selectCountry} onOpenSettings={() => setCountrySettingsOpen(true)} /> : null}
               {page === 'country' && selectedProduct && selectedCountry ? (
                 <CountryWorkspace
                   product={selectedProduct}

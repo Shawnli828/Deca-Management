@@ -33,6 +33,24 @@ export type Product = {
   postCount?: number;
 };
 
+export type ProductKpis = {
+  product_code?: string;
+  today?: {
+    posts?: number;
+    views?: number;
+    average_views?: number;
+    utc_window?: { start?: string; end?: string };
+  };
+  seven_day?: {
+    posts?: number;
+    views?: number;
+    average_views?: number;
+    average_er?: number;
+    interactions?: number;
+    utc_window?: { start?: string; end?: string };
+  };
+};
+
 export type AccountSummary = {
   account_id: string;
   reelfarm_account_id?: string;

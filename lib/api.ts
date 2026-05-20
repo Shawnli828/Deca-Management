@@ -6,6 +6,7 @@ import type {
   PublishCheckResult,
   PublishCheckState,
   Product,
+  ProductKpis,
   ReelFarmResult,
   RoasterState
 } from './types';
@@ -47,6 +48,10 @@ export const api = {
     }, 'Failed to save data'),
   reset: () => apiFetch<{ data: Product[] }>('/api/reset', { method: 'POST' }, 'Failed to reset'),
   dataQuery: <T>(params: URLSearchParams) => apiFetch<T>(`/api/data/query?${params.toString()}`),
+  productKpis: (productCode: string) =>
+    api.dataQuery<{ ok: boolean; data: ProductKpis }>(
+      new URLSearchParams({ resource: 'product_kpis', product_code: productCode })
+    ),
   accounts: (productCode: string, countryCode: string, days: number) =>
     api.dataQuery<{ ok: boolean; data: AccountSummary[] }>(
       new URLSearchParams({ resource: 'accounts', product_code: productCode, country_code: countryCode, days: String(days) })

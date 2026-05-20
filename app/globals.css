@@ -966,6 +966,60 @@
             gap: 10px;
         }
 
+        .product-kpi-board {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .product-kpi-card {
+            display: grid;
+            gap: 8px;
+            min-height: 132px;
+            border: 1px solid var(--line);
+            padding: 18px;
+            background:
+                radial-gradient(circle at 18% 8%, rgba(255, 255, 255, 0.08), transparent 34%),
+                #11100e;
+        }
+
+        .product-kpi-card.today {
+            border-color: rgba(125, 211, 252, 0.4);
+        }
+
+        .product-kpi-card.views {
+            border-color: rgba(129, 140, 248, 0.5);
+        }
+
+        .product-kpi-card.er {
+            border-color: rgba(74, 222, 128, 0.42);
+        }
+
+        .product-kpi-card span {
+            color: var(--muted);
+            font-size: 13px;
+            font-weight: 900;
+        }
+
+        .product-kpi-card strong {
+            color: var(--text);
+            font-size: clamp(38px, 5.4vw, 76px);
+            font-weight: 950;
+            line-height: 0.95;
+        }
+
+        .product-kpi-card.today strong {
+            color: #7dd3fc;
+        }
+
+        .product-kpi-card.views strong {
+            color: #a5b4fc;
+        }
+
+        .product-kpi-card.er strong {
+            color: #86efac;
+        }
+
         .country-list-item {
             display: grid;
             grid-template-columns: auto minmax(0, 1fr);
@@ -3611,6 +3665,10 @@
             .api-param-list div {
                 grid-template-columns: minmax(0, 1fr);
                 gap: 4px;
+            }
+
+            .product-kpi-board {
+                grid-template-columns: minmax(0, 1fr);
             }
 
             .roaster-toolbar {
