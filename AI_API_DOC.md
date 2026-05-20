@@ -1,20 +1,16 @@
-# Deca Growth AI Read API
+# Deca Growth Data API
 
-This document describes the read-only API for external AI tools to access Deca Growth material data.
+This document explains how external tools, AI agents, scripts, and reporting jobs can read Deca Growth dashboard data.
 
-The production backend is now served by FastAPI. Interactive API docs are available at:
-
-```text
-https://deca-management.vercel.app/api/docs
-```
-
-The OpenAPI schema is available at:
+The preferred API is:
 
 ```text
-https://deca-management.vercel.app/api/openapi.json
+GET /api/data/query
 ```
 
-## Base URL
+The older endpoint `/api/ai/materials` remains available for backward compatibility, but new integrations should use `/api/data/query`.
+
+## Base URLs
 
 Production:
 
@@ -22,156 +18,453 @@ Production:
 https://deca-management.vercel.app
 ```
 
-Local:
+Local development:
 
 ```text
 http://127.0.0.1:8765
 ```
 
+Interactive FastAPI docs:
+
+```text
+https://deca-management.vercel.app/api/docs
+```
+
+OpenAPI schema:
+
+```text
+https://deca-management.vercel.app/api/openapi.json
+```
+
 ## Authentication
 
-Recommended for external AI access:
+External tools must send a dashboard-generated API key as a Bearer token:
 
 ```http
-Authorization: Bearer YOUR_AI_API_KEY
+Authorization: Bearer YOUR_DECA_API_KEY
 ```
 
-Generate the API key inside the Deca Growth admin panel:
+Generate a key in the Deca Growth dashboard:
 
-1. Log in to the Deca Growth dashboard.
+1. Log in to the dashboard.
 2. Click `打开数据库`.
-3. In `外部 AI API Keys`, enter a key name.
-4. Click `生成 Key`.
-5. Copy the generated key immediately. It is shown only once.
+3. Open `API Key`.
+4. Enter a key name, for example `Classifier`.
+5. Click `生成 Key`.
+6. Copy the generated `deca_...` key immediately. It is shown only once.
 
-The generated key is stored in the database as a hash and can be revoked from the same panel.
+Keys are stored as hashes and can be revoked from the same panel.
 
-`AI_API_KEY` in Vercel Environment Variables is still supported as a fallback, but it is no longer required for normal use.
-
-## Endpoint
-
-### GET `/api/ai/materials`
-
-Returns country-level ReelFarm material data from the database.
-
-This endpoint is read-only. It does not sync ReelFarm and does not modify the database.
-
-### Query Parameters
-
-| Parameter | Required | Example | Description |
-| --- | --- | --- | --- |
-| `product_code` | No | `DL` | Filter by product ReelFarm code. |
-| `country_code` | No | `US` | Filter by country ReelFarm code. |
-| `product_id` | No | `abc123` | Filter by internal product id. |
-| `country_id` | No | `xyz789` | Filter by internal country id. |
-| `synced_only` | No | `true` | Only return countries with synced ReelFarm cards. |
-| `include_raw` | No | `true` | Include the raw stored ReelFarm result under `raw_reelfarm_result`. |
-
-## Examples
-
-### Get All Synced Materials
+If your terminal cannot connect directly to Vercel from your local network, use your local proxy:
 
 ```bash
-curl "https://deca-management.vercel.app/api/ai/materials?synced_only=true" \
-  -H "Authorization: Bearer YOUR_AI_API_KEY"
+curl -x http://127.0.0.1:7897 \
+  "https://deca-management.vercel.app/api/data/query?resource=summary" \
+  -H "Authorization: Bearer YOUR_DECA_API_KEY"
 ```
 
-### Get One Product/Country
+## General Response Format
 
-```bash
-curl "https://deca-management.vercel.app/api/ai/materials?product_code=DL&country_code=US" \
-  -H "Authorization: Bearer YOUR_AI_API_KEY"
-```
-
-## Response Shape
+Most successful `/api/data/query` responses use:
 
 ```json
 {
   "ok": true,
-  "generated_at": "2026-05-19T03:20:00.000000+00:00",
-  "database_backend": "postgres",
+  "resource": "posts",
   "filters": {
-    "product_code": "DL",
-    "country_code": "US",
-    "product_id": null,
-    "country_id": null,
-    "synced_only": true,
-    "include_raw": false
+    "product_code": "DB",
+    "country_code": "GE"
   },
-  "totals": {
-    "products": 1,
-    "countries": 1,
-    "creators": 2,
-    "materials": 18,
-    "posts": 18
+  "pagination": {
+    "limit": 50,
+    "offset": 0,
+    "has_more": true
   },
-  "countries": [
+  "data": [],
+  "generated_at": "2026-05-20T08:30:00.000000+00:00"
+}
+```
+
+Error responses use:
+
+```json
+{
+  "ok": false,
+  "error": "Unauthorized"
+}
+```
+
+Common errors:
+
+| HTTP Status | Meaning |
+| --- | --- |
+| `401` | Missing, revoked, or invalid API key. |
+| `400` | Unsupported resource, metric, or invalid query parameter. |
+| `500` | Server/database error. Check Vercel runtime logs. |
+
+## Important Rules
+
+- `/api/data/query` is read-only.
+- `/api/data/query` reads from the Deca Growth database only.
+- It does not call ReelFarm.
+- Sync endpoints are the only endpoints that fetch from ReelFarm.
+- All timestamps stored from ReelFarm are UTC.
+- Product/country codes are your internal ReelFarm codes, for example `DB`, `DL`, `DM`, `US`, `GE`, `FR`.
+
+## Supported Query Parameters
+
+| Parameter | Example | Applies To | Description |
+| --- | --- | --- | --- |
+| `resource` | `posts` | all | Required resource name. |
+| `product_code` | `DB` | most | Filter by product code. |
+| `country_code` | `GE` | most | Filter by country/market code. |
+| `market_code` | `GE` | most | Alias for `country_code`. |
+| `account_id` | `abc123` or `username` | accounts/posts/materials | Filter by internal account id, ReelFarm account id, or username. |
+| `automation_id` | `rf-auto-id` | posts/materials | Filter by automation id. |
+| `material_id` | `video-id` | posts/materials | Filter by material/video id. |
+| `post_id` | `post-id` | posts/top_posts | Filter by post id. |
+| `days` | `7` | accounts/account_posts/daily_metrics/posts/materials/top_posts | Relative UTC date window. |
+| `date_from` | `2026-05-01` | posts/materials/top_posts | Inclusive lower date bound. |
+| `date_to` | `2026-05-20` | posts/materials/top_posts | Inclusive upper date bound. |
+| `metric` | `view_count` | top_posts | Sort metric. |
+| `limit` | `50` | paginated resources | Default `50`, max `500`; `top_posts` max `100`. |
+| `offset` | `0` | paginated resources | Pagination offset. |
+
+## Resources
+
+### 1. `resource=summary`
+
+High-level totals across relational tables.
+
+Example:
+
+```bash
+curl "https://deca-management.vercel.app/api/data/query?resource=summary" \
+  -H "Authorization: Bearer YOUR_DECA_API_KEY"
+```
+
+Returns:
+
+```json
+{
+  "ok": true,
+  "resource": "summary",
+  "data": {
+    "products": 3,
+    "countries": 7,
+    "accounts": 234,
+    "automations": 234,
+    "materials": 8026,
+    "posts": 8026,
+    "total_views": 123456,
+    "total_likes": 1234,
+    "total_comments": 123,
+    "total_shares": 12,
+    "total_bookmarks": 45,
+    "last_synced_at": "2026-05-20T08:00:00+00:00"
+  }
+}
+```
+
+Use this for health checks, reporting headers, and verifying that a key can access data.
+
+### 2. `resource=countries`
+
+Product/country rollups.
+
+Example:
+
+```bash
+curl "https://deca-management.vercel.app/api/data/query?resource=countries&product_code=DB" \
+  -H "Authorization: Bearer YOUR_DECA_API_KEY"
+```
+
+Returns rows with:
+
+- `product_id`
+- `product_code`
+- `product_name`
+- `country_id` / `market_id`
+- `country_code` / `market_code`
+- `country_name`
+- `creator_count`
+- `automation_count`
+- `material_count`
+- `post_count`
+- total metrics
+- `last_synced_at`
+
+### 3. `resource=accounts`
+
+Fast account summary rows for one product/country. This endpoint does not include posts or slideshow images.
+
+Example:
+
+```bash
+curl "https://deca-management.vercel.app/api/data/query?resource=accounts&product_code=DB&country_code=GE&days=7" \
+  -H "Authorization: Bearer YOUR_DECA_API_KEY"
+```
+
+Returns rows with:
+
+- `account_id`
+- `reelfarm_account_id`
+- `username`
+- `display_name`
+- `avatar_url`
+- `status`
+- `automation_count`
+- `material_count`
+- `post_count`
+- `total_views`
+- `total_likes`
+- `total_comments`
+- `total_shares`
+- `total_bookmarks`
+- `latest_post_at`
+- `last_synced_at`
+
+Use this to render creator/account rows quickly.
+
+### 4. `resource=account_posts`
+
+Paginated post/material detail for one account.
+
+Example:
+
+```bash
+curl "https://deca-management.vercel.app/api/data/query?resource=account_posts&product_code=DB&country_code=GE&account_id=user123&days=30&limit=4&offset=0" \
+  -H "Authorization: Bearer YOUR_DECA_API_KEY"
+```
+
+Returns detailed rows with:
+
+- `product`
+- `country`
+- `account`
+- `automation`
+- `material`
+- `post`
+- `metrics`
+- `pagination`
+
+Use this when a user expands one account and needs only that account's first page of posts.
+
+### 5. `resource=posts`
+
+Detailed post rows, filterable by product, country, account, automation, and date.
+
+Example:
+
+```bash
+curl "https://deca-management.vercel.app/api/data/query?resource=posts&product_code=DB&country_code=GE&date_from=2026-04-30&limit=50" \
+  -H "Authorization: Bearer YOUR_DECA_API_KEY"
+```
+
+Each row contains:
+
+```json
+{
+  "product": { "id": "product-id", "code": "DB", "name": "DeenBack" },
+  "country": { "id": "market-id", "code": "GE", "name": "Germany" },
+  "account": {
+    "id": "account-id",
+    "reelfarm_account_id": "rf-account-id",
+    "username": "creator_username",
+    "display_name": "Creator Name",
+    "avatar_url": "https://..."
+  },
+  "automation": {
+    "id": "automation-id",
+    "reelfarm_automation_id": "rf-automation-id",
+    "name": "GE-DB-Fatih-Damage-44",
+    "status": "active",
+    "schedule": []
+  },
+  "material": {
+    "id": "material-id",
+    "reelfarm_video_id": "video-id",
+    "video_type": "slideshow",
+    "hook": "Hook text",
+    "prompt": "Full prompt text",
+    "slideshow_images": [{ "image_url": "https://..." }],
+    "slide_count": 6,
+    "status": "Finished",
+    "created_at": "2026-05-17T19:52:01+00:00",
+    "finished_at": "2026-05-17T19:52:20+00:00"
+  },
+  "post": {
+    "id": "post-id",
+    "reelfarm_post_id": "rf-post-id",
+    "status": "published",
+    "title": "Post title",
+    "published_at": "2026-05-17T19:52:50.25543+00:00",
+    "published_at_readable": "2026/05/17 19:52 UTC"
+  },
+  "metrics": {
+    "view_count": 787,
+    "like_count": 99,
+    "comment_count": 0,
+    "share_count": 0,
+    "bookmark_count": 19
+  }
+}
+```
+
+Use this for AI classification because it includes the account, automation, hook, prompt, images, published time, and metrics.
+
+### 6. `resource=materials`
+
+Detailed material/video rows with related account, automation, product/country, and post if available.
+
+Example:
+
+```bash
+curl "https://deca-management.vercel.app/api/data/query?resource=materials&product_code=DB&country_code=GE&limit=50" \
+  -H "Authorization: Bearer YOUR_DECA_API_KEY"
+```
+
+Use this when the AI should classify generated assets even if you care more about video/material content than post metrics.
+
+### 7. `resource=daily_metrics`
+
+Daily trend data from `post_daily_snapshots`.
+
+Example:
+
+```bash
+curl "https://deca-management.vercel.app/api/data/query?resource=daily_metrics&product_code=DB&country_code=GE&days=7" \
+  -H "Authorization: Bearer YOUR_DECA_API_KEY"
+```
+
+Returns rows with:
+
+- `snapshot_date`
+- `post_count`
+- `views`
+- `likes`
+- `comments`
+- `shares`
+- `bookmarks`
+- `deltas`
+
+Use this for daily performance deltas and trend reports.
+
+### 8. `resource=top_posts`
+
+Top posts sorted by one metric.
+
+Supported metrics:
+
+- `view_count`
+- `like_count`
+- `comment_count`
+- `share_count`
+- `bookmark_count`
+
+Example:
+
+```bash
+curl "https://deca-management.vercel.app/api/data/query?resource=top_posts&product_code=DB&country_code=GE&metric=view_count&limit=20" \
+  -H "Authorization: Bearer YOUR_DECA_API_KEY"
+```
+
+Use this for best-performing material analysis.
+
+### 9. `resource=country_cards`
+
+Dashboard-compatible full country cards payload.
+
+Example:
+
+```bash
+curl "https://deca-management.vercel.app/api/data/query?resource=country_cards&product_code=DB&country_code=GE" \
+  -H "Authorization: Bearer YOUR_DECA_API_KEY"
+```
+
+Returns:
+
+```json
+{
+  "prefix": "GE-DB",
+  "count": 56,
+  "cards": [
     {
-      "product": {
-        "id": "product-id",
-        "name": "Delust",
-        "folder": "甲方",
-        "reelFarmCode": "DL"
-      },
-      "country": {
-        "id": "country-id",
-        "name": "United States",
-        "reelFarmCode": "US"
-      },
-      "automation_prefix": "US-DL",
-      "synced_at": "2026-05-19T03:20:00.000000+00:00",
-      "creator_count": 2,
-      "material_count": 18,
-      "post_count": 18,
-      "creators": [
-        {
-          "account": {
-            "tiktok_account_id": "123",
-            "account_username": "example_creator",
-            "account_image": "https://..."
-          },
-          "automation": {
-            "automation_id": "automation-id",
-            "title": "US-DL-Discipline-Solution-1",
-            "status": "active"
-          },
-          "material_count": 9,
-          "post_count": 9,
-          "materials": [
-            {
-              "video": {
-                "video_id": "video-id",
-                "video_type": "slideshow",
-                "slideshow_images": [],
-                "slide_count": 6,
-                "hook": "First slide text",
-                "prompt": "Full generation prompt..."
-              },
-              "post": {
-                "post_id": "post-id",
-                "video_id": "video-id",
-                "published_at": "2026-05-17T19:52:50.25543+00:00",
-                "published_at_meta": "2026-05-17T19:52:50.25543+00:00",
-                "published_at_readable": "2026/05/17 19:52 UTC",
-                "view_count": 787,
-                "like_count": 99,
-                "comment_count": 0,
-                "share_count": 0,
-                "bookmark_count": 19
-              }
-            }
-          ]
-        }
-      ]
+      "automation": {},
+      "account": {},
+      "videos": [],
+      "posts": [],
+      "post_statistics": {},
+      "errors": {}
     }
   ]
 }
 ```
 
-## Notes For AI Classification
+This resource is mainly for backward compatibility with the dashboard cards UI. It may be heavy for large countries. Prefer `accounts` + `account_posts` for progressive loading.
 
-- Use `countries[].creators[].materials[]` as the main classification input.
-- `video.prompt`, `video.hook`, `video.slideshow_images`, and `post` metrics are the most useful fields.
-- `published_at_meta` is the original machine-readable timestamp.
-- `published_at_readable` is the display-friendly UTC timestamp.
-- The current data is country-level. Topic / Format classification can be generated later by AI from these materials.
+## Backward-Compatible Endpoint
+
+### GET `/api/ai/materials`
+
+This older endpoint returns a country-level nested payload.
+
+Example:
+
+```bash
+curl "https://deca-management.vercel.app/api/ai/materials?product_code=DB&country_code=GE&synced_only=true" \
+  -H "Authorization: Bearer YOUR_DECA_API_KEY"
+```
+
+Use `/api/data/query?resource=posts` for new AI classification workflows.
+
+## Recommended AI Classification Workflow
+
+For classifying concept/format without writing back to the database:
+
+1. Choose a product and country, for example `DB + GE`.
+2. Query posts since the desired date:
+
+```bash
+curl "https://deca-management.vercel.app/api/data/query?resource=posts&product_code=DB&country_code=GE&date_from=2026-04-30&limit=500" \
+  -H "Authorization: Bearer YOUR_DECA_API_KEY"
+```
+
+3. For each row, read:
+   - `product.code`, `product.name`
+   - `country.code`, `country.name`
+   - `account.username`
+   - `automation.name`
+   - `material.hook`
+   - `material.prompt`
+   - `material.slideshow_images`
+   - `post.published_at`
+   - `metrics`
+
+4. Ask the AI to classify each material into:
+   - `concept`
+   - `format`
+   - optional confidence/explanation
+
+5. Keep the returned classification outside the database until you are ready to implement a write-back endpoint.
+
+## Quick Test Commands
+
+Health check, no key required:
+
+```bash
+curl "https://deca-management.vercel.app/api/health"
+```
+
+Unauthorized check:
+
+```bash
+curl "https://deca-management.vercel.app/api/data/query?resource=summary"
+```
+
+Authorized summary:
+
+```bash
+curl "https://deca-management.vercel.app/api/data/query?resource=summary" \
+  -H "Authorization: Bearer YOUR_DECA_API_KEY"
+```

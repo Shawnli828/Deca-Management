@@ -23,6 +23,7 @@ export function DatabaseModal({
   onCopy: (value: string) => void;
 }) {
   const [name, setName] = useState('');
+  const [tab, setTab] = useState<'keys' | 'docs'>('keys');
   if (!open) return null;
 
   async function submit(event: FormEvent) {
@@ -44,7 +45,11 @@ export function DatabaseModal({
           <button className="icon-btn" type="button" onClick={onClose} title="关闭">×</button>
         </header>
         <div className="database-body">
-          <section className="api-key-panel">
+          <div className="api-modal-tabs">
+            <button className={tab === 'keys' ? 'active' : ''} type="button" onClick={() => setTab('keys')}>API Keys</button>
+            <button className={tab === 'docs' ? 'active' : ''} type="button" onClick={() => setTab('docs')}>API 使用说明</button>
+          </div>
+          {tab === 'keys' ? <section className="api-key-panel">
             <div className="api-key-head">
               <div>
                 <h3>API Keys</h3>
@@ -75,7 +80,74 @@ export function DatabaseModal({
                 </div>
               )) : <div className="item-meta">还没有 API Key。</div>}
             </div>
-          </section>
+          </section> : (
+            <section className="api-doc-panel">
+              <div className="api-doc-block">
+                <h3>Base URL</h3>
+                <code>https://deca-management.vercel.app</code>
+              </div>
+              <div className="api-doc-block">
+                <h3>Authentication</h3>
+                <p>所有外部工具请求都需要在 header 加 Bearer Token。</p>
+                <pre>{`Authorization: Bearer YOUR_DECA_API_KEY`}</pre>
+              </div>
+              <div className="api-doc-block">
+                <h3>推荐入口</h3>
+                <pre>{`GET /api/data/query?resource=summary`}</pre>
+                <p>这个接口只读本地数据库，不会调用 ReelFarm。</p>
+              </div>
+              <div className="api-doc-grid">
+                <div>
+                  <h4>summary</h4>
+                  <p>总览 products / accounts / posts / metrics。</p>
+                </div>
+                <div>
+                  <h4>countries</h4>
+                  <p>产品和国家/地区的汇总数据。</p>
+                </div>
+                <div>
+                  <h4>accounts</h4>
+                  <p>某产品国家下的账号摘要，不含图片明细。</p>
+                </div>
+                <div>
+                  <h4>account_posts</h4>
+                  <p>单个账号的分页素材和 post 明细。</p>
+                </div>
+                <div>
+                  <h4>posts</h4>
+                  <p>最适合 AI 分类的详细 post rows。</p>
+                </div>
+                <div>
+                  <h4>materials</h4>
+                  <p>按素材/video 读取 hook、prompt、slides。</p>
+                </div>
+                <div>
+                  <h4>daily_metrics</h4>
+                  <p>读取每日快照和趋势变化。</p>
+                </div>
+                <div>
+                  <h4>top_posts</h4>
+                  <p>按 views / likes 等指标找高表现素材。</p>
+                </div>
+              </div>
+              <div className="api-doc-block">
+                <h3>常用测试</h3>
+                <pre>{`curl "https://deca-management.vercel.app/api/data/query?resource=summary" \\
+  -H "Authorization: Bearer YOUR_DECA_API_KEY"`}</pre>
+                <button className="btn ghost" type="button" onClick={() => onCopy(`curl "https://deca-management.vercel.app/api/data/query?resource=summary" \\\n  -H "Authorization: Bearer YOUR_DECA_API_KEY"`)}>复制</button>
+              </div>
+              <div className="api-doc-block">
+                <h3>读取 DB + GE posts</h3>
+                <pre>{`curl "https://deca-management.vercel.app/api/data/query?resource=posts&product_code=DB&country_code=GE&limit=50" \\
+  -H "Authorization: Bearer YOUR_DECA_API_KEY"`}</pre>
+                <button className="btn ghost" type="button" onClick={() => onCopy(`curl "https://deca-management.vercel.app/api/data/query?resource=posts&product_code=DB&country_code=GE&limit=50" \\\n  -H "Authorization: Bearer YOUR_DECA_API_KEY"`)}>复制</button>
+              </div>
+              <div className="api-doc-block">
+                <h3>完整文档</h3>
+                <p>本地文件：<code>AI_API_DOC.md</code>。线上 OpenAPI：<code>/api/docs</code> 和 <code>/api/openapi.json</code>。</p>
+              </div>
+            </section>
+          )}
         </div>
       </section>
     </div>

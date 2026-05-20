@@ -2020,6 +2020,32 @@
             gap: 8px;
         }
 
+        .api-modal-tabs {
+            display: flex;
+            gap: 8px;
+            border: 1px solid var(--line);
+            padding: 6px;
+            background: #0d0c0b;
+        }
+
+        .api-modal-tabs button {
+            min-height: 34px;
+            border: 1px solid transparent;
+            padding: 0 12px;
+            background: transparent;
+            color: var(--muted);
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 850;
+        }
+
+        .api-modal-tabs button.active,
+        .api-modal-tabs button:hover {
+            border-color: #474b91;
+            background: #151735;
+            color: var(--text);
+        }
+
         .api-key-row {
             display: flex;
             align-items: center;
@@ -2058,6 +2084,63 @@
             color: var(--accent-strong);
             font-size: 12px;
             white-space: nowrap;
+        }
+
+        .api-doc-panel {
+            display: grid;
+            gap: 12px;
+            border: 1px solid var(--line);
+            padding: 14px;
+            background: #0d0c0b;
+        }
+
+        .api-doc-block {
+            display: grid;
+            gap: 8px;
+            border: 1px solid var(--line);
+            padding: 12px;
+            background: #151310;
+        }
+
+        .api-doc-block h3,
+        .api-doc-grid h4 {
+            margin: 0;
+            color: var(--text);
+            font-size: 14px;
+            line-height: 1.3;
+        }
+
+        .api-doc-block p,
+        .api-doc-grid p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .api-doc-block code,
+        .api-doc-block pre {
+            overflow: auto;
+            margin: 0;
+            border: 1px solid #474b91;
+            padding: 10px;
+            background: #080915;
+            color: var(--accent-strong);
+            font-size: 12px;
+            line-height: 1.55;
+            white-space: pre;
+        }
+
+        .api-doc-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .api-doc-grid > div {
+            border: 1px solid var(--line);
+            padding: 10px;
+            background: #151310;
         }
 
         .product-settings-panel,
