@@ -15,6 +15,10 @@
     {
       "path": "/api/reelfarm/sync-all",
       "schedule": "0 16 * * *"
+    },
+    {
+      "path": "/api/publish-check/run",
+      "schedule": "0 15 * * *"
     }
   ],
   "routes": [

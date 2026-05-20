@@ -32,6 +32,7 @@ DATABASE_URL = (
 STATE_KEY = "product_distribution"
 REELFARM_API_KEY = "reel_farm_api_key"
 ROASTER_STATE_KEY = "roaster_state"
+PUBLISH_CHECK_STATE_KEY = "publish_check_state"
 EXTERNAL_API_KEYS_KEY = "external_api_keys"
 REELFARM_BASE_URL = "https://reel.farm/api/v1"
 SEED_DATA_PATH = BASE_DIR / "seed_data.json"
@@ -431,6 +432,50 @@ def delete_app_value(key):
 def save_data(data, conn=None):
     payload = json.dumps(strip_reelfarm_state(data), ensure_ascii=False, separators=(",", ":"))
     save_app_value(STATE_KEY, payload, conn)
+
+
+def default_publish_check_state():
+    return {"assignments": [], "last_result": None}
+
+
+def load_publish_check_state():
+    raw = load_app_value(PUBLISH_CHECK_STATE_KEY)
+    if not raw:
+        return default_publish_check_state()
+    try:
+        state = json.loads(raw)
+    except json.JSONDecodeError:
+        return default_publish_check_state()
+    if not isinstance(state, dict):
+        return default_publish_check_state()
+    assignments = state.get("assignments")
+    if not isinstance(assignments, list):
+        assignments = []
+    return {
+        "assignments": assignments,
+        "last_result": state.get("last_result") if isinstance(state.get("last_result"), dict) else None,
+    }
+
+
+def save_publish_check_state(state):
+    clean = default_publish_check_state()
+    assignments = state.get("assignments") if isinstance(state, dict) else []
+    if isinstance(assignments, list):
+        clean["assignments"] = [
+            {
+                "id": str(item.get("id") or generate_id()),
+                "person_id": str(item.get("person_id") or ""),
+                "person_name": str(item.get("person_name") or ""),
+                "product_id": str(item.get("product_id") or ""),
+                "country_id": str(item.get("country_id") or ""),
+            }
+            for item in assignments
+            if isinstance(item, dict) and item.get("product_id") and item.get("country_id")
+        ]
+    if isinstance(state, dict) and isinstance(state.get("last_result"), dict):
+        clean["last_result"] = state["last_result"]
+    save_app_value(PUBLISH_CHECK_STATE_KEY, clean)
+    return clean
 
 
 def strip_reelfarm_state(value):
@@ -1982,6 +2027,159 @@ def query_accounts(query):
             tuple(params),
         ).fetchall()
     return [row_dict(row) for row in rows]
+
+
+def beijing_day_window(now=None):
+    beijing = timezone(timedelta(hours=8))
+    current = now or datetime.now(timezone.utc)
+    local = current.astimezone(beijing)
+    start_local = datetime(local.year, local.month, local.day, tzinfo=beijing)
+    end_local = start_local + timedelta(days=1)
+    return {
+        "beijing_date": start_local.date().isoformat(),
+        "utc_start": start_local.astimezone(timezone.utc).isoformat(),
+        "utc_end": end_local.astimezone(timezone.utc).isoformat(),
+    }
+
+
+def product_country_lookup():
+    products = load_data()
+    lookup = {}
+    for product in products if isinstance(products, list) else []:
+        if not isinstance(product, dict):
+            continue
+        product_id = str(product.get("id") or "")
+        product_code = str(product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
+        for country in product.get("countries") or []:
+            if not isinstance(country, dict):
+                continue
+            country_id = str(country.get("id") or "")
+            country_code = str(country.get("reelFarmCode") or COUNTRY_CODES.get(country.get("name"), "") or code_from_name(country.get("name"))).upper()
+            lookup[(product_id, country_id)] = {
+                "product": {
+                    "id": product_id,
+                    "name": product.get("name") or "",
+                    "code": product_code,
+                    "folder": product.get("folder") or product.get("owner_type") or "",
+                },
+                "country": {
+                    "id": country_id,
+                    "name": country.get("name") or "",
+                    "code": country_code,
+                },
+            }
+    return lookup
+
+
+def publish_check_accounts(product_code, country_code, utc_start, utc_end):
+    placeholder = db_placeholder()
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        rows = conn.execute(
+            f"""
+            SELECT
+                acc.id AS account_id,
+                acc.reelfarm_account_id,
+                acc.username,
+                acc.display_name,
+                acc.avatar_url,
+                acc.status AS account_status,
+                a.id AS automation_id,
+                a.reelfarm_automation_id,
+                a.name AS automation_name,
+                a.status AS automation_status,
+                COUNT(DISTINCT CASE
+                    WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder}
+                    THEN post.id
+                END) AS published_count,
+                MAX(CASE
+                    WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder}
+                    THEN post.published_at
+                END) AS today_latest_post_at,
+                MAX(post.published_at) AS latest_post_at
+            FROM products p
+            JOIN product_markets pm ON pm.product_id = p.id
+            JOIN markets m ON m.id = pm.market_id
+            JOIN product_market_channels pmc ON pmc.product_market_id = pm.id
+            JOIN channels ch ON ch.id = pmc.channel_id
+            JOIN automations a ON a.product_market_channel_id = pmc.id
+            LEFT JOIN accounts acc ON acc.id = a.account_id
+            LEFT JOIN materials mat ON mat.automation_id = a.id
+            LEFT JOIN posts post ON post.material_id = mat.id
+            WHERE ch.code = {placeholder}
+              AND p.code = {placeholder}
+              AND m.code = {placeholder}
+              AND acc.id IS NOT NULL
+            GROUP BY
+                acc.id,
+                acc.reelfarm_account_id,
+                acc.username,
+                acc.display_name,
+                acc.avatar_url,
+                acc.status,
+                a.id,
+                a.reelfarm_automation_id,
+                a.name,
+                a.status
+            ORDER BY acc.username, a.name
+            """,
+            (utc_start, utc_end, utc_start, utc_end, "TIKTOK", product_code, country_code),
+        ).fetchall()
+    return [row_dict(row) for row in rows]
+
+
+def run_publish_check():
+    state = load_publish_check_state()
+    window = beijing_day_window()
+    lookup = product_country_lookup()
+    groups = []
+    totals = {
+        "assignments": 0,
+        "accounts": 0,
+        "published_accounts": 0,
+        "missing_accounts": 0,
+    }
+
+    for assignment in state.get("assignments", []):
+        product_id = str(assignment.get("product_id") or "")
+        country_id = str(assignment.get("country_id") or "")
+        context = lookup.get((product_id, country_id))
+        if not context:
+            continue
+
+        product_code = context["product"]["code"]
+        country_code = context["country"]["code"]
+        accounts = publish_check_accounts(product_code, country_code, window["utc_start"], window["utc_end"])
+        missing = [account for account in accounts if int(account.get("published_count") or 0) <= 0]
+        published_count = len(accounts) - len(missing)
+        group = {
+            "assignment_id": assignment.get("id"),
+            "person_id": assignment.get("person_id"),
+            "person_name": assignment.get("person_name") or "未命名负责人",
+            "product": context["product"],
+            "country": context["country"],
+            "account_count": len(accounts),
+            "published_account_count": published_count,
+            "missing_account_count": len(missing),
+            "missing_accounts": missing,
+        }
+        groups.append(group)
+        totals["assignments"] += 1
+        totals["accounts"] += len(accounts)
+        totals["published_accounts"] += published_count
+        totals["missing_accounts"] += len(missing)
+
+    result = {
+        "ok": True,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "beijing_date": window["beijing_date"],
+        "utc_window": {"start": window["utc_start"], "end": window["utc_end"]},
+        "totals": totals,
+        "groups": groups,
+    }
+    state["last_result"] = result
+    save_publish_check_state(state)
+    return result
 
 
 def detailed_select():

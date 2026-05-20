@@ -186,6 +186,59 @@ export type RoasterState = {
   assignments: Record<string, Record<string, string[]>>;
 };
 
+export type PublishCheckAssignment = {
+  id: string;
+  person_id: string;
+  person_name: string;
+  product_id: string;
+  country_id: string;
+};
+
+export type PublishCheckAccount = {
+  account_id?: string;
+  reelfarm_account_id?: string;
+  username?: string;
+  display_name?: string;
+  avatar_url?: string;
+  account_status?: string;
+  automation_id?: string;
+  reelfarm_automation_id?: string;
+  automation_name?: string;
+  automation_status?: string;
+  published_count?: number;
+  today_latest_post_at?: string;
+  latest_post_at?: string;
+};
+
+export type PublishCheckResult = {
+  ok: boolean;
+  generated_at?: string;
+  beijing_date?: string;
+  utc_window?: { start: string; end: string };
+  totals?: {
+    assignments: number;
+    accounts: number;
+    published_accounts: number;
+    missing_accounts: number;
+  };
+  groups?: Array<{
+    assignment_id?: string;
+    person_id?: string;
+    person_name?: string;
+    product?: { id?: string; name?: string; code?: string; folder?: string };
+    country?: { id?: string; name?: string; code?: string };
+    account_count: number;
+    published_account_count: number;
+    missing_account_count: number;
+    missing_accounts: PublishCheckAccount[];
+  }>;
+};
+
+export type PublishCheckState = {
+  assignments: PublishCheckAssignment[];
+  last_result?: PublishCheckResult | null;
+};
+
 export type ExternalApiKey = {
   id: string;
   name: string;

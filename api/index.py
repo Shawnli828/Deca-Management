@@ -22,6 +22,7 @@ from server import (
     external_api_key_authorized,
     init_relational_schema,
     load_data,
+    load_publish_check_state,
     load_roaster_state,
     make_auth_token,
     password_hash,
@@ -31,10 +32,12 @@ from server import (
     revoke_external_api_key,
     save_app_value,
     save_data,
+    save_publish_check_state,
     save_roaster_state,
     sync_all_reelfarm_records,
     sync_reelfarm_country,
     sync_reelfarm_prefix,
+    run_publish_check,
     stored_reelfarm_country,
     delete_app_value,
     enrich_data_with_relational_rollups,
@@ -227,6 +230,30 @@ def post_roaster(request: Request, payload: dict[str, Any] = Body(default_factor
         raise HTTPException(status_code=400, detail="Expected { state: {...} }")
 
     return {"ok": True, "state": save_roaster_state(state)}
+
+
+@app.get("/api/publish-check")
+def get_publish_check(request: Request):
+    require_dashboard_auth(request)
+    return {"ok": True, "state": load_publish_check_state()}
+
+
+@app.post("/api/publish-check")
+def post_publish_check(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
+    require_dashboard_auth(request)
+    state = payload.get("state")
+    if not isinstance(state, dict):
+        raise HTTPException(status_code=400, detail="Expected { state: {...} }")
+
+    return {"ok": True, "state": save_publish_check_state(state)}
+
+
+@app.api_route("/api/publish-check/run", methods=["GET", "POST"])
+def post_publish_check_run(request: Request):
+    if not cron_authorized(request.headers):
+        require_dashboard_auth(request)
+
+    return run_publish_check()
 
 
 @app.get("/api/reelfarm/config")

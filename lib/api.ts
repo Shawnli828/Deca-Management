@@ -3,6 +3,8 @@ import type {
   DatabaseSnapshot,
   DetailedPostRow,
   ExternalApiKey,
+  PublishCheckResult,
+  PublishCheckState,
   Product,
   ReelFarmResult,
   RoasterState
@@ -74,6 +76,14 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ state })
     }, 'Failed to save roaster'),
+  publishCheck: () => apiFetch<{ ok: boolean; state: PublishCheckState }>('/api/publish-check', undefined, 'Failed to load publish check'),
+  savePublishCheck: (state: PublishCheckState) =>
+    apiFetch<{ ok: boolean; state: PublishCheckState }>('/api/publish-check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ state })
+    }, 'Failed to save publish check'),
+  runPublishCheck: () => apiFetch<PublishCheckResult>('/api/publish-check/run', { method: 'POST' }, 'Failed to run publish check'),
   database: () => apiFetch<DatabaseSnapshot>('/api/database', undefined, 'Failed to load database'),
   apiKeys: () => apiFetch<{ ok: boolean; keys: ExternalApiKey[] }>('/api/api-keys'),
   createApiKey: (name: string) =>

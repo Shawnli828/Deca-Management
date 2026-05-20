@@ -8,10 +8,11 @@ import { DatabaseModal } from '@/components/DatabaseModal';
 import { MetricsBar } from '@/components/MetricsBar';
 import { ProductList } from '@/components/ProductList';
 import { ProductSettingsModal } from '@/components/ProductSettingsModal';
+import { PublishCheckBoard } from '@/components/PublishCheckBoard';
 import { RoasterBoard } from '@/components/RoasterBoard';
 import { SideMenu } from '@/components/SideMenu';
 import { accountSummaryToCard, api, mergePostRowsIntoCard } from '@/lib/api';
-import type { Country, DatabaseSnapshot, ExternalApiKey, Product, ReelFarmResult, RoasterState } from '@/lib/types';
+import type { Country, DatabaseSnapshot, ExternalApiKey, Product, PublishCheckState, ReelFarmResult, RoasterState } from '@/lib/types';
 import { buildCountryAutomationPrefix, cardStateKey, codeFromName, countryCodes, getCountryReelFarmCode, getProductReelFarmCode } from '@/lib/utils';
 
 const defaultRoaster: RoasterState = {
@@ -30,7 +31,7 @@ const defaultRoaster: RoasterState = {
 export default function DashboardPage() {
   const [authenticated, setAuthenticated] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
-  const [tool, setTool] = useState<'slideshow' | 'roaster'>('slideshow');
+  const [tool, setTool] = useState<'slideshow' | 'roaster' | 'publishCheck'>('slideshow');
   const [page, setPage] = useState<'products' | 'product' | 'country'>('products');
   const [selectedProductId, setSelectedProductId] = useState('');
   const [selectedCountryId, setSelectedCountryId] = useState('');
@@ -44,6 +45,8 @@ export default function DashboardPage() {
   const [slideIndexes, setSlideIndexes] = useState<Record<string, number>>({});
   const [syncPrefix, setSyncPrefix] = useState('');
   const [roaster, setRoaster] = useState<RoasterState>(defaultRoaster);
+  const [publishCheck, setPublishCheck] = useState<PublishCheckState>({ assignments: [], last_result: null });
+  const [publishCheckRunning, setPublishCheckRunning] = useState(false);
   const [databaseOpen, setDatabaseOpen] = useState(false);
   const [editingProductId, setEditingProductId] = useState('');
   const [snapshot, setSnapshot] = useState<DatabaseSnapshot | null>(null);
@@ -72,6 +75,12 @@ export default function DashboardPage() {
       setRoaster(await api.roaster());
     } catch {
       setRoaster(defaultRoaster);
+    }
+    try {
+      const publishPayload = await api.publishCheck();
+      setPublishCheck(publishPayload.state || { assignments: [], last_result: null });
+    } catch {
+      setPublishCheck({ assignments: [], last_result: null });
     }
   }
 
@@ -377,6 +386,34 @@ export default function DashboardPage() {
     }
   }
 
+  async function savePublishCheck(next: PublishCheckState) {
+    setPublishCheck(next);
+    try {
+      const payload = await api.savePublishCheck(next);
+      setPublishCheck(payload.state);
+      setStatus('发布检查配置已保存');
+      setStatusError(false);
+    } catch {
+      setStatus('发布检查配置保存失败');
+      setStatusError(true);
+    }
+  }
+
+  async function runPublishCheckNow() {
+    setPublishCheckRunning(true);
+    try {
+      const result = await api.runPublishCheck();
+      setPublishCheck(prev => ({ ...prev, last_result: result }));
+      setStatus(`发布检查完成：${result.totals?.missing_accounts || 0} 个账号未发布`);
+      setStatusError(false);
+    } catch (error: any) {
+      setStatus(error?.message || '发布检查失败');
+      setStatusError(true);
+    } finally {
+      setPublishCheckRunning(false);
+    }
+  }
+
   async function openDatabase() {
     setDatabaseOpen(true);
     setGeneratedKey('');
@@ -464,6 +501,23 @@ export default function DashboardPage() {
               <div className="top-actions"><span className="status-pill">团队排班</span></div>
             </header>
             <RoasterBoard products={products} state={roaster} onChange={saveRoaster} />
+          </section>
+          <section className={`tool-page ${tool === 'publishCheck' ? 'active' : ''}`}>
+            <header className="topbar">
+              <div>
+                <h1>发布检查</h1>
+                <p className="subtitle">按负责人检查产品国家下的 TikTok account 今日是否发布。</p>
+              </div>
+              <div className="top-actions"><span className="status-pill">北京时间 23:00 自动检查</span></div>
+            </header>
+            <PublishCheckBoard
+              products={products}
+              roaster={roaster}
+              state={publishCheck}
+              running={publishCheckRunning}
+              onSave={savePublishCheck}
+              onRun={runPublishCheckNow}
+            />
           </section>
         </main>
       </div>

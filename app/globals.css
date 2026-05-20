@@ -2934,6 +2934,181 @@
             vertical-align: middle !important;
         }
 
+        .publish-check-board {
+            display: grid;
+            gap: 16px;
+            min-height: calc(100vh - 112px);
+            padding: 24px;
+            border-top: 1px solid var(--line);
+            background: #050505;
+        }
+
+        .publish-check-hero,
+        .publish-check-panel,
+        .publish-check-window {
+            border: 1px solid var(--line);
+            background: #0d0c0b;
+        }
+
+        .publish-check-hero {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            padding: 18px;
+        }
+
+        .publish-check-hero h2,
+        .publish-check-panel h3 {
+            margin: 0;
+            color: var(--text);
+            line-height: 1.25;
+        }
+
+        .publish-check-hero p,
+        .publish-check-panel p {
+            margin: 7px 0 0;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .publish-check-window {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px 18px;
+            padding: 12px 14px;
+            color: var(--muted);
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .publish-check-panel {
+            display: grid;
+            gap: 14px;
+            padding: 16px;
+        }
+
+        .publish-check-panel-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .assignment-form {
+            display: grid;
+            grid-template-columns: minmax(150px, 1fr) minmax(170px, 1fr) minmax(170px, 1fr) auto;
+            gap: 10px;
+        }
+
+        .assignment-list,
+        .publish-result-grid,
+        .missing-account-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .assignment-row,
+        .missing-account-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            border: 1px solid var(--line);
+            padding: 11px 12px;
+            background: #151310;
+            color: var(--muted);
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .assignment-person {
+            min-width: 96px;
+            color: var(--text);
+            font-weight: 850;
+        }
+
+        .publish-check-summary {
+            display: grid;
+            justify-items: end;
+            gap: 2px;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
+        .publish-check-summary strong {
+            color: var(--text);
+            font-size: 30px;
+            line-height: 1;
+        }
+
+        .publish-result-card {
+            display: grid;
+            gap: 12px;
+            border: 1px solid var(--line);
+            padding: 14px;
+            background: #090908;
+        }
+
+        .publish-result-card.has-missing {
+            border-color: rgba(248, 113, 113, 0.42);
+        }
+
+        .publish-result-card.is-clear {
+            border-color: rgba(74, 222, 128, 0.28);
+        }
+
+        .publish-result-card-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+        }
+
+        .publish-result-card-head div {
+            display: grid;
+            gap: 4px;
+        }
+
+        .publish-result-card-head strong,
+        .missing-account-row strong {
+            color: var(--text);
+            font-weight: 850;
+        }
+
+        .publish-result-card-head span,
+        .missing-account-row span {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .publish-result-count {
+            border: 1px solid var(--line);
+            padding: 6px 9px;
+            background: #151310;
+            color: var(--text) !important;
+            white-space: nowrap;
+        }
+
+        .missing-account-row > div {
+            display: grid;
+            gap: 4px;
+            min-width: 0;
+        }
+
+        .empty-state {
+            border: 1px dashed rgba(181, 173, 162, 0.18);
+            padding: 14px;
+            color: var(--muted);
+            font-size: 13px;
+            font-weight: 700;
+            text-align: center;
+        }
+
         @media (max-width: 900px) {
             .roaster-toolbar {
                 align-items: stretch;
@@ -2942,5 +3117,17 @@
 
             .roaster-person-form {
                 min-width: 0;
+            }
+
+            .publish-check-hero,
+            .publish-check-panel-head,
+            .assignment-row,
+            .missing-account-row {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .assignment-form {
+                grid-template-columns: minmax(0, 1fr);
             }
         }
