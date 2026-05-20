@@ -34,9 +34,26 @@ export function PublishCheckBoard({
   const [productId, setProductId] = useState(products[0]?.id || '');
   const selectedProduct = products.find(product => product.id === productId) || products[0];
   const [countryId, setCountryId] = useState(selectedProduct?.countries?.[0]?.id || '');
+  const [assignmentSort, setAssignmentSort] = useState<'person' | 'product' | 'country'>('person');
   const result = state.last_result;
 
   const peopleById = useMemo(() => new Map(roaster.people.map(person => [person.id, person])), [roaster.people]);
+  const sortedAssignments = useMemo(() => {
+    return [...state.assignments].sort((left, right) => {
+      const leftProduct = products.find(product => product.id === left.product_id);
+      const rightProduct = products.find(product => product.id === right.product_id);
+      const leftCountry = leftProduct?.countries?.find(country => country.id === left.country_id);
+      const rightCountry = rightProduct?.countries?.find(country => country.id === right.country_id);
+      const values = {
+        person: [left.person_name, right.person_name],
+        product: [leftProduct?.name || '', rightProduct?.name || ''],
+        country: [leftCountry?.name || '', rightCountry?.name || '']
+      }[assignmentSort];
+      const primary = String(values[0] || '').localeCompare(String(values[1] || ''), 'zh-Hans');
+      if (primary !== 0) return primary;
+      return String(left.person_name || '').localeCompare(String(right.person_name || ''), 'zh-Hans');
+    });
+  }, [assignmentSort, products, state.assignments]);
 
   useEffect(() => {
     if (!personId && roaster.people[0]?.id) setPersonId(roaster.people[0].id);
@@ -112,18 +129,23 @@ export function PublishCheckBoard({
           </select>
           <button className="btn ghost" type="submit">添加范围</button>
         </form>
-        <div className="assignment-list">
-          {state.assignments.length ? state.assignments.map(item => {
+        <div className="assignment-table">
+          <div className="assignment-table-head">
+            <button className={assignmentSort === 'person' ? 'active' : ''} type="button" onClick={() => setAssignmentSort('person')}>负责人 ↕</button>
+            <button className={assignmentSort === 'product' ? 'active' : ''} type="button" onClick={() => setAssignmentSort('product')}>产品 ↕</button>
+            <button className={assignmentSort === 'country' ? 'active' : ''} type="button" onClick={() => setAssignmentSort('country')}>国家/地区 ↕</button>
+            <span>操作</span>
+          </div>
+          <div className="assignment-list">
+          {sortedAssignments.length ? sortedAssignments.map(item => {
             const product = products.find(entry => entry.id === item.product_id);
             const country = product?.countries?.find(entry => entry.id === item.country_id);
             return (
               <div className="assignment-row" key={item.id}>
                 <div className="assignment-cell">
-                  <span className="assignment-label">负责人</span>
                   <strong>{item.person_name || peopleById.get(item.person_id)?.name || '未命名'}</strong>
                 </div>
                 <div className="assignment-cell">
-                  <span className="assignment-label">产品</span>
                   <span className="assignment-product-value">
                     <span className="assignment-product-logo">
                       {product?.logo ? <img src={product.logo} alt="" /> : product?.name?.slice(0, 1) || '?'}
@@ -132,7 +154,6 @@ export function PublishCheckBoard({
                   </span>
                 </div>
                 <div className="assignment-cell">
-                  <span className="assignment-label">国家/地区</span>
                   <strong>{country ? countryFlag(country) : '🌐'} {country?.name || '未知地区'}</strong>
                 </div>
                 <div className="assignment-actions">
@@ -141,6 +162,7 @@ export function PublishCheckBoard({
               </div>
             );
           }) : <div className="empty-state">还没有配置负责范围。</div>}
+          </div>
         </div>
       </section>
 
