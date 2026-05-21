@@ -266,6 +266,12 @@ export default function DashboardPage() {
     }
   }, [authenticated, tool]);
 
+  useEffect(() => {
+    if (authenticated && selectedProduct) {
+      loadProductTags(selectedProduct).catch(() => {});
+    }
+  }, [authenticated, selectedProductId]);
+
   async function addCardTag(card: ReelFarmCard, tag: string) {
     const accountId = getCardAccountId(card);
     if (!accountId) return;
