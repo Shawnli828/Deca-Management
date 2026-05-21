@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import type { Country, Product, ProductKpis, ReelFarmCard, ReelFarmResult } from '@/lib/types';
 import { buildCountryAutomationPrefix, cardStateKey, getCountryReelFarmCode } from '@/lib/utils';
 import { ProductKpiBoard } from './ProductKpiBoard';
@@ -22,7 +23,9 @@ export function CountryWorkspace({
   onPage,
   onMoveSlide,
   onAddTag,
-  onRemoveTag
+  onRemoveTag,
+  productTags,
+  onCreateTag
 }: {
   product: Product;
   country: Country;
@@ -39,9 +42,12 @@ export function CountryWorkspace({
   onToggleCard: (key: string) => void;
   onPage: (key: string, direction: number) => void;
   onMoveSlide: (videoId: string, direction: number, total: number) => void;
-  onAddTag: (card: ReelFarmCard) => void;
+  onAddTag: (card: ReelFarmCard, tag: string) => void;
   onRemoveTag: (card: ReelFarmCard, tag: string) => void;
+  productTags: string[];
+  onCreateTag: (tag: string) => void;
 }) {
+  const [tagInput, setTagInput] = useState('');
   const prefix = buildCountryAutomationPrefix(product, country);
   const isSyncing = loadingPrefix === `country:${country.id}`;
   const displayedCreatorCount = Math.max(Number(result?.count) || 0, Number(country.creatorCount) || 0);
@@ -73,6 +79,23 @@ export function CountryWorkspace({
             </div>
           </div>
           <div className="country-sidebar-fields">
+            <form className="country-tag-form" onSubmit={event => {
+              event.preventDefault();
+              if (!tagInput.trim()) return;
+              onCreateTag(tagInput.trim());
+              setTagInput('');
+            }}>
+              <span className="field-label">Tag</span>
+              <div className="country-tag-input-row">
+                <input className="text-input" value={tagInput} onChange={event => setTagInput(event.target.value)} placeholder="写一个 tag" />
+                <button className="creator-tag-add" type="submit" title="添加">+</button>
+              </div>
+              <div className="country-tag-pool">
+                {productTags.length ? productTags.map(tag => (
+                  <span className="creator-tag-chip" key={tag}>#{tag}</span>
+                )) : <span className="country-tag-empty">暂无 tag</span>}
+              </div>
+            </form>
             <label>
               <span className="field-label">当前国家/地区</span>
               <input className="text-input" value={country.name || ''} readOnly />
@@ -126,6 +149,7 @@ export function CountryWorkspace({
                         onMoveSlide={onMoveSlide}
                         onAddTag={onAddTag}
                         onRemoveTag={onRemoveTag}
+                        availableTags={productTags}
                       />
                     );
                   })}

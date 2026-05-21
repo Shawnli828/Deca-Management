@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import type { ReelFarmCard } from '@/lib/types';
 import { cardStateKey, formatNumber, formatPercent, getMetricFromPosts } from '@/lib/utils';
 import { MaterialCard } from './MaterialCard';
@@ -13,7 +14,8 @@ export function ReelFarmAccountCard({
   onPage,
   onMoveSlide,
   onAddTag,
-  onRemoveTag
+  onRemoveTag,
+  availableTags
 }: {
   card: ReelFarmCard;
   isOpen: boolean;
@@ -22,9 +24,11 @@ export function ReelFarmAccountCard({
   onToggle: (key: string) => void;
   onPage: (key: string, direction: number) => void;
   onMoveSlide: (videoId: string, direction: number, total: number) => void;
-  onAddTag: (card: ReelFarmCard) => void;
+  onAddTag: (card: ReelFarmCard, tag: string) => void;
   onRemoveTag: (card: ReelFarmCard, tag: string) => void;
+  availableTags: string[];
 }) {
+  const [pickerOpen, setPickerOpen] = useState(false);
   const key = cardStateKey(card);
   const automation = card.automation || {};
   const account = card.account || {};
@@ -35,6 +39,7 @@ export function ReelFarmAccountCard({
   const videos = card.videos || [];
   const summary = card.summary_metrics || {};
   const tags = card.tags || [];
+  const assignableTags = availableTags.filter(tag => !tags.includes(tag));
   const views = Number(summary.total_views) || getMetricFromPosts(posts as any, 'view_count');
   const likes = Number(summary.total_likes) || getMetricFromPosts(posts as any, 'like_count');
   const comments = Number(summary.total_comments) || getMetricFromPosts(posts as any, 'comment_count');
@@ -79,7 +84,26 @@ export function ReelFarmAccountCard({
               #{tag}
             </button>
           ))}
-          <button className="creator-tag-add" type="button" onClick={() => onAddTag(card)} title="添加">+</button>
+          <span className="creator-tag-pick">
+            <button className="creator-tag-add" type="button" onClick={() => setPickerOpen(open => !open)} title="添加">+</button>
+            {pickerOpen ? (
+              <span className="creator-tag-menu">
+                {assignableTags.length ? assignableTags.map(tag => (
+                  <button
+                    className="creator-tag-option"
+                    type="button"
+                    key={tag}
+                    onClick={() => {
+                      onAddTag(card, tag);
+                      setPickerOpen(false);
+                    }}
+                  >
+                    #{tag}
+                  </button>
+                )) : <span className="creator-tag-empty">先在左侧写 tag</span>}
+              </span>
+            ) : null}
+          </span>
         </div>
         {stats.map(([label, value]) => (
           <div className="creator-stat" key={label}>

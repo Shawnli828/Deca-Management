@@ -15,6 +15,7 @@ from server import (
     add_account_tag,
     ai_materials_payload,
     cookie_header,
+    create_product_tag,
     create_external_api_key,
     cron_authorized,
     database_snapshot,
@@ -29,6 +30,7 @@ from server import (
     load_roaster_state,
     make_auth_token,
     password_hash,
+    product_tags_payload,
     reelfarm_api_key,
     reelfarm_matches,
     relational_table_counts,
@@ -291,6 +293,24 @@ def post_account_tags_delete(request: Request, payload: dict[str, Any] = Body(de
     require_dashboard_auth(request)
     try:
         return delete_account_tag(payload.get("account_id"), payload.get("tag"))
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/product-tags")
+def get_product_tags(request: Request, product_code: str = ""):
+    require_dashboard_auth(request)
+    try:
+        return product_tags_payload(product_code)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/product-tags")
+def post_product_tags(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
+    require_dashboard_auth(request)
+    try:
+        return create_product_tag(payload.get("product_code"), payload.get("tag"))
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 

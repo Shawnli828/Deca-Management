@@ -405,10 +405,20 @@ def init_relational_schema(conn):
             UNIQUE(account_id, tag)
         )
         """,
+        """
+        CREATE TABLE IF NOT EXISTS product_tags (
+            id TEXT PRIMARY KEY,
+            product_code TEXT NOT NULL,
+            tag TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(product_code, tag)
+        )
+        """,
         "CREATE INDEX IF NOT EXISTS idx_post_daily_snapshots_snapshot_date ON post_daily_snapshots(snapshot_date)",
         "CREATE INDEX IF NOT EXISTS idx_post_daily_snapshots_post_id ON post_daily_snapshots(post_id)",
         "CREATE INDEX IF NOT EXISTS idx_account_tags_account_id ON account_tags(account_id)",
         "CREATE INDEX IF NOT EXISTS idx_account_tags_tag ON account_tags(tag)",
+        "CREATE INDEX IF NOT EXISTS idx_product_tags_product_code ON product_tags(product_code)",
         "CREATE INDEX IF NOT EXISTS idx_posts_published_at ON posts(published_at)",
         "CREATE INDEX IF NOT EXISTS idx_posts_material_id ON posts(material_id)",
         "CREATE INDEX IF NOT EXISTS idx_materials_automation_id ON materials(automation_id)",
@@ -2200,6 +2210,55 @@ def account_tags_payload(account_ids):
         data = row_dict(row)
         tags.setdefault(data.get("account_id"), []).append(data.get("tag"))
     return {"ok": True, "tags": tags}
+
+
+def product_tags_payload(product_code):
+    product_code = str(product_code or "").strip().upper()
+    if not product_code:
+        raise ValueError("product_code is required.")
+    placeholder = db_placeholder()
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        option_rows = conn.execute(
+            f"SELECT tag FROM product_tags WHERE product_code = {placeholder}",
+            (product_code,),
+        ).fetchall()
+        used_rows = conn.execute(
+            f"""
+            SELECT DISTINCT tag.tag
+            FROM account_tags tag
+            JOIN accounts acc ON acc.id = tag.account_id
+            JOIN product_market_channels pmc ON pmc.id = acc.product_market_channel_id
+            JOIN product_markets pm ON pm.id = pmc.product_market_id
+            JOIN products p ON p.id = pm.product_id
+            WHERE p.code = {placeholder}
+            """,
+            (product_code,),
+        ).fetchall()
+    tags = sorted({
+        clean_tag(row_dict(row).get("tag"))
+        for row in [*option_rows, *used_rows]
+        if clean_tag(row_dict(row).get("tag"))
+    }, key=lambda value: value.lower())
+    return {"ok": True, "product_code": product_code, "tags": tags}
+
+
+def create_product_tag(product_code, tag):
+    product_code = str(product_code or "").strip().upper()
+    tag = clean_tag(tag)
+    if not product_code or not tag:
+        raise ValueError("product_code and tag are required.")
+    now = datetime.now(timezone.utc).isoformat()
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        upsert_row(
+            conn,
+            "product_tags",
+            {"id": stable_id("product_tag", product_code, tag.lower()), "product_code": product_code, "tag": tag, "created_at": now},
+            ["product_code", "tag"],
+        )
+        conn.commit()
+    return product_tags_payload(product_code)
 
 
 def add_account_tag(account_id, tag):

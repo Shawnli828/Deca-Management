@@ -529,6 +529,31 @@
             gap: 12px;
         }
 
+        .country-tag-form {
+            display: grid;
+            gap: 8px;
+        }
+
+        .country-tag-input-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 32px;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .country-tag-pool {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            min-height: 30px;
+        }
+
+        .country-tag-empty {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 800;
+        }
+
         .topic-panel {
             overflow: hidden;
             border: 1px solid var(--line);
@@ -3671,6 +3696,52 @@
             background: #151310;
             color: var(--muted);
             font-size: 15px;
+        }
+
+        .creator-tag-pick {
+            position: relative;
+            display: inline-flex;
+        }
+
+        .creator-tag-menu {
+            position: absolute;
+            z-index: 20;
+            top: calc(100% + 8px);
+            left: 0;
+            display: grid;
+            gap: 6px;
+            min-width: 128px;
+            max-width: 190px;
+            border: 1px solid var(--line);
+            padding: 8px;
+            background: #0b0a09;
+            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+        }
+
+        .creator-tag-option {
+            display: block;
+            width: 100%;
+            border: 1px solid #474b91;
+            border-radius: 0;
+            padding: 7px 8px;
+            background: #151735;
+            color: var(--accent-strong);
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 850;
+            text-align: left;
+        }
+
+        .creator-tag-option:hover {
+            background: #20266a;
+            color: #fff;
+        }
+
+        .creator-tag-empty {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 800;
+            white-space: nowrap;
         }
 
         .tag-board {

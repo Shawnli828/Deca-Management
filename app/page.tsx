@@ -63,6 +63,7 @@ export default function DashboardPage() {
   const [tagProductId, setTagProductId] = useState('');
   const [tagDashboard, setTagDashboard] = useState<TagDashboard | null>(null);
   const [tagDashboardLoading, setTagDashboardLoading] = useState(false);
+  const [productTags, setProductTags] = useState<Record<string, string[]>>({});
 
   const selectedProduct = useMemo(() => products.find(product => product.id === selectedProductId) || products[0] || null, [products, selectedProductId]);
   const selectedCountry = useMemo(() => selectedProduct?.countries?.find(country => country.id === selectedCountryId) || selectedProduct?.countries?.[0] || null, [selectedProduct, selectedCountryId]);
@@ -211,6 +212,7 @@ export default function DashboardPage() {
 
     setReelFarmResults(prev => ({ ...prev, [prefix]: { prefix, count: 0, cards: [], loading: true } }));
     try {
+      await loadProductTags(product);
       const payload = await api.accounts(getProductReelFarmCode(product), getCountryReelFarmCode(country), daysOverride);
       let cards = (payload.data || []).map(accountSummaryToCard);
       const accountIds = cards.map(getCardAccountId).filter(Boolean);
@@ -222,6 +224,14 @@ export default function DashboardPage() {
     } catch (error: any) {
       setReelFarmResults(prev => ({ ...prev, [prefix]: { prefix, count: 0, cards: [], error: error?.message || '账号数据加载失败' } }));
     }
+  }
+
+  async function loadProductTags(product = selectedProduct) {
+    if (!product) return [];
+    const productCode = getProductReelFarmCode(product);
+    const payload = await api.productTags(productCode);
+    setProductTags(previous => ({ ...previous, [productCode]: payload.tags || [] }));
+    return payload.tags || [];
   }
 
   function getCardAccountId(card: ReelFarmCard) {
@@ -256,14 +266,23 @@ export default function DashboardPage() {
     }
   }, [authenticated, tool]);
 
-  async function addCardTag(card: ReelFarmCard) {
+  async function addCardTag(card: ReelFarmCard, tag: string) {
     const accountId = getCardAccountId(card);
     if (!accountId) return;
-    const tag = window.prompt('输入 Tag 名称');
     if (!tag?.trim()) return;
     const payload = await api.addAccountTag(accountId, tag.trim());
     updateCardTags(accountId, previous => Array.from(new Set([...previous, payload.tag])));
     if (tool === 'tags') await loadTagDashboard();
+  }
+
+  async function createCountryTag(tag: string) {
+    const product = selectedProduct;
+    if (!product || !tag.trim()) return;
+    const productCode = getProductReelFarmCode(product);
+    const payload = await api.createProductTag(productCode, tag.trim());
+    setProductTags(previous => ({ ...previous, [productCode]: payload.tags || [] }));
+    setStatus(`#${tag.trim()} 已加入 ${product.name} tag 池`);
+    setStatusError(false);
   }
 
   async function removeCardTag(card: ReelFarmCard, tag: string) {
@@ -659,6 +678,8 @@ export default function DashboardPage() {
                   onMoveSlide={moveSlide}
                   onAddTag={addCardTag}
                   onRemoveTag={removeCardTag}
+                  productTags={productTags[getProductReelFarmCode(selectedProduct)] || []}
+                  onCreateTag={createCountryTag}
                 />
               ) : null}
             </section>

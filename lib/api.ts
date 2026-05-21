@@ -110,6 +110,14 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ account_id: accountId, tag })
     }),
+  productTags: (productCode: string) =>
+    apiFetch<{ ok: boolean; product_code: string; tags: string[] }>(`/api/product-tags?product_code=${encodeURIComponent(productCode)}`),
+  createProductTag: (productCode: string, tag: string) =>
+    apiFetch<{ ok: boolean; product_code: string; tags: string[] }>('/api/product-tags', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_code: productCode, tag })
+    }),
   tagDashboard: (productCode: string) =>
     apiFetch<TagDashboard>(`/api/tags/dashboard?product_code=${encodeURIComponent(productCode)}`),
   database: () => apiFetch<DatabaseSnapshot>('/api/database', undefined, 'Failed to load database'),
