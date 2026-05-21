@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { Country, Product, ProductKpis, ReelFarmCard, ReelFarmResult } from '@/lib/types';
 import { buildCountryAutomationPrefix, cardStateKey, getCountryReelFarmCode } from '@/lib/utils';
 import { ProductKpiBoard } from './ProductKpiBoard';
@@ -168,6 +169,7 @@ function CreatorTagEditorModal({
   onAddTag: (card: ReelFarmCard, tag: string) => void;
   onRemoveTag: (card: ReelFarmCard, tag: string) => void;
 }) {
+  const [mounted, setMounted] = useState(false);
   const [categoryInput, setCategoryInput] = useState('');
   const [tagInput, setTagInput] = useState('');
   const key = cardStateKey(card);
@@ -175,7 +177,13 @@ function CreatorTagEditorModal({
   const categories = Array.from(new Set(availableTags.map(getTagCategory).filter(Boolean)));
   const tagOptions = availableTags.filter(tag => !categoryInput.trim() || getTagCategory(tag).toLowerCase() === categoryInput.trim().toLowerCase());
 
-  return (
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
+
+  return createPortal(
     <div className="tag-editor-backdrop" onClick={onClose}>
       <div className="tag-editor-modal" onClick={event => event.stopPropagation()}>
         <button className="tag-editor-close" type="button" onClick={onClose}>×</button>
@@ -231,6 +239,7 @@ function CreatorTagEditorModal({
           <button className="tag-editor-save" type="button" onClick={onClose}>Save Tags</button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
