@@ -51,6 +51,40 @@ export type ProductKpis = {
   };
 };
 
+export type TagDashboardAccount = {
+  account_id: string;
+  username?: string;
+  display_name?: string;
+  avatar_url?: string;
+  status?: string;
+  post_count?: number;
+  total_views?: number;
+  latest_post_at?: string;
+};
+
+export type TagDashboardCountry = {
+  country_id?: string;
+  country_name?: string;
+  country_code?: string;
+  accounts: TagDashboardAccount[];
+};
+
+export type TagDashboardItem = {
+  tag: string;
+  account_count: number;
+  yesterday_avg_views: number;
+  seven_day_avg_views: number;
+  seven_day_er: number;
+  countries: TagDashboardCountry[];
+};
+
+export type TagDashboard = {
+  ok: boolean;
+  product_code: string;
+  windows?: Record<string, string>;
+  tags: TagDashboardItem[];
+};
+
 export type AccountSummary = {
   account_id: string;
   reelfarm_account_id?: string;
@@ -180,6 +214,7 @@ export type ReelFarmCard = {
     total_shares?: number;
     total_bookmarks?: number;
   };
+  tags?: string[];
   pagination?: {
     limit: number;
     offset: number;

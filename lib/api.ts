@@ -8,7 +8,8 @@ import type {
   Product,
   ProductKpis,
   ReelFarmResult,
-  RoasterState
+  RoasterState,
+  TagDashboard
 } from './types';
 
 export async function parseApiResponse<T>(response: Response, fallback = 'Request failed'): Promise<T> {
@@ -95,6 +96,22 @@ export const api = {
       { method: 'POST' },
       'Failed to send Feishu reminder'
     ),
+  accountTags: (accountIds: string[]) =>
+    apiFetch<{ ok: boolean; tags: Record<string, string[]> }>(`/api/account-tags?account_ids=${encodeURIComponent(accountIds.join(','))}`),
+  addAccountTag: (accountId: string, tag: string) =>
+    apiFetch<{ ok: boolean; account_id: string; tag: string }>('/api/account-tags', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account_id: accountId, tag })
+    }),
+  deleteAccountTag: (accountId: string, tag: string) =>
+    apiFetch<{ ok: boolean; account_id: string; tag: string }>('/api/account-tags/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account_id: accountId, tag })
+    }),
+  tagDashboard: (productCode: string) =>
+    apiFetch<TagDashboard>(`/api/tags/dashboard?product_code=${encodeURIComponent(productCode)}`),
   database: () => apiFetch<DatabaseSnapshot>('/api/database', undefined, 'Failed to load database'),
   apiKeys: () => apiFetch<{ ok: boolean; keys: ExternalApiKey[] }>('/api/api-keys'),
   createApiKey: (name: string) =>

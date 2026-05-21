@@ -1,6 +1,6 @@
 'use client';
 
-export function SideMenu({ tool, setTool }: { tool: string; setTool: (tool: 'slideshow' | 'roaster' | 'publishCheck') => void }) {
+export function SideMenu({ tool, setTool }: { tool: string; setTool: (tool: 'slideshow' | 'roaster' | 'publishCheck' | 'tags') => void }) {
   return (
     <aside className="side-menu" aria-label="中台菜单">
       <div className="side-brand">
@@ -19,6 +19,10 @@ export function SideMenu({ tool, setTool }: { tool: string; setTool: (tool: 'sli
         <button className={`side-nav-btn ${tool === 'publishCheck' ? 'active' : ''}`} type="button" onClick={() => setTool('publishCheck')}>
           <span className="side-nav-title">发布检查</span>
           <span className="side-nav-meta">Daily Check</span>
+        </button>
+        <button className={`side-nav-btn ${tool === 'tags' ? 'active' : ''}`} type="button" onClick={() => setTool('tags')}>
+          <span className="side-nav-title">Tags</span>
+          <span className="side-nav-meta">Account Groups</span>
         </button>
       </nav>
     </aside>

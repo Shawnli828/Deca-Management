@@ -12,8 +12,9 @@ import { ProductSettingsModal } from '@/components/ProductSettingsModal';
 import { PublishCheckBoard } from '@/components/PublishCheckBoard';
 import { RoasterBoard } from '@/components/RoasterBoard';
 import { SideMenu } from '@/components/SideMenu';
+import { TagBoard } from '@/components/TagBoard';
 import { accountSummaryToCard, api, mergePostRowsIntoCard } from '@/lib/api';
-import type { Country, DatabaseSnapshot, ExternalApiKey, Product, ProductKpis, PublishCheckState, ReelFarmResult, RoasterState } from '@/lib/types';
+import type { Country, DatabaseSnapshot, ExternalApiKey, Product, ProductKpis, PublishCheckState, ReelFarmCard, ReelFarmResult, RoasterState, TagDashboard } from '@/lib/types';
 import { buildCountryAutomationPrefix, cardStateKey, codeFromName, getCountryReelFarmCode, getProductReelFarmCode } from '@/lib/utils';
 
 const defaultRoaster: RoasterState = {
@@ -32,7 +33,7 @@ const defaultRoaster: RoasterState = {
 export default function DashboardPage() {
   const [authenticated, setAuthenticated] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
-  const [tool, setTool] = useState<'slideshow' | 'roaster' | 'publishCheck'>('slideshow');
+  const [tool, setTool] = useState<'slideshow' | 'roaster' | 'publishCheck' | 'tags'>('slideshow');
   const [page, setPage] = useState<'products' | 'product' | 'country'>('products');
   const [selectedProductId, setSelectedProductId] = useState('');
   const [selectedCountryId, setSelectedCountryId] = useState('');
@@ -59,6 +60,9 @@ export default function DashboardPage() {
   const [generatedKey, setGeneratedKey] = useState('');
   const [productKpis, setProductKpis] = useState<Record<string, ProductKpis | null>>({});
   const [countryKpis, setCountryKpis] = useState<Record<string, ProductKpis | null>>({});
+  const [tagProductId, setTagProductId] = useState('');
+  const [tagDashboard, setTagDashboard] = useState<TagDashboard | null>(null);
+  const [tagDashboardLoading, setTagDashboardLoading] = useState(false);
 
   const selectedProduct = useMemo(() => products.find(product => product.id === selectedProductId) || products[0] || null, [products, selectedProductId]);
   const selectedCountry = useMemo(() => selectedProduct?.countries?.find(country => country.id === selectedCountryId) || selectedProduct?.countries?.[0] || null, [selectedProduct, selectedCountryId]);
@@ -76,6 +80,7 @@ export default function DashboardPage() {
     setProducts(data);
     setSelectedProductId(data[0]?.id || '');
     setSelectedCountryId(data[0]?.countries?.[0]?.id || '');
+    setTagProductId(data[0]?.id || '');
     setStatus('已连接数据库');
     setStatusError(false);
     try {
@@ -207,11 +212,79 @@ export default function DashboardPage() {
     setReelFarmResults(prev => ({ ...prev, [prefix]: { prefix, count: 0, cards: [], loading: true } }));
     try {
       const payload = await api.accounts(getProductReelFarmCode(product), getCountryReelFarmCode(country), daysOverride);
-      const cards = (payload.data || []).map(accountSummaryToCard);
+      let cards = (payload.data || []).map(accountSummaryToCard);
+      const accountIds = cards.map(getCardAccountId).filter(Boolean);
+      if (accountIds.length) {
+        const tagPayload = await api.accountTags(accountIds);
+        cards = cards.map(card => ({ ...card, tags: tagPayload.tags[getCardAccountId(card)] || [] }));
+      }
       setReelFarmResults(prev => ({ ...prev, [prefix]: { prefix, count: cards.length, cards } }));
     } catch (error: any) {
       setReelFarmResults(prev => ({ ...prev, [prefix]: { prefix, count: 0, cards: [], error: error?.message || '账号数据加载失败' } }));
     }
+  }
+
+  function getCardAccountId(card: ReelFarmCard) {
+    const account = card.account || {};
+    return String(account.id || account.account_id || '').trim();
+  }
+
+  async function loadTagDashboard(productId = tagProductId || selectedProductId) {
+    const product = products.find(item => item.id === productId) || products[0];
+    if (!product) return;
+    setTagDashboardLoading(true);
+    try {
+      const payload = await api.tagDashboard(getProductReelFarmCode(product));
+      setTagDashboard(payload);
+    } catch (error: any) {
+      setStatus(error?.message || 'Tag 看板读取失败');
+      setStatusError(true);
+      setTagDashboard(null);
+    } finally {
+      setTagDashboardLoading(false);
+    }
+  }
+
+  function changeTagProduct(productId: string) {
+    setTagProductId(productId);
+    loadTagDashboard(productId);
+  }
+
+  useEffect(() => {
+    if (authenticated && tool === 'tags') {
+      loadTagDashboard(tagProductId || selectedProductId);
+    }
+  }, [authenticated, tool]);
+
+  async function addCardTag(card: ReelFarmCard) {
+    const accountId = getCardAccountId(card);
+    if (!accountId) return;
+    const tag = window.prompt('输入 Tag 名称');
+    if (!tag?.trim()) return;
+    const payload = await api.addAccountTag(accountId, tag.trim());
+    updateCardTags(accountId, previous => Array.from(new Set([...previous, payload.tag])));
+    if (tool === 'tags') await loadTagDashboard();
+  }
+
+  async function removeCardTag(card: ReelFarmCard, tag: string) {
+    const accountId = getCardAccountId(card);
+    if (!accountId) return;
+    await api.deleteAccountTag(accountId, tag);
+    updateCardTags(accountId, previous => previous.filter(item => item !== tag));
+    if (tool === 'tags') await loadTagDashboard();
+  }
+
+  function updateCardTags(accountId: string, updater: (tags: string[]) => string[]) {
+    setReelFarmResults(prev => {
+      const next = { ...prev };
+      for (const [prefix, result] of Object.entries(next)) {
+        next[prefix] = {
+          ...result,
+          cards: result.cards.map(card => getCardAccountId(card) === accountId ? { ...card, tags: updater(card.tags || []) } : card)
+        };
+      }
+      return next;
+    });
   }
 
   useEffect(() => {
@@ -584,6 +657,8 @@ export default function DashboardPage() {
                   onToggleCard={toggleCard}
                   onPage={pagePosts}
                   onMoveSlide={moveSlide}
+                  onAddTag={addCardTag}
+                  onRemoveTag={removeCardTag}
                 />
               ) : null}
             </section>
@@ -615,6 +690,23 @@ export default function DashboardPage() {
               onSave={savePublishCheck}
               onRun={runPublishCheckNow}
               onSendReminder={sendPublishReminderNow}
+            />
+          </section>
+          <section className={`tool-page ${tool === 'tags' ? 'active' : ''}`}>
+            <header className="topbar">
+              <div>
+                <h1>Tags</h1>
+                <p className="subtitle">按单个产品聚合账号 Tag，看不同国家账号的昨日均播和 7 日表现。</p>
+              </div>
+              <div className="top-actions"><span className="status-pill">Product Scoped</span></div>
+            </header>
+            <TagBoard
+              products={products}
+              selectedProductId={tagProductId || selectedProductId}
+              dashboard={tagDashboard}
+              loading={tagDashboardLoading}
+              onProductChange={changeTagProduct}
+              onRefresh={() => loadTagDashboard(tagProductId || selectedProductId)}
             />
           </section>
         </main>

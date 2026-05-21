@@ -11,6 +11,8 @@ from server import (
     REELFARM_BASE_URL,
     SESSION_COOKIE,
     SESSION_TTL_SECONDS,
+    account_tags_payload,
+    add_account_tag,
     ai_materials_payload,
     cookie_header,
     create_external_api_key,
@@ -18,6 +20,7 @@ from server import (
     database_snapshot,
     data_query_payload,
     default_data,
+    delete_account_tag,
     connect_db,
     external_api_key_authorized,
     init_relational_schema,
@@ -38,6 +41,7 @@ from server import (
     sync_all_reelfarm_records,
     sync_reelfarm_country,
     sync_reelfarm_prefix,
+    tag_dashboard_payload,
     run_publish_check,
     stored_reelfarm_country,
     delete_app_value,
@@ -264,6 +268,40 @@ def post_publish_check_send_reminder(request: Request):
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result.get("error") or "Failed to send Feishu reminder.")
     return result
+
+
+@app.get("/api/account-tags")
+def get_account_tags(request: Request, account_ids: str = ""):
+    require_dashboard_auth(request)
+    ids = [item.strip() for item in account_ids.split(",") if item.strip()]
+    return account_tags_payload(ids)
+
+
+@app.post("/api/account-tags")
+def post_account_tags(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
+    require_dashboard_auth(request)
+    try:
+        return add_account_tag(payload.get("account_id"), payload.get("tag"))
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/account-tags/delete")
+def post_account_tags_delete(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
+    require_dashboard_auth(request)
+    try:
+        return delete_account_tag(payload.get("account_id"), payload.get("tag"))
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/tags/dashboard")
+def get_tags_dashboard(request: Request, product_code: str = ""):
+    require_dashboard_auth(request)
+    try:
+        return tag_dashboard_payload(product_code)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @app.get("/api/reelfarm/config")

@@ -396,8 +396,19 @@ def init_relational_schema(conn):
             UNIQUE(post_id, snapshot_date)
         )
         """,
+        """
+        CREATE TABLE IF NOT EXISTS account_tags (
+            id TEXT PRIMARY KEY,
+            account_id TEXT NOT NULL,
+            tag TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(account_id, tag)
+        )
+        """,
         "CREATE INDEX IF NOT EXISTS idx_post_daily_snapshots_snapshot_date ON post_daily_snapshots(snapshot_date)",
         "CREATE INDEX IF NOT EXISTS idx_post_daily_snapshots_post_id ON post_daily_snapshots(post_id)",
+        "CREATE INDEX IF NOT EXISTS idx_account_tags_account_id ON account_tags(account_id)",
+        "CREATE INDEX IF NOT EXISTS idx_account_tags_tag ON account_tags(tag)",
         "CREATE INDEX IF NOT EXISTS idx_posts_published_at ON posts(published_at)",
         "CREATE INDEX IF NOT EXISTS idx_posts_material_id ON posts(material_id)",
         "CREATE INDEX IF NOT EXISTS idx_materials_automation_id ON materials(automation_id)",
@@ -2151,6 +2162,201 @@ def query_product_kpis(query):
             "utc_window": {"start": seven_start, "end": seven_end},
         },
     }
+
+
+def previous_complete_windows(now_utc=None):
+    beijing = timezone(timedelta(hours=8))
+    current_local = (now_utc or datetime.now(timezone.utc)).astimezone(beijing)
+    today_start_local = datetime(current_local.year, current_local.month, current_local.day, tzinfo=beijing)
+    yesterday_start_local = today_start_local - timedelta(days=1)
+    seven_start_local = yesterday_start_local - timedelta(days=6)
+    return {
+        "yesterday_start": yesterday_start_local.astimezone(timezone.utc).isoformat(),
+        "yesterday_end": today_start_local.astimezone(timezone.utc).isoformat(),
+        "seven_start": seven_start_local.astimezone(timezone.utc).isoformat(),
+        "seven_end": today_start_local.astimezone(timezone.utc).isoformat(),
+    }
+
+
+def clean_tag(value):
+    tag = re.sub(r"\s+", " ", str(value or "")).strip()
+    return tag[:40]
+
+
+def account_tags_payload(account_ids):
+    ids = [str(item or "").strip() for item in account_ids if str(item or "").strip()]
+    if not ids:
+        return {"ok": True, "tags": {}}
+    placeholder = db_placeholder()
+    placeholders = ",".join([placeholder] * len(ids))
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        rows = conn.execute(
+            f"SELECT account_id, tag FROM account_tags WHERE account_id IN ({placeholders}) ORDER BY tag",
+            tuple(ids),
+        ).fetchall()
+    tags = {}
+    for row in rows:
+        data = row_dict(row)
+        tags.setdefault(data.get("account_id"), []).append(data.get("tag"))
+    return {"ok": True, "tags": tags}
+
+
+def add_account_tag(account_id, tag):
+    account_id = str(account_id or "").strip()
+    tag = clean_tag(tag)
+    if not account_id or not tag:
+        raise ValueError("account_id and tag are required.")
+    now = datetime.now(timezone.utc).isoformat()
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        upsert_row(
+            conn,
+            "account_tags",
+            {"id": stable_id("account_tag", account_id, tag.lower()), "account_id": account_id, "tag": tag, "created_at": now},
+            ["account_id", "tag"],
+        )
+        conn.commit()
+    return {"ok": True, "account_id": account_id, "tag": tag}
+
+
+def delete_account_tag(account_id, tag):
+    account_id = str(account_id or "").strip()
+    tag = clean_tag(tag)
+    if not account_id or not tag:
+        raise ValueError("account_id and tag are required.")
+    placeholder = db_placeholder()
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        conn.execute(f"DELETE FROM account_tags WHERE account_id = {placeholder} AND tag = {placeholder}", (account_id, tag))
+        conn.commit()
+    return {"ok": True, "account_id": account_id, "tag": tag}
+
+
+def tag_dashboard_payload(product_code):
+    product_code = str(product_code or "").strip().upper()
+    if not product_code:
+        raise ValueError("product_code is required.")
+    placeholder = db_placeholder()
+    windows = previous_complete_windows()
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        tag_rows = conn.execute(
+            f"""
+            SELECT
+                tag.tag,
+                COUNT(DISTINCT acc.id) AS account_count,
+                COUNT(DISTINCT CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.id END) AS yesterday_posts,
+                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.view_count ELSE 0 END), 0) AS yesterday_views,
+                COUNT(DISTINCT CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.id END) AS seven_day_posts,
+                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.view_count ELSE 0 END), 0) AS seven_day_views,
+                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.like_count ELSE 0 END), 0) AS seven_day_likes,
+                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.comment_count ELSE 0 END), 0) AS seven_day_comments,
+                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.share_count ELSE 0 END), 0) AS seven_day_shares,
+                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.bookmark_count ELSE 0 END), 0) AS seven_day_bookmarks
+            FROM account_tags tag
+            JOIN accounts acc ON acc.id = tag.account_id
+            JOIN product_market_channels pmc ON pmc.id = acc.product_market_channel_id
+            JOIN product_markets pm ON pm.id = pmc.product_market_id
+            JOIN products p ON p.id = pm.product_id
+            JOIN markets m ON m.id = pm.market_id
+            JOIN channels ch ON ch.id = pmc.channel_id
+            LEFT JOIN posts post ON post.account_id = acc.id
+            WHERE ch.code = {placeholder} AND p.code = {placeholder}
+            GROUP BY tag.tag
+            ORDER BY tag.tag
+            """,
+            (
+                windows["yesterday_start"], windows["yesterday_end"],
+                windows["yesterday_start"], windows["yesterday_end"],
+                windows["seven_start"], windows["seven_end"],
+                windows["seven_start"], windows["seven_end"],
+                windows["seven_start"], windows["seven_end"],
+                windows["seven_start"], windows["seven_end"],
+                windows["seven_start"], windows["seven_end"],
+                windows["seven_start"], windows["seven_end"],
+                "TIKTOK", product_code,
+            ),
+        ).fetchall()
+        account_rows = conn.execute(
+            f"""
+            SELECT
+                tag.tag,
+                p.id AS product_id,
+                p.name AS product_name,
+                p.code AS product_code,
+                m.id AS country_id,
+                m.name AS country_name,
+                m.code AS country_code,
+                acc.id AS account_id,
+                acc.reelfarm_account_id,
+                acc.username,
+                acc.display_name,
+                acc.avatar_url,
+                acc.status,
+                COUNT(DISTINCT post.id) AS post_count,
+                COALESCE(SUM(post.view_count), 0) AS total_views,
+                MAX(post.published_at) AS latest_post_at
+            FROM account_tags tag
+            JOIN accounts acc ON acc.id = tag.account_id
+            JOIN product_market_channels pmc ON pmc.id = acc.product_market_channel_id
+            JOIN product_markets pm ON pm.id = pmc.product_market_id
+            JOIN products p ON p.id = pm.product_id
+            JOIN markets m ON m.id = pm.market_id
+            JOIN channels ch ON ch.id = pmc.channel_id
+            LEFT JOIN posts post ON post.account_id = acc.id
+            WHERE ch.code = {placeholder} AND p.code = {placeholder}
+            GROUP BY tag.tag, p.id, p.name, p.code, m.id, m.name, m.code, acc.id, acc.reelfarm_account_id, acc.username, acc.display_name, acc.avatar_url, acc.status
+            ORDER BY tag.tag, m.name, total_views DESC
+            """,
+            ("TIKTOK", product_code),
+        ).fetchall()
+
+    tags = []
+    by_tag = {}
+    for row in tag_rows:
+        data = row_dict(row)
+        seven_views = int(data.get("seven_day_views") or 0)
+        seven_posts = int(data.get("seven_day_posts") or 0)
+        yesterday_views = int(data.get("yesterday_views") or 0)
+        yesterday_posts = int(data.get("yesterday_posts") or 0)
+        interactions = sum(int(data.get(key) or 0) for key in ("seven_day_likes", "seven_day_comments", "seven_day_shares", "seven_day_bookmarks"))
+        item = {
+            "tag": data.get("tag"),
+            "account_count": int(data.get("account_count") or 0),
+            "yesterday_avg_views": round(yesterday_views / yesterday_posts) if yesterday_posts else 0,
+            "seven_day_avg_views": round(seven_views / seven_posts) if seven_posts else 0,
+            "seven_day_er": (interactions / seven_views * 100) if seven_views else 0,
+            "countries": {},
+        }
+        tags.append(item)
+        by_tag[item["tag"]] = item
+    for row in account_rows:
+        data = row_dict(row)
+        tag = data.get("tag")
+        item = by_tag.get(tag)
+        if not item:
+            continue
+        country_key = data.get("country_code") or data.get("country_id") or "UNKNOWN"
+        country = item["countries"].setdefault(country_key, {
+            "country_id": data.get("country_id"),
+            "country_name": data.get("country_name"),
+            "country_code": data.get("country_code"),
+            "accounts": [],
+        })
+        country["accounts"].append({
+            "account_id": data.get("account_id"),
+            "username": data.get("username"),
+            "display_name": data.get("display_name"),
+            "avatar_url": data.get("avatar_url"),
+            "status": data.get("status"),
+            "post_count": int(data.get("post_count") or 0),
+            "total_views": int(data.get("total_views") or 0),
+            "latest_post_at": data.get("latest_post_at"),
+        })
+    for item in tags:
+        item["countries"] = list(item["countries"].values())
+    return {"ok": True, "product_code": product_code, "windows": windows, "tags": tags}
 
 
 def query_accounts(query):

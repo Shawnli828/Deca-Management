@@ -1,6 +1,6 @@
 'use client';
 
-import type { Country, Product, ProductKpis, ReelFarmResult } from '@/lib/types';
+import type { Country, Product, ProductKpis, ReelFarmCard, ReelFarmResult } from '@/lib/types';
 import { buildCountryAutomationPrefix, cardStateKey, getCountryReelFarmCode } from '@/lib/utils';
 import { ProductKpiBoard } from './ProductKpiBoard';
 import { ReelFarmAccountCard } from './ReelFarmAccountCard';
@@ -20,7 +20,9 @@ export function CountryWorkspace({
   onSync,
   onToggleCard,
   onPage,
-  onMoveSlide
+  onMoveSlide,
+  onAddTag,
+  onRemoveTag
 }: {
   product: Product;
   country: Country;
@@ -37,6 +39,8 @@ export function CountryWorkspace({
   onToggleCard: (key: string) => void;
   onPage: (key: string, direction: number) => void;
   onMoveSlide: (videoId: string, direction: number, total: number) => void;
+  onAddTag: (card: ReelFarmCard) => void;
+  onRemoveTag: (card: ReelFarmCard, tag: string) => void;
 }) {
   const prefix = buildCountryAutomationPrefix(product, country);
   const isSyncing = loadingPrefix === `country:${country.id}`;
@@ -120,6 +124,8 @@ export function CountryWorkspace({
                         onToggle={onToggleCard}
                         onPage={onPage}
                         onMoveSlide={onMoveSlide}
+                        onAddTag={onAddTag}
+                        onRemoveTag={onRemoveTag}
                       />
                     );
                   })}

@@ -11,7 +11,9 @@ export function ReelFarmAccountCard({
   slideIndexes,
   onToggle,
   onPage,
-  onMoveSlide
+  onMoveSlide,
+  onAddTag,
+  onRemoveTag
 }: {
   card: ReelFarmCard;
   isOpen: boolean;
@@ -20,6 +22,8 @@ export function ReelFarmAccountCard({
   onToggle: (key: string) => void;
   onPage: (key: string, direction: number) => void;
   onMoveSlide: (videoId: string, direction: number, total: number) => void;
+  onAddTag: (card: ReelFarmCard) => void;
+  onRemoveTag: (card: ReelFarmCard, tag: string) => void;
 }) {
   const key = cardStateKey(card);
   const automation = card.automation || {};
@@ -30,6 +34,7 @@ export function ReelFarmAccountCard({
   const posts = card.posts || [];
   const videos = card.videos || [];
   const summary = card.summary_metrics || {};
+  const tags = card.tags || [];
   const views = Number(summary.total_views) || getMetricFromPosts(posts as any, 'view_count');
   const likes = Number(summary.total_likes) || getMetricFromPosts(posts as any, 'like_count');
   const comments = Number(summary.total_comments) || getMetricFromPosts(posts as any, 'comment_count');
@@ -78,6 +83,14 @@ export function ReelFarmAccountCard({
         <span className="creator-expand">›</span>
       </div>
       <div className="creator-row-subtitle">{automation.title || automation.automation_id || 'Untitled automation'}</div>
+      <div className="creator-tags" onClick={event => event.stopPropagation()}>
+        {tags.map(tag => (
+          <button className="creator-tag-chip" type="button" key={tag} onClick={() => onRemoveTag(card, tag)} title="点击删除 tag">
+            #{tag} ×
+          </button>
+        ))}
+        <button className="creator-tag-add" type="button" onClick={() => onAddTag(card)}>+ Tag</button>
+      </div>
       {isOpen ? (
         <>
           <div className="creator-toolbar">

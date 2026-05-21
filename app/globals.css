@@ -3638,6 +3638,188 @@
             min-width: 0;
         }
 
+        .creator-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            border-top: 1px solid var(--line);
+            padding: 0 24px 14px 98px;
+            background: #050505;
+        }
+
+        .creator-tag-chip,
+        .creator-tag-add {
+            min-height: 28px;
+            border: 1px solid #474b91;
+            padding: 0 9px;
+            background: #151735;
+            color: var(--accent-strong);
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 850;
+        }
+
+        .creator-tag-add {
+            border-color: var(--line);
+            background: #151310;
+            color: var(--muted);
+        }
+
+        .tag-board {
+            display: grid;
+            gap: 18px;
+        }
+
+        .tag-board-hero {
+            display: flex;
+            align-items: end;
+            justify-content: space-between;
+            gap: 16px;
+            border: 1px solid var(--line);
+            padding: 18px;
+            background: #11100e;
+        }
+
+        .tag-board-hero h2 {
+            margin: 0;
+            color: var(--text);
+            font-size: 28px;
+            line-height: 1.15;
+        }
+
+        .tag-board-hero p,
+        .tag-card-head p {
+            margin: 6px 0 0;
+            color: var(--muted);
+            font-size: 13px;
+            font-weight: 750;
+        }
+
+        .tag-board-controls {
+            display: flex;
+            gap: 10px;
+            min-width: min(460px, 100%);
+        }
+
+        .tag-grid {
+            display: grid;
+            gap: 14px;
+        }
+
+        .tag-card {
+            display: grid;
+            gap: 14px;
+            border: 1px solid var(--line);
+            padding: 16px;
+            background: #0a0908;
+        }
+
+        .tag-card-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 14px;
+        }
+
+        .tag-name {
+            color: var(--text);
+            font-size: 24px;
+            font-weight: 950;
+        }
+
+        .tag-kpis {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .tag-kpis div {
+            display: grid;
+            gap: 6px;
+            border: 1px solid var(--line);
+            padding: 12px;
+            background: #151310;
+        }
+
+        .tag-kpis span {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 850;
+        }
+
+        .tag-kpis strong {
+            color: var(--accent-strong);
+            font-size: 30px;
+            line-height: 1;
+        }
+
+        .tag-country-list,
+        .tag-account-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .tag-country-group {
+            display: grid;
+            gap: 8px;
+            border-top: 1px solid var(--line);
+            padding-top: 12px;
+        }
+
+        .tag-country-group h3 {
+            margin: 0;
+            color: var(--text);
+            font-size: 15px;
+        }
+
+        .tag-account-row {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr);
+            gap: 10px;
+            align-items: center;
+            border: 1px solid var(--line);
+            padding: 10px;
+            background: #050505;
+        }
+
+        .tag-account-avatar {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 34px;
+            height: 34px;
+            overflow: hidden;
+            border: 1px solid var(--line);
+            border-radius: 50%;
+            background: #151310;
+            color: var(--text);
+            font-size: 11px;
+            font-weight: 900;
+        }
+
+        .tag-account-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .tag-account-row strong,
+        .tag-account-row span {
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .tag-account-row strong {
+            color: var(--text);
+            font-size: 13px;
+        }
+
+        .tag-account-row span {
+            color: var(--muted);
+            font-size: 12px;
+        }
+
         .empty-state {
             border: 1px dashed rgba(181, 173, 162, 0.18);
             padding: 14px;
@@ -3683,9 +3865,20 @@
             .publish-check-hero,
             .publish-check-panel-head,
             .publish-result-actions,
+            .tag-board-hero,
             .missing-account-row {
                 align-items: stretch;
                 flex-direction: column;
+            }
+
+            .tag-board-controls,
+            .tag-kpis {
+                grid-template-columns: minmax(0, 1fr);
+                flex-direction: column;
+            }
+
+            .creator-tags {
+                padding-left: 14px;
             }
 
             .assignment-row {
