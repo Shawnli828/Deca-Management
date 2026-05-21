@@ -102,8 +102,8 @@ export function CountryWorkspace({
               <div className="creator-table">
                 <div className="creator-table-head">
                   <div>Creator ↕</div>
+                  <div></div>
                   <div>Posts ↕</div>
-                  <div>Slides ↕</div>
                   <div>Views ↕</div>
                   <div>Likes ↕</div>
                   <div>Comments ↕</div>

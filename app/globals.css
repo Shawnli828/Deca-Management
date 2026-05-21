@@ -1527,7 +1527,7 @@
 
         .creator-table-head {
             display: grid;
-            grid-template-columns: minmax(280px, 1.35fr) repeat(7, minmax(76px, 0.42fr)) 42px;
+            grid-template-columns: minmax(260px, 1.2fr) minmax(140px, 0.62fr) repeat(6, minmax(76px, 0.42fr)) 42px;
             gap: 12px;
             align-items: center;
             min-height: 42px;
@@ -1541,7 +1541,7 @@
 
         .creator-header {
             display: grid;
-            grid-template-columns: minmax(280px, 1.35fr) repeat(7, minmax(76px, 0.42fr)) 42px;
+            grid-template-columns: minmax(260px, 1.2fr) minmax(140px, 0.62fr) repeat(6, minmax(76px, 0.42fr)) 42px;
             gap: 12px;
             align-items: center;
             min-height: 72px;
@@ -1625,16 +1625,17 @@
             color: #172016;
         }
 
-        .creator-tags {
+        .creator-inline-tags {
             display: flex;
             align-items: center;
-            gap: 7px;
+            flex-wrap: wrap;
+            gap: 6px;
             min-width: 0;
             overflow: hidden;
         }
 
-        .creator-tags .creator-chip {
-            max-width: 100%;
+        .creator-inline-tags .creator-tag-chip {
+            max-width: 112px;
             overflow: hidden;
             text-overflow: ellipsis;
         }
@@ -3638,31 +3639,38 @@
             min-width: 0;
         }
 
-        .creator-tags {
+        .creator-inline-tags {
             display: flex;
             flex-wrap: wrap;
-            gap: 8px;
-            border-top: 1px solid var(--line);
-            padding: 0 24px 14px 98px;
-            background: #050505;
+            gap: 6px;
+            align-items: center;
+            min-width: 0;
         }
 
         .creator-tag-chip,
         .creator-tag-add {
-            min-height: 28px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            height: 28px;
             border: 1px solid #474b91;
-            padding: 0 9px;
+            border-radius: 0;
+            padding: 0 8px;
             background: #151735;
             color: var(--accent-strong);
             cursor: pointer;
             font-size: 12px;
             font-weight: 850;
+            line-height: 1;
         }
 
         .creator-tag-add {
+            width: 28px;
+            padding: 0;
             border-color: var(--line);
             background: #151310;
             color: var(--muted);
+            font-size: 15px;
         }
 
         .tag-board {
@@ -3877,7 +3885,7 @@
                 flex-direction: column;
             }
 
-            .creator-tags {
+            .creator-inline-tags {
                 padding-left: 14px;
             }
 

@@ -48,7 +48,6 @@ export function ReelFarmAccountCard({
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const stats: Array<[string, string]> = [
     ['Posts', formatNumber(Number(summary.post_count) || posts.length)],
-    ['Slides', formatNumber(Number(summary.material_count) || Number(card.video_total) || slideshows.length)],
     ['Views', formatNumber(views)],
     ['Likes', formatNumber(likes)],
     ['Comments', formatNumber(comments)],
@@ -74,6 +73,14 @@ export function ReelFarmAccountCard({
             <span className="creator-subline">{displayAccount}</span>
           </span>
         </div>
+        <div className="creator-inline-tags" onClick={event => event.stopPropagation()}>
+          {tags.map(tag => (
+            <button className="creator-tag-chip" type="button" key={tag} onClick={() => onRemoveTag(card, tag)} title="点击删除">
+              #{tag}
+            </button>
+          ))}
+          <button className="creator-tag-add" type="button" onClick={() => onAddTag(card)} title="添加">+</button>
+        </div>
         {stats.map(([label, value]) => (
           <div className="creator-stat" key={label}>
             <div className="creator-stat-value">{value}</div>
@@ -83,14 +90,6 @@ export function ReelFarmAccountCard({
         <span className="creator-expand">›</span>
       </div>
       <div className="creator-row-subtitle">{automation.title || automation.automation_id || 'Untitled automation'}</div>
-      <div className="creator-tags" onClick={event => event.stopPropagation()}>
-        {tags.map(tag => (
-          <button className="creator-tag-chip" type="button" key={tag} onClick={() => onRemoveTag(card, tag)} title="点击删除 tag">
-            #{tag} ×
-          </button>
-        ))}
-        <button className="creator-tag-add" type="button" onClick={() => onAddTag(card)}>+ Tag</button>
-      </div>
       {isOpen ? (
         <>
           <div className="creator-toolbar">
