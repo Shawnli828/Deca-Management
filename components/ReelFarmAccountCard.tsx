@@ -29,6 +29,8 @@ export function ReelFarmAccountCard({
   availableTags: string[];
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [categoryInput, setCategoryInput] = useState('');
+  const [tagInput, setTagInput] = useState('');
   const key = cardStateKey(card);
   const automation = card.automation || {};
   const account = card.account || {};
@@ -39,7 +41,8 @@ export function ReelFarmAccountCard({
   const videos = card.videos || [];
   const summary = card.summary_metrics || {};
   const tags = card.tags || [];
-  const assignableTags = availableTags.filter(tag => !tags.includes(tag));
+  const categories = Array.from(new Set(availableTags.map(getTagCategory).filter(Boolean)));
+  const tagOptions = availableTags.filter(tag => !categoryInput.trim() || getTagCategory(tag).toLowerCase() === categoryInput.trim().toLowerCase());
   const views = Number(summary.total_views) || getMetricFromPosts(posts as any, 'view_count');
   const likes = Number(summary.total_likes) || getMetricFromPosts(posts as any, 'like_count');
   const comments = Number(summary.total_comments) || getMetricFromPosts(posts as any, 'comment_count');
@@ -78,29 +81,70 @@ export function ReelFarmAccountCard({
             <span className="creator-subline">{displayAccount}</span>
           </span>
         </div>
-        <div className={`creator-inline-tags ${pickerOpen ? 'is-picking' : ''}`} onClick={event => event.stopPropagation()}>
+        <div className="creator-inline-tags" onClick={event => event.stopPropagation()}>
           {tags.map(tag => (
-            <button className="creator-tag-chip" type="button" key={tag} onClick={() => onRemoveTag(card, tag)} title="点击删除">
-              #{tag}
+            <button className="creator-tag-chip" style={tagChipStyle(tag)} type="button" key={tag} onClick={() => onRemoveTag(card, tag)} title="点击删除">
+              {formatTagLabel(tag)} ×
             </button>
           ))}
           <button className="creator-tag-add" type="button" onClick={() => setPickerOpen(open => !open)} title="添加">+</button>
           {pickerOpen ? (
-            <span className="creator-tag-menu-inline">
-              {assignableTags.length ? assignableTags.map(tag => (
-                <button
-                  className="creator-tag-option"
-                  type="button"
-                  key={tag}
-                  onClick={() => {
-                    onAddTag(card, tag);
-                    setPickerOpen(false);
-                  }}
-                >
-                  #{tag}
-                </button>
-              )) : <span className="creator-tag-empty">先在左侧写 tag</span>}
-            </span>
+            <div className="tag-editor-backdrop" onClick={() => setPickerOpen(false)}>
+              <div className="tag-editor-modal" onClick={event => event.stopPropagation()}>
+                <button className="tag-editor-close" type="button" onClick={() => setPickerOpen(false)}>×</button>
+                <h3>Edit Creator Tags</h3>
+                <div className="tag-editor-section-title">Add Tag</div>
+                <div className="tag-editor-row">
+                  <label className="tag-editor-field">
+                    <span>⌕</span>
+                    <input
+                      value={categoryInput}
+                      onChange={event => setCategoryInput(event.target.value)}
+                      placeholder="Category (search or type new)"
+                      list={`tag-categories-${key}`}
+                    />
+                    <datalist id={`tag-categories-${key}`}>
+                      {categories.map(category => <option value={category} key={category} />)}
+                    </datalist>
+                  </label>
+                  <label className="tag-editor-field">
+                    <span>⌕</span>
+                    <input
+                      value={tagInput}
+                      onChange={event => setTagInput(event.target.value)}
+                      placeholder={categoryInput.trim() ? 'Select or type tag' : 'Select category first...'}
+                      list={`tag-options-${key}`}
+                    />
+                    <datalist id={`tag-options-${key}`}>
+                      {tagOptions.map(option => <option value={getTagName(option)} key={option} />)}
+                    </datalist>
+                  </label>
+                  <button
+                    className="tag-editor-add"
+                    type="button"
+                    disabled={!categoryInput.trim() || !tagInput.trim()}
+                    onClick={() => {
+                      const nextTag = composeTag(categoryInput, tagInput);
+                      onAddTag(card, nextTag);
+                      setTagInput('');
+                    }}
+                  >
+                    + Add
+                  </button>
+                </div>
+                <div className="tag-editor-current">
+                  {tags.length ? tags.map(tag => (
+                    <button className="creator-tag-chip" style={tagChipStyle(tag)} type="button" key={tag} onClick={() => onRemoveTag(card, tag)}>
+                      {formatTagLabel(tag)} ×
+                    </button>
+                  )) : <span className="creator-tag-empty">No tags yet</span>}
+                </div>
+                <div className="tag-editor-actions">
+                  <button className="tag-editor-cancel" type="button" onClick={() => setPickerOpen(false)}>Cancel</button>
+                  <button className="tag-editor-save" type="button" onClick={() => setPickerOpen(false)}>Save Tags</button>
+                </div>
+              </div>
+            </div>
           ) : null}
         </div>
         {stats.map(([label, value]) => (
@@ -151,4 +195,43 @@ export function ReelFarmAccountCard({
       ) : null}
     </article>
   );
+}
+
+function splitTag(value: string) {
+  const [category, ...rest] = String(value || '').split(':');
+  return {
+    category: rest.length ? category.trim() : 'General',
+    name: (rest.length ? rest.join(':') : category).trim()
+  };
+}
+
+function getTagCategory(value: string) {
+  return splitTag(value).category;
+}
+
+function getTagName(value: string) {
+  return splitTag(value).name;
+}
+
+function composeTag(category: string, tag: string) {
+  return `${category.trim()}: ${tag.trim()}`;
+}
+
+function formatTagLabel(value: string) {
+  const { category, name } = splitTag(value);
+  return `${category} · ${name}`;
+}
+
+function tagChipStyle(value: string) {
+  const palette = [
+    { bg: '#252044', border: '#6f63ff', color: '#c9c5ff' },
+    { bg: '#15342a', border: '#38c78b', color: '#a8f0cc' },
+    { bg: '#3a2415', border: '#f29b4b', color: '#ffd0a3' },
+    { bg: '#3a1825', border: '#f06f9a', color: '#ffc1d3' },
+    { bg: '#172d3d', border: '#5bbce9', color: '#b8eaff' }
+  ];
+  let hash = 0;
+  for (const char of getTagCategory(value)) hash = char.charCodeAt(0) + ((hash << 5) - hash);
+  const color = palette[Math.abs(hash) % palette.length];
+  return { background: color.bg, borderColor: color.border, color: color.color };
 }

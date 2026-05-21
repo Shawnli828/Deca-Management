@@ -276,19 +276,15 @@ export default function DashboardPage() {
     const accountId = getCardAccountId(card);
     if (!accountId) return;
     if (!tag?.trim()) return;
+    const product = selectedProduct;
+    if (product) {
+      const productCode = getProductReelFarmCode(product);
+      const productTagPayload = await api.createProductTag(productCode, tag.trim());
+      setProductTags(previous => ({ ...previous, [productCode]: productTagPayload.tags || [] }));
+    }
     const payload = await api.addAccountTag(accountId, tag.trim());
     updateCardTags(accountId, previous => Array.from(new Set([...previous, payload.tag])));
     if (tool === 'tags') await loadTagDashboard();
-  }
-
-  async function createCountryTag(tag: string) {
-    const product = selectedProduct;
-    if (!product || !tag.trim()) return;
-    const productCode = getProductReelFarmCode(product);
-    const payload = await api.createProductTag(productCode, tag.trim());
-    setProductTags(previous => ({ ...previous, [productCode]: payload.tags || [] }));
-    setStatus(`#${tag.trim()} 已加入 ${product.name} tag 池`);
-    setStatusError(false);
   }
 
   async function removeCardTag(card: ReelFarmCard, tag: string) {
@@ -685,7 +681,6 @@ export default function DashboardPage() {
                   onAddTag={addCardTag}
                   onRemoveTag={removeCardTag}
                   productTags={productTags[getProductReelFarmCode(selectedProduct)] || []}
-                  onCreateTag={createCountryTag}
                 />
               ) : null}
             </section>
