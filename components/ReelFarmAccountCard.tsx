@@ -78,32 +78,30 @@ export function ReelFarmAccountCard({
             <span className="creator-subline">{displayAccount}</span>
           </span>
         </div>
-        <div className="creator-inline-tags" onClick={event => event.stopPropagation()}>
+        <div className={`creator-inline-tags ${pickerOpen ? 'is-picking' : ''}`} onClick={event => event.stopPropagation()}>
           {tags.map(tag => (
             <button className="creator-tag-chip" type="button" key={tag} onClick={() => onRemoveTag(card, tag)} title="点击删除">
               #{tag}
             </button>
           ))}
-          <span className="creator-tag-pick">
-            <button className="creator-tag-add" type="button" onClick={() => setPickerOpen(open => !open)} title="添加">+</button>
-            {pickerOpen ? (
-              <span className="creator-tag-menu">
-                {assignableTags.length ? assignableTags.map(tag => (
-                  <button
-                    className="creator-tag-option"
-                    type="button"
-                    key={tag}
-                    onClick={() => {
-                      onAddTag(card, tag);
-                      setPickerOpen(false);
-                    }}
-                  >
-                    #{tag}
-                  </button>
-                )) : <span className="creator-tag-empty">先在左侧写 tag</span>}
-              </span>
-            ) : null}
-          </span>
+          <button className="creator-tag-add" type="button" onClick={() => setPickerOpen(open => !open)} title="添加">+</button>
+          {pickerOpen ? (
+            <span className="creator-tag-menu-inline">
+              {assignableTags.length ? assignableTags.map(tag => (
+                <button
+                  className="creator-tag-option"
+                  type="button"
+                  key={tag}
+                  onClick={() => {
+                    onAddTag(card, tag);
+                    setPickerOpen(false);
+                  }}
+                >
+                  #{tag}
+                </button>
+              )) : <span className="creator-tag-empty">先在左侧写 tag</span>}
+            </span>
+          ) : null}
         </div>
         {stats.map(([label, value]) => (
           <div className="creator-stat" key={label}>
