@@ -2355,7 +2355,15 @@ def tag_dashboard_payload(product_code):
                 acc.status,
                 COUNT(DISTINCT post.id) AS post_count,
                 COALESCE(SUM(post.view_count), 0) AS total_views,
-                MAX(post.published_at) AS latest_post_at
+                MAX(post.published_at) AS latest_post_at,
+                COUNT(DISTINCT CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.id END) AS yesterday_posts,
+                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.view_count ELSE 0 END), 0) AS yesterday_views,
+                COUNT(DISTINCT CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.id END) AS seven_day_posts,
+                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.view_count ELSE 0 END), 0) AS seven_day_views,
+                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.like_count ELSE 0 END), 0) AS seven_day_likes,
+                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.comment_count ELSE 0 END), 0) AS seven_day_comments,
+                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.share_count ELSE 0 END), 0) AS seven_day_shares,
+                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.bookmark_count ELSE 0 END), 0) AS seven_day_bookmarks
             FROM account_tags tag
             JOIN accounts acc ON acc.id = tag.account_id
             JOIN product_market_channels pmc ON pmc.id = acc.product_market_channel_id
@@ -2368,7 +2376,17 @@ def tag_dashboard_payload(product_code):
             GROUP BY tag.tag, p.id, p.name, p.code, m.id, m.name, m.code, acc.id, acc.reelfarm_account_id, acc.username, acc.display_name, acc.avatar_url, acc.status
             ORDER BY tag.tag, m.name, total_views DESC
             """,
-            ("TIKTOK", product_code),
+            (
+                windows["yesterday_start"], windows["yesterday_end"],
+                windows["yesterday_start"], windows["yesterday_end"],
+                windows["seven_start"], windows["seven_end"],
+                windows["seven_start"], windows["seven_end"],
+                windows["seven_start"], windows["seven_end"],
+                windows["seven_start"], windows["seven_end"],
+                windows["seven_start"], windows["seven_end"],
+                windows["seven_start"], windows["seven_end"],
+                "TIKTOK", product_code,
+            ),
         ).fetchall()
 
     tags = []
@@ -2401,8 +2419,26 @@ def tag_dashboard_payload(product_code):
             "country_id": data.get("country_id"),
             "country_name": data.get("country_name"),
             "country_code": data.get("country_code"),
+            "account_count": 0,
+            "_yesterday_posts": 0,
+            "_yesterday_views": 0,
+            "_seven_day_posts": 0,
+            "_seven_day_views": 0,
+            "_seven_day_likes": 0,
+            "_seven_day_comments": 0,
+            "_seven_day_shares": 0,
+            "_seven_day_bookmarks": 0,
             "accounts": [],
         })
+        country["account_count"] += 1
+        country["_yesterday_posts"] += int(data.get("yesterday_posts") or 0)
+        country["_yesterday_views"] += int(data.get("yesterday_views") or 0)
+        country["_seven_day_posts"] += int(data.get("seven_day_posts") or 0)
+        country["_seven_day_views"] += int(data.get("seven_day_views") or 0)
+        country["_seven_day_likes"] += int(data.get("seven_day_likes") or 0)
+        country["_seven_day_comments"] += int(data.get("seven_day_comments") or 0)
+        country["_seven_day_shares"] += int(data.get("seven_day_shares") or 0)
+        country["_seven_day_bookmarks"] += int(data.get("seven_day_bookmarks") or 0)
         country["accounts"].append({
             "account_id": data.get("account_id"),
             "username": data.get("username"),
@@ -2414,6 +2450,15 @@ def tag_dashboard_payload(product_code):
             "latest_post_at": data.get("latest_post_at"),
         })
     for item in tags:
+        for country in item["countries"].values():
+            seven_views = country.pop("_seven_day_views", 0)
+            seven_posts = country.pop("_seven_day_posts", 0)
+            yesterday_views = country.pop("_yesterday_views", 0)
+            yesterday_posts = country.pop("_yesterday_posts", 0)
+            interactions = sum(country.pop(key, 0) for key in ("_seven_day_likes", "_seven_day_comments", "_seven_day_shares", "_seven_day_bookmarks"))
+            country["yesterday_avg_views"] = round(yesterday_views / yesterday_posts) if yesterday_posts else 0
+            country["seven_day_avg_views"] = round(seven_views / seven_posts) if seven_posts else 0
+            country["seven_day_er"] = (interactions / seven_views * 100) if seven_views else 0
         item["countries"] = list(item["countries"].values())
     return {"ok": True, "product_code": product_code, "windows": windows, "tags": tags}
 

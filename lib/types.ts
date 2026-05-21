@@ -66,6 +66,10 @@ export type TagDashboardCountry = {
   country_id?: string;
   country_name?: string;
   country_code?: string;
+  account_count?: number;
+  yesterday_avg_views?: number;
+  seven_day_avg_views?: number;
+  seven_day_er?: number;
   accounts: TagDashboardAccount[];
 };
 

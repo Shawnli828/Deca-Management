@@ -3813,24 +3813,6 @@
             gap: 18px;
         }
 
-        .tag-board-hero {
-            display: flex;
-            align-items: end;
-            justify-content: space-between;
-            gap: 16px;
-            border: 1px solid var(--line);
-            padding: 18px;
-            background: #11100e;
-        }
-
-        .tag-board-hero h2 {
-            margin: 0;
-            color: var(--text);
-            font-size: 28px;
-            line-height: 1.15;
-        }
-
-        .tag-board-hero p,
         .tag-card-head p {
             margin: 6px 0 0;
             color: var(--muted);
@@ -3841,7 +3823,7 @@
         .tag-board-controls {
             display: flex;
             gap: 10px;
-            min-width: min(460px, 100%);
+            width: min(620px, 100%);
         }
 
         .tag-grid {
@@ -3912,6 +3894,49 @@
             margin: 0;
             color: var(--text);
             font-size: 15px;
+        }
+
+        .tag-country-head {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .tag-country-head span {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 850;
+        }
+
+        .tag-country-kpis {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .tag-country-kpis div {
+            border: 1px solid var(--line);
+            padding: 10px;
+            background: #11100e;
+        }
+
+        .tag-country-kpis span,
+        .tag-country-kpis strong {
+            display: block;
+        }
+
+        .tag-country-kpis span {
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 850;
+        }
+
+        .tag-country-kpis strong {
+            margin-top: 5px;
+            color: var(--accent-strong);
+            font-size: 22px;
+            line-height: 1;
         }
 
         .tag-account-row {
@@ -4008,14 +4033,14 @@
             .publish-check-hero,
             .publish-check-panel-head,
             .publish-result-actions,
-            .tag-board-hero,
             .missing-account-row {
                 align-items: stretch;
                 flex-direction: column;
             }
 
             .tag-board-controls,
-            .tag-kpis {
+            .tag-kpis,
+            .tag-country-kpis {
                 grid-template-columns: minmax(0, 1fr);
                 flex-direction: column;
             }

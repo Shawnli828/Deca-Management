@@ -18,25 +18,25 @@ export function TagBoard({
   onProductChange: (productId: string) => void;
   onRefresh: () => void;
 }) {
-  const selectedProduct = products.find(product => product.id === selectedProductId) || products[0];
+  const selectedProduct = products.find(product => product.id === selectedProductId);
+  const showCards = Boolean(selectedProduct && dashboard);
 
   return (
     <section className="tag-board">
-      <div className="tag-board-hero">
-        <div>
-          <h2>Tag 看板</h2>
-          <p>每个产品单独管理 Tag，把同一产品下不同国家的账号聚拢起来观察。</p>
-        </div>
-        <div className="tag-board-controls">
-          <select className="text-input" value={selectedProduct?.id || ''} onChange={event => onProductChange(event.target.value)}>
-            {products.map(product => <option value={product.id} key={product.id}>{product.name}</option>)}
-          </select>
-          <button className="btn ghost" type="button" onClick={onRefresh} disabled={loading}>{loading ? '读取中...' : '刷新'}</button>
-        </div>
+      <div className="tag-board-controls">
+        <select className="text-input" value={selectedProduct?.id || ''} onChange={event => onProductChange(event.target.value)}>
+          <option value="">选择产品</option>
+          {products.map(product => <option value={product.id} key={product.id}>{product.name}</option>)}
+        </select>
+        <button className="btn ghost" type="button" onClick={onRefresh} disabled={!selectedProduct || loading}>{loading ? '读取中...' : '刷新'}</button>
       </div>
 
       <div className="tag-grid">
-        {dashboard?.tags?.length ? dashboard.tags.map(tag => (
+        {!selectedProduct ? (
+          <div className="empty-state">先选择一个产品，再查看对应的账号 Tag 看板。</div>
+        ) : loading ? (
+          <div className="empty-state">正在读取 Tag 看板...</div>
+        ) : showCards && dashboard?.tags?.length ? dashboard.tags.map(tag => (
           <article className="tag-card" key={tag.tag}>
             <div className="tag-card-head">
               <div>
@@ -52,7 +52,15 @@ export function TagBoard({
             <div className="tag-country-list">
               {tag.countries.map(country => (
                 <section className="tag-country-group" key={country.country_id || country.country_code}>
-                  <h3>{countryFlag({ id: country.country_id || '', name: country.country_name || '', reelFarmCode: country.country_code || getCountryReelFarmCode({ id: '', name: country.country_name || '' }) })} {country.country_name || country.country_code}</h3>
+                  <div className="tag-country-head">
+                    <h3>{countryFlag({ id: country.country_id || '', name: country.country_name || '', reelFarmCode: country.country_code || getCountryReelFarmCode({ id: '', name: country.country_name || '' }) })} {country.country_name || country.country_code}</h3>
+                    <span>{formatNumber(country.account_count || country.accounts.length)} 个账号</span>
+                  </div>
+                  <div className="tag-country-kpis">
+                    <div><span>昨日均播</span><strong>{formatNumber(country.yesterday_avg_views || 0)}</strong></div>
+                    <div><span>7日均播</span><strong>{formatNumber(country.seven_day_avg_views || 0)}</strong></div>
+                    <div><span>7日 ER</span><strong>{formatPercent(country.seven_day_er || 0)}</strong></div>
+                  </div>
                   <div className="tag-account-list">
                     {country.accounts.map(account => (
                       <div className="tag-account-row" key={account.account_id}>

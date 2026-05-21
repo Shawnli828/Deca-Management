@@ -239,8 +239,8 @@ export default function DashboardPage() {
     return String(account.id || account.account_id || '').trim();
   }
 
-  async function loadTagDashboard(productId = tagProductId || selectedProductId) {
-    const product = products.find(item => item.id === productId) || products[0];
+  async function loadTagDashboard(productId = tagProductId) {
+    const product = products.find(item => item.id === productId);
     if (!product) return;
     setTagDashboardLoading(true);
     try {
@@ -257,12 +257,13 @@ export default function DashboardPage() {
 
   function changeTagProduct(productId: string) {
     setTagProductId(productId);
-    loadTagDashboard(productId);
+    setTagDashboard(null);
+    if (productId) loadTagDashboard(productId);
   }
 
   useEffect(() => {
-    if (authenticated && tool === 'tags') {
-      loadTagDashboard(tagProductId || selectedProductId);
+    if (authenticated && tool === 'tags' && tagProductId) {
+      loadTagDashboard(tagProductId);
     }
   }, [authenticated, tool]);
 
@@ -715,20 +716,13 @@ export default function DashboardPage() {
             />
           </section>
           <section className={`tool-page ${tool === 'tags' ? 'active' : ''}`}>
-            <header className="topbar">
-              <div>
-                <h1>Tags</h1>
-                <p className="subtitle">按单个产品聚合账号 Tag，看不同国家账号的昨日均播和 7 日表现。</p>
-              </div>
-              <div className="top-actions"><span className="status-pill">Product Scoped</span></div>
-            </header>
             <TagBoard
               products={products}
-              selectedProductId={tagProductId || selectedProductId}
+              selectedProductId={tagProductId}
               dashboard={tagDashboard}
               loading={tagDashboardLoading}
               onProductChange={changeTagProduct}
-              onRefresh={() => loadTagDashboard(tagProductId || selectedProductId)}
+              onRefresh={() => loadTagDashboard(tagProductId)}
             />
           </section>
         </main>
