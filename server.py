@@ -2079,11 +2079,14 @@ def query_product_kpis(query):
         raise ValueError("product_code is required.")
     placeholder = db_placeholder()
     now_utc = datetime.now(timezone.utc)
-    today = beijing_day_window(now_utc)
     beijing = timezone(timedelta(hours=8))
     current_local = now_utc.astimezone(beijing)
-    seven_start_local = datetime(current_local.year, current_local.month, current_local.day, tzinfo=beijing) - timedelta(days=6)
-    seven_end_local = datetime(current_local.year, current_local.month, current_local.day, tzinfo=beijing) + timedelta(days=1)
+    today_start_local = datetime(current_local.year, current_local.month, current_local.day, tzinfo=beijing)
+    yesterday_start_local = today_start_local - timedelta(days=1)
+    seven_start_local = yesterday_start_local - timedelta(days=6)
+    seven_end_local = today_start_local
+    yesterday_start = yesterday_start_local.astimezone(timezone.utc).isoformat()
+    yesterday_end = today_start_local.astimezone(timezone.utc).isoformat()
     seven_start = seven_start_local.astimezone(timezone.utc).isoformat()
     seven_end = seven_end_local.astimezone(timezone.utc).isoformat()
     market_filter = ""
@@ -2108,8 +2111,8 @@ def query_product_kpis(query):
             WHERE ch.code = {placeholder} AND p.code = {placeholder}{market_filter} AND post.id IS NOT NULL
             """,
             (
-                today["utc_start"], today["utc_end"],
-                today["utc_start"], today["utc_end"],
+                yesterday_start, yesterday_end,
+                yesterday_start, yesterday_end,
                 seven_start, seven_end,
                 seven_start, seven_end,
                 seven_start, seven_end,
@@ -2137,7 +2140,7 @@ def query_product_kpis(query):
             "posts": today_posts,
             "views": today_views,
             "average_views": round(today_views / today_posts) if today_posts else 0,
-            "utc_window": {"start": today["utc_start"], "end": today["utc_end"]},
+            "utc_window": {"start": yesterday_start, "end": yesterday_end},
         },
         "seven_day": {
             "posts": seven_posts,

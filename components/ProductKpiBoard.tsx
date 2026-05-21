@@ -11,7 +11,7 @@ export function ProductKpiBoard({ kpis }: { kpis?: ProductKpis | null }) {
   return (
     <div className="product-kpi-board">
       <div className="product-kpi-card today">
-        <span>当日均播</span>
+        <span>昨日均播</span>
         <strong>{formatNumber(todayAverageViews)}</strong>
       </div>
       <div className="product-kpi-card views">
