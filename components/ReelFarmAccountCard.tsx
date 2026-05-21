@@ -1,6 +1,3 @@
-'use client';
-
-import { useState } from 'react';
 import type { ReelFarmCard } from '@/lib/types';
 import { cardStateKey, formatNumber, formatPercent, getMetricFromPosts } from '@/lib/utils';
 import { MaterialCard } from './MaterialCard';
@@ -13,9 +10,8 @@ export function ReelFarmAccountCard({
   onToggle,
   onPage,
   onMoveSlide,
-  onAddTag,
   onRemoveTag,
-  availableTags
+  onOpenTagEditor
 }: {
   card: ReelFarmCard;
   isOpen: boolean;
@@ -24,13 +20,9 @@ export function ReelFarmAccountCard({
   onToggle: (key: string) => void;
   onPage: (key: string, direction: number) => void;
   onMoveSlide: (videoId: string, direction: number, total: number) => void;
-  onAddTag: (card: ReelFarmCard, tag: string) => void;
   onRemoveTag: (card: ReelFarmCard, tag: string) => void;
-  availableTags: string[];
+  onOpenTagEditor: (card: ReelFarmCard) => void;
 }) {
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [categoryInput, setCategoryInput] = useState('');
-  const [tagInput, setTagInput] = useState('');
   const key = cardStateKey(card);
   const automation = card.automation || {};
   const account = card.account || {};
@@ -41,8 +33,6 @@ export function ReelFarmAccountCard({
   const videos = card.videos || [];
   const summary = card.summary_metrics || {};
   const tags = card.tags || [];
-  const categories = Array.from(new Set(availableTags.map(getTagCategory).filter(Boolean)));
-  const tagOptions = availableTags.filter(tag => !categoryInput.trim() || getTagCategory(tag).toLowerCase() === categoryInput.trim().toLowerCase());
   const views = Number(summary.total_views) || getMetricFromPosts(posts as any, 'view_count');
   const likes = Number(summary.total_likes) || getMetricFromPosts(posts as any, 'like_count');
   const comments = Number(summary.total_comments) || getMetricFromPosts(posts as any, 'comment_count');
@@ -87,65 +77,7 @@ export function ReelFarmAccountCard({
               {formatTagLabel(tag)} ×
             </button>
           ))}
-          <button className="creator-tag-add" type="button" onClick={() => setPickerOpen(open => !open)} title="添加">+</button>
-          {pickerOpen ? (
-            <div className="tag-editor-backdrop" onClick={() => setPickerOpen(false)}>
-              <div className="tag-editor-modal" onClick={event => event.stopPropagation()}>
-                <button className="tag-editor-close" type="button" onClick={() => setPickerOpen(false)}>×</button>
-                <h3>Edit Creator Tags</h3>
-                <div className="tag-editor-section-title">Add Tag</div>
-                <div className="tag-editor-row">
-                  <label className="tag-editor-field">
-                    <span>⌕</span>
-                    <input
-                      value={categoryInput}
-                      onChange={event => setCategoryInput(event.target.value)}
-                      placeholder="Category (search or type new)"
-                      list={`tag-categories-${key}`}
-                    />
-                    <datalist id={`tag-categories-${key}`}>
-                      {categories.map(category => <option value={category} key={category} />)}
-                    </datalist>
-                  </label>
-                  <label className="tag-editor-field">
-                    <span>⌕</span>
-                    <input
-                      value={tagInput}
-                      onChange={event => setTagInput(event.target.value)}
-                      placeholder={categoryInput.trim() ? 'Select or type tag' : 'Select category first...'}
-                      list={`tag-options-${key}`}
-                    />
-                    <datalist id={`tag-options-${key}`}>
-                      {tagOptions.map(option => <option value={getTagName(option)} key={option} />)}
-                    </datalist>
-                  </label>
-                  <button
-                    className="tag-editor-add"
-                    type="button"
-                    disabled={!categoryInput.trim() || !tagInput.trim()}
-                    onClick={() => {
-                      const nextTag = composeTag(categoryInput, tagInput);
-                      onAddTag(card, nextTag);
-                      setTagInput('');
-                    }}
-                  >
-                    + Add
-                  </button>
-                </div>
-                <div className="tag-editor-current">
-                  {tags.length ? tags.map(tag => (
-                    <button className="creator-tag-chip" style={tagChipStyle(tag)} type="button" key={tag} onClick={() => onRemoveTag(card, tag)}>
-                      {formatTagLabel(tag)} ×
-                    </button>
-                  )) : <span className="creator-tag-empty">No tags yet</span>}
-                </div>
-                <div className="tag-editor-actions">
-                  <button className="tag-editor-cancel" type="button" onClick={() => setPickerOpen(false)}>Cancel</button>
-                  <button className="tag-editor-save" type="button" onClick={() => setPickerOpen(false)}>Save Tags</button>
-                </div>
-              </div>
-            </div>
-          ) : null}
+          <button className="creator-tag-add" type="button" onClick={() => onOpenTagEditor(card)} title="添加">+</button>
         </div>
         {stats.map(([label, value]) => (
           <div className="creator-stat" key={label}>
@@ -197,7 +129,7 @@ export function ReelFarmAccountCard({
   );
 }
 
-function splitTag(value: string) {
+export function splitTag(value: string) {
   const [category, ...rest] = String(value || '').split(':');
   return {
     category: rest.length ? category.trim() : 'General',
@@ -205,24 +137,24 @@ function splitTag(value: string) {
   };
 }
 
-function getTagCategory(value: string) {
+export function getTagCategory(value: string) {
   return splitTag(value).category;
 }
 
-function getTagName(value: string) {
+export function getTagName(value: string) {
   return splitTag(value).name;
 }
 
-function composeTag(category: string, tag: string) {
+export function composeTag(category: string, tag: string) {
   return `${category.trim()}: ${tag.trim()}`;
 }
 
-function formatTagLabel(value: string) {
+export function formatTagLabel(value: string) {
   const { category, name } = splitTag(value);
   return `${category} · ${name}`;
 }
 
-function tagChipStyle(value: string) {
+export function tagChipStyle(value: string) {
   const palette = [
     { bg: '#252044', border: '#6f63ff', color: '#c9c5ff' },
     { bg: '#15342a', border: '#38c78b', color: '#a8f0cc' },
