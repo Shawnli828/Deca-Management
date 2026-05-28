@@ -16,6 +16,62 @@ type AccountPostState = {
 };
 
 const ACCOUNT_POST_PAGE_SIZE = 4;
+const DATE_PRESETS = [
+  { key: 'today', label: 'Today' },
+  { key: 'yesterday', label: 'Yesterday' },
+  { key: '7d', label: 'Last 7 days' },
+  { key: '30d', label: 'Last 30 days' },
+  { key: '3m', label: 'Last 3 months' },
+  { key: '6m', label: 'Last 6 months' }
+] as const;
+
+type DatePresetKey = typeof DATE_PRESETS[number]['key'];
+
+function dateInputValue(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function parseInputDate(value: string) {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, (month || 1) - 1, day || 1);
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function addMonths(date: Date, months: number) {
+  const next = new Date(date);
+  next.setMonth(next.getMonth() + months);
+  return next;
+}
+
+function rangeForPreset(preset: DatePresetKey) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (preset === 'today') return { from: dateInputValue(today), to: dateInputValue(today) };
+  if (preset === 'yesterday') {
+    const yesterday = addDays(today, -1);
+    return { from: dateInputValue(yesterday), to: dateInputValue(yesterday) };
+  }
+  if (preset === '30d') return { from: dateInputValue(addDays(today, -29)), to: dateInputValue(today) };
+  if (preset === '3m') return { from: dateInputValue(addMonths(today, -3)), to: dateInputValue(today) };
+  if (preset === '6m') return { from: dateInputValue(addMonths(today, -6)), to: dateInputValue(today) };
+  return { from: dateInputValue(addDays(today, -6)), to: dateInputValue(today) };
+}
+
+function displayDateRange(from: string, to: string) {
+  const formatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return `${formatter.format(parseInputDate(from))} - ${formatter.format(parseInputDate(to))}`;
+}
+
+function sameDate(left: string, right: string) {
+  return left === right;
+}
+
+const defaultDateRange = rangeForPreset('7d');
 
 export function CountryList({
   product,
@@ -37,8 +93,8 @@ export function CountryList({
   const [countryFilter, setCountryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [tagFilter, setTagFilter] = useState('all');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const [dateFrom, setDateFrom] = useState(defaultDateRange.from);
+  const [dateTo, setDateTo] = useState(defaultDateRange.to);
   const [expandedAccounts, setExpandedAccounts] = useState<Record<string, boolean>>({});
   const [postCache, setPostCache] = useState<Record<string, AccountPostState>>({});
 
@@ -203,17 +259,14 @@ export function CountryList({
           <option value="all">Tags</option>
           {tagOptions.map(tag => <option value={tag} key={tag}>{tag}</option>)}
         </select>
-        <div className="date-filter">
-          <label>
-            <span>From</span>
-            <input className="text-input" type="date" value={dateFrom} onChange={event => setDateFrom(event.target.value)} />
-          </label>
-          <label>
-            <span>To</span>
-            <input className="text-input" type="date" value={dateTo} onChange={event => setDateTo(event.target.value)} />
-          </label>
-          {(dateFrom || dateTo) ? <button className="pool-detail-btn" type="button" onClick={() => { setDateFrom(''); setDateTo(''); }}>Clear</button> : null}
-        </div>
+        <DateRangeFilter
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onApply={(from, to) => {
+            setDateFrom(from);
+            setDateTo(to);
+          }}
+        />
       </div>
 
       <div className="account-level-row">
@@ -298,6 +351,120 @@ export function CountryList({
         </table>
       </div>
     </section>
+  );
+}
+
+function DateRangeFilter({
+  dateFrom,
+  dateTo,
+  onApply
+}: {
+  dateFrom: string;
+  dateTo: string;
+  onApply: (from: string, to: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draftFrom, setDraftFrom] = useState(dateFrom);
+  const [draftTo, setDraftTo] = useState(dateTo);
+  const [month, setMonth] = useState(() => parseInputDate(dateFrom || defaultDateRange.from));
+
+  function openPicker() {
+    setDraftFrom(dateFrom);
+    setDraftTo(dateTo);
+    setMonth(parseInputDate(dateFrom || defaultDateRange.from));
+    setOpen(true);
+  }
+
+  function applyPreset(preset: DatePresetKey) {
+    const range = rangeForPreset(preset);
+    setDraftFrom(range.from);
+    setDraftTo(range.to);
+    setMonth(parseInputDate(range.from));
+  }
+
+  function selectDay(value: string) {
+    if (!draftFrom || (draftFrom && draftTo)) {
+      setDraftFrom(value);
+      setDraftTo('');
+      return;
+    }
+    if (value < draftFrom) {
+      setDraftTo(draftFrom);
+      setDraftFrom(value);
+      return;
+    }
+    setDraftTo(value);
+  }
+
+  const monthStart = new Date(month.getFullYear(), month.getMonth(), 1);
+  const calendarStart = addDays(monthStart, -monthStart.getDay());
+  const days = Array.from({ length: 42 }, (_, index) => addDays(calendarStart, index));
+  const monthLabel = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(monthStart);
+
+  return (
+    <div className="date-range-filter">
+      <button className="date-range-trigger" type="button" onClick={openPicker}>
+        <span className="date-range-icon">▣</span>
+        <span>{displayDateRange(dateFrom, dateTo)}</span>
+      </button>
+      {open ? (
+        <div className="date-range-popover">
+          <div className="date-range-presets">
+            <h3>Date Range</h3>
+            {DATE_PRESETS.map(preset => {
+              const range = rangeForPreset(preset.key);
+              const active = sameDate(draftFrom, range.from) && sameDate(draftTo, range.to);
+              return (
+                <button className={active ? 'active' : ''} type="button" key={preset.key} onClick={() => applyPreset(preset.key)}>
+                  {preset.label}
+                </button>
+              );
+            })}
+          </div>
+          <div className="date-calendar">
+            <div className="date-calendar-head">
+              <button type="button" onClick={() => setMonth(addMonths(month, -1))}>‹</button>
+              <strong>{monthLabel}</strong>
+              <button type="button" onClick={() => setMonth(addMonths(month, 1))}>›</button>
+            </div>
+            <div className="date-calendar-grid week">
+              {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => <span key={day}>{day}</span>)}
+            </div>
+            <div className="date-calendar-grid">
+              {days.map(day => {
+                const value = dateInputValue(day);
+                const outside = day.getMonth() !== month.getMonth();
+                const selected = value === draftFrom || value === draftTo;
+                const inRange = draftFrom && draftTo && value > draftFrom && value < draftTo;
+                return (
+                  <button
+                    className={`${outside ? 'outside' : ''} ${selected ? 'selected' : ''} ${inRange ? 'in-range' : ''}`}
+                    type="button"
+                    key={value}
+                    onClick={() => selectDay(value)}
+                  >
+                    {day.getDate()}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="date-range-actions">
+            <button type="button" onClick={() => setOpen(false)}>Cancel</button>
+            <button
+              className="primary"
+              type="button"
+              onClick={() => {
+                onApply(draftFrom || dateFrom, draftTo || draftFrom || dateTo);
+                setOpen(false);
+              }}
+            >
+              Apply
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
