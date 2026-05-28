@@ -4778,3 +4778,149 @@
         .database-stat-label {
             color: var(--muted) !important;
         }
+
+        /* Light theme module cleanup */
+        .brand-mark,
+        .brand-cn,
+        .topbar h1,
+        .side-brand,
+        .side-brand-text,
+        .side-nav-title,
+        .roaster-toolbar h2,
+        .publish-check-hero h2,
+        .publish-check-panel h3,
+        .tag-board-hero h2,
+        .tag-name,
+        .tag-country-group h3,
+        .assignment-cell strong,
+        .roaster-app-name {
+            color: var(--text) !important;
+        }
+
+        .brand-dot {
+            color: var(--accent) !important;
+        }
+
+        .roaster-people,
+        .roaster-table-wrap,
+        .roaster-table,
+        .roaster-table thead,
+        .roaster-table tbody,
+        .roaster-table tr,
+        .roaster-table th,
+        .roaster-table td,
+        .roaster-group-row,
+        .roaster-dropzone,
+        .roaster-product-cell,
+        .roaster-product-logo,
+        .publish-check-hero,
+        .publish-check-panel,
+        .publish-check-window,
+        .assignment-table,
+        .assignment-list,
+        .assignment-row,
+        .assignment-table-head,
+        .publish-result-card,
+        .publish-result-card-head,
+        .missing-account-row,
+        .tag-board-hero,
+        .tag-grid,
+        .tag-card,
+        .tag-card-head,
+        .tag-kpis div,
+        .tag-country-group,
+        .tag-country-head,
+        .tag-country-kpis div,
+        .tag-account-list,
+        .tag-account-row,
+        .database-json,
+        .api-reference-section,
+        .api-reference-hero,
+        .api-card,
+        .api-resource-card {
+            background: #ffffff !important;
+            color: var(--text) !important;
+            border-color: var(--line) !important;
+        }
+
+        .roaster-table th,
+        .roaster-table td,
+        .assignment-table-head,
+        .assignment-cell,
+        .assignment-actions,
+        .publish-check-window,
+        .publish-result-card,
+        .missing-account-row,
+        .tag-country-group {
+            border-color: var(--line) !important;
+        }
+
+        .roaster-dropzone.is-empty,
+        .roaster-empty-cell-label,
+        .person-chip,
+        .assignment-chip,
+        .publish-check-summary,
+        .publish-result-count,
+        .assignment-product-logo,
+        .tag-kpis div,
+        .tag-country-kpis div,
+        .tag-account-avatar,
+        .tag-board-controls .text-input,
+        .api-code,
+        code,
+        pre {
+            background: #f7f8fa !important;
+            color: var(--text) !important;
+            border-color: var(--line) !important;
+        }
+
+        .roaster-empty-cell-label,
+        .roaster-empty-people,
+        .publish-check-hero p,
+        .publish-check-panel p,
+        .publish-check-window,
+        .assignment-table-head button,
+        .assignment-table-head span,
+        .tag-board-hero p,
+        .tag-card-head p,
+        .tag-kpis span,
+        .tag-country-kpis span,
+        .tag-country-head span,
+        .tag-account-row span {
+            color: var(--muted) !important;
+        }
+
+        .tag-kpis strong,
+        .tag-country-kpis strong,
+        .publish-check-summary strong {
+            color: var(--accent-strong) !important;
+        }
+
+        .assignment-table-head button.active,
+        .assignment-table-head button:hover,
+        .tag-country-head:hover,
+        .tag-country-head:hover h3,
+        .tag-country-head:hover span {
+            background: var(--accent-soft) !important;
+            color: var(--accent-strong) !important;
+        }
+
+        .btn.danger,
+        .delete-btn:hover {
+            background: #fff1f2 !important;
+            border-color: #fecdd3 !important;
+            color: var(--red) !important;
+        }
+
+        .database-modal,
+        .tag-editor-backdrop {
+            background: rgba(15, 23, 42, 0.18) !important;
+        }
+
+        .tag-editor-modal,
+        .tag-editor-field input,
+        .tag-editor-cancel {
+            background: #ffffff !important;
+            color: var(--text) !important;
+            border-color: var(--line) !important;
+        }
