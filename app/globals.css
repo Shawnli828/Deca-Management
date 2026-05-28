@@ -56,6 +56,11 @@
             display: grid;
             grid-template-columns: 220px minmax(0, 1fr);
             min-height: 100vh;
+            transition: grid-template-columns 0.2s ease;
+        }
+
+        .app-layout.side-collapsed {
+            grid-template-columns: 72px minmax(0, 1fr);
         }
 
         .side-menu {
@@ -77,6 +82,17 @@
             font-weight: 800;
         }
 
+        .side-collapse-btn {
+            margin-left: auto;
+            width: 26px;
+            height: 26px;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            background: var(--surface-soft);
+            color: var(--text);
+            line-height: 1;
+        }
+
         .side-nav {
             display: grid;
             gap: 8px;
@@ -85,7 +101,9 @@
 
         .side-nav-btn {
             display: grid;
-            gap: 3px;
+            grid-template-columns: 28px minmax(0, 1fr);
+            gap: 9px;
+            align-items: center;
             width: 100%;
             border: 1px solid transparent;
             border-radius: 0;
@@ -93,6 +111,25 @@
             background: transparent;
             color: var(--muted);
             text-align: left;
+        }
+
+        .side-nav-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border: 1px solid var(--line);
+            border-radius: 7px;
+            color: var(--accent-strong);
+            font-size: 12px;
+            font-weight: 950;
+        }
+
+        .side-nav-copy {
+            display: grid;
+            gap: 3px;
+            min-width: 0;
         }
 
         .side-nav-btn:hover,
@@ -111,6 +148,32 @@
             color: var(--subtle);
             font-size: 11px;
             font-weight: 700;
+        }
+
+        .side-menu.collapsed {
+            padding: 18px 10px;
+        }
+
+        .side-menu.collapsed .side-brand {
+            justify-content: center;
+        }
+
+        .side-menu.collapsed .side-brand-text,
+        .side-menu.collapsed .side-nav-copy {
+            display: none;
+        }
+
+        .side-menu.collapsed .side-collapse-btn {
+            position: absolute;
+            top: 18px;
+            right: -13px;
+            z-index: 2;
+        }
+
+        .side-menu.collapsed .side-nav-btn {
+            grid-template-columns: 1fr;
+            justify-items: center;
+            padding: 10px 6px;
         }
 
         .app.is-locked {
@@ -1069,6 +1132,253 @@
             font-size: 13px;
             font-weight: 650;
             line-height: 1.35;
+        }
+
+        .account-pool-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 4px 0 8px;
+        }
+
+        .account-pool-head h2 {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 0;
+            color: var(--text);
+            font-size: 18px;
+            line-height: 1.25;
+        }
+
+        .account-pool-head h2 span {
+            min-width: 28px;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            padding: 2px 7px;
+            color: var(--muted);
+            font-size: 12px;
+            text-align: center;
+        }
+
+        .account-pool-head p {
+            margin: 6px 0 0;
+            color: var(--muted);
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .account-pool-actions,
+        .account-pool-filters {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .account-pool-filters {
+            flex-wrap: wrap;
+            padding: 8px 0;
+        }
+
+        .account-pool-filters .text-input {
+            width: auto;
+            min-width: 170px;
+            height: 38px;
+            padding: 8px 12px;
+            font-size: 12px;
+        }
+
+        .account-pool-filters input.text-input {
+            min-width: 260px;
+        }
+
+        .account-level-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .account-level-row span {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .dot {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--muted);
+        }
+
+        .dot.healthy { background: #86efac; }
+        .dot.usable { background: #f59e0b; }
+        .dot.star { background: #a78bfa; }
+
+        .pool-performance {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            border: 1px solid var(--line);
+            border-radius: 7px;
+            padding: 14px 16px;
+            background: var(--surface);
+        }
+
+        .pool-performance strong,
+        .pool-performance span {
+            display: block;
+        }
+
+        .pool-performance strong {
+            color: var(--text);
+            font-size: 15px;
+        }
+
+        .pool-performance span {
+            margin-top: 3px;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .pool-performance > span {
+            margin-top: 0;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            padding: 4px 8px;
+        }
+
+        .account-pool-table-wrap {
+            overflow-x: auto;
+            border: 1px solid var(--line);
+            border-radius: 7px;
+            background: var(--surface);
+        }
+
+        .account-pool-table {
+            width: 100%;
+            min-width: 1080px;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+
+        .account-pool-table th,
+        .account-pool-table td {
+            border-bottom: 1px solid var(--line);
+            padding: 10px 12px;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 750;
+            text-align: left;
+            vertical-align: middle;
+        }
+
+        .account-pool-table th {
+            background: var(--surface-soft);
+            color: var(--muted);
+            font-size: 11px;
+            text-transform: none;
+        }
+
+        .account-pool-table tbody tr:hover {
+            background: rgba(124, 131, 255, 0.06);
+        }
+
+        .account-pool-table th:first-child,
+        .account-pool-table td:first-child {
+            width: 38px;
+            text-align: center;
+        }
+
+        .pool-account-cell {
+            display: grid;
+            grid-template-columns: 34px minmax(0, 1fr);
+            gap: 9px;
+            align-items: center;
+            min-width: 0;
+        }
+
+        .pool-avatar {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 34px;
+            height: 34px;
+            overflow: hidden;
+            border: 1px solid var(--line);
+            border-radius: 50%;
+            background: var(--surface-soft);
+            color: var(--text);
+            font-size: 10px;
+            font-weight: 900;
+        }
+
+        .pool-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .pool-account-cell strong,
+        .pool-account-cell small {
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .pool-account-cell strong {
+            color: var(--text);
+            font-size: 12px;
+            font-weight: 850;
+        }
+
+        .pool-account-cell small {
+            margin-top: 2px;
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .pool-pill,
+        .pool-tags span {
+            display: inline-flex;
+            align-items: center;
+            min-height: 22px;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            padding: 3px 7px;
+            background: var(--surface-soft);
+            color: var(--text);
+            font-size: 11px;
+            font-weight: 850;
+            white-space: nowrap;
+        }
+
+        .pool-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+
+        .pool-detail-btn {
+            border: 0;
+            background: transparent;
+            color: var(--text);
+            font-size: 12px;
+            font-weight: 850;
+        }
+
+        .pool-empty {
+            padding: 24px !important;
+            text-align: center !important;
         }
 
         @media (min-width: 680px) {

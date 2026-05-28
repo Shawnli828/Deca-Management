@@ -1,29 +1,42 @@
 'use client';
 
-export function SideMenu({ tool, setTool }: { tool: string; setTool: (tool: 'slideshow' | 'roaster' | 'publishCheck' | 'tags') => void }) {
+export function SideMenu({
+  tool,
+  setTool,
+  collapsed,
+  onToggle
+}: {
+  tool: string;
+  setTool: (tool: 'slideshow' | 'roaster' | 'publishCheck' | 'tags') => void;
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
+  const items = [
+    { id: 'slideshow' as const, title: 'Slide Show', meta: 'Reel Farm', icon: 'S' },
+    { id: 'roaster' as const, title: 'Roaster', meta: 'Team Board', icon: 'R' },
+    { id: 'publishCheck' as const, title: '发布检查', meta: 'Daily Check', icon: 'D' },
+    { id: 'tags' as const, title: 'Tags', meta: 'Account Groups', icon: 'T' }
+  ];
+
   return (
-    <aside className="side-menu" aria-label="中台菜单">
+    <aside className={`side-menu ${collapsed ? 'collapsed' : ''}`} aria-label="中台菜单">
       <div className="side-brand">
         <span className="brand-mark">DG<span className="brand-dot">.</span></span>
-        <span>中台</span>
+        <span className="side-brand-text">中台</span>
+        <button className="side-collapse-btn" type="button" onClick={onToggle} aria-label={collapsed ? '展开菜单' : '收起菜单'}>
+          {collapsed ? '›' : '‹'}
+        </button>
       </div>
       <nav className="side-nav">
-        <button className={`side-nav-btn ${tool === 'slideshow' ? 'active' : ''}`} type="button" onClick={() => setTool('slideshow')}>
-          <span className="side-nav-title">Slide Show</span>
-          <span className="side-nav-meta">Reel Farm</span>
-        </button>
-        <button className={`side-nav-btn ${tool === 'roaster' ? 'active' : ''}`} type="button" onClick={() => setTool('roaster')}>
-          <span className="side-nav-title">Roaster</span>
-          <span className="side-nav-meta">Team Board</span>
-        </button>
-        <button className={`side-nav-btn ${tool === 'publishCheck' ? 'active' : ''}`} type="button" onClick={() => setTool('publishCheck')}>
-          <span className="side-nav-title">发布检查</span>
-          <span className="side-nav-meta">Daily Check</span>
-        </button>
-        <button className={`side-nav-btn ${tool === 'tags' ? 'active' : ''}`} type="button" onClick={() => setTool('tags')}>
-          <span className="side-nav-title">Tags</span>
-          <span className="side-nav-meta">Account Groups</span>
-        </button>
+        {items.map(item => (
+          <button className={`side-nav-btn ${tool === item.id ? 'active' : ''}`} type="button" onClick={() => setTool(item.id)} title={collapsed ? item.title : undefined} key={item.id}>
+            <span className="side-nav-icon">{item.icon}</span>
+            <span className="side-nav-copy">
+              <span className="side-nav-title">{item.title}</span>
+              <span className="side-nav-meta">{item.meta}</span>
+            </span>
+          </button>
+        ))}
       </nav>
     </aside>
   );

@@ -34,6 +34,7 @@ export default function DashboardPage() {
   const [authenticated, setAuthenticated] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [tool, setTool] = useState<'slideshow' | 'roaster' | 'publishCheck' | 'tags'>('slideshow');
+  const [sideCollapsed, setSideCollapsed] = useState(false);
   const [page, setPage] = useState<'products' | 'product' | 'country'>('products');
   const [selectedProductId, setSelectedProductId] = useState('');
   const [selectedCountryId, setSelectedCountryId] = useState('');
@@ -636,8 +637,8 @@ export default function DashboardPage() {
 
   return (
     <div className="app">
-      <div className="app-layout">
-        <SideMenu tool={tool} setTool={setTool} />
+      <div className={`app-layout ${sideCollapsed ? 'side-collapsed' : ''}`}>
+        <SideMenu tool={tool} setTool={setTool} collapsed={sideCollapsed} onToggle={() => setSideCollapsed(value => !value)} />
         <main className="shell">
           <section className={`tool-page ${tool === 'slideshow' ? 'active' : ''}`}>
             <header className="topbar">
