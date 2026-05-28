@@ -37,8 +37,16 @@ export function CountryList({
   const [countryFilter, setCountryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [tagFilter, setTagFilter] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [expandedAccounts, setExpandedAccounts] = useState<Record<string, boolean>>({});
   const [postCache, setPostCache] = useState<Record<string, AccountPostState>>({});
+
+  function addDateFilters(params: URLSearchParams) {
+    if (dateFrom) params.set('date_from', dateFrom);
+    if (dateTo) params.set('date_to', dateTo);
+    return params;
+  }
 
   async function loadAccountPool() {
     if (!product) return;
@@ -46,11 +54,11 @@ export function CountryList({
     try {
       const productCode = getProductReelFarmCode(product);
       const chunks = await Promise.all(countries.map(async country => {
-        const params = new URLSearchParams({
+        const params = addDateFilters(new URLSearchParams({
           resource: 'accounts',
           product_code: productCode,
           country_code: getCountryReelFarmCode(country)
-        });
+        }));
         const payload = await api.dataQuery<{ ok: boolean; data: AccountSummary[] }>(params);
         return (payload.data || []).map(account => ({ ...account, country }));
       }));
@@ -69,15 +77,15 @@ export function CountryList({
 
   useEffect(() => {
     loadAccountPool().catch(() => setLoading(false));
-  }, [product.id]);
+  }, [product.id, dateFrom, dateTo]);
 
   useEffect(() => {
     setExpandedAccounts({});
     setPostCache({});
-  }, [product.id]);
+  }, [product.id, dateFrom, dateTo]);
 
   function accountRowKey(row: AccountPoolRow) {
-    return `${row.country.id}:${row.account_id}`;
+    return `${row.country.id}:${row.account_id}:${dateFrom || 'start'}:${dateTo || 'end'}`;
   }
 
   async function loadAccountPosts(row: AccountPoolRow, offset = 0) {
@@ -98,14 +106,14 @@ export function CountryList({
     }));
 
     try {
-      const params = new URLSearchParams({
+      const params = addDateFilters(new URLSearchParams({
         resource: 'account_posts',
         product_code: getProductReelFarmCode(product),
         country_code: getCountryReelFarmCode(row.country),
         account_id: row.account_id,
         limit: String(ACCOUNT_POST_PAGE_SIZE),
         offset: String(offset)
-      });
+      }));
       const payload = await api.dataQuery<{
         ok: boolean;
         data: DetailedPostRow[];
@@ -195,6 +203,17 @@ export function CountryList({
           <option value="all">Tags</option>
           {tagOptions.map(tag => <option value={tag} key={tag}>{tag}</option>)}
         </select>
+        <div className="date-filter">
+          <label>
+            <span>From</span>
+            <input className="text-input" type="date" value={dateFrom} onChange={event => setDateFrom(event.target.value)} />
+          </label>
+          <label>
+            <span>To</span>
+            <input className="text-input" type="date" value={dateTo} onChange={event => setDateTo(event.target.value)} />
+          </label>
+          {(dateFrom || dateTo) ? <button className="pool-detail-btn" type="button" onClick={() => { setDateFrom(''); setDateTo(''); }}>Clear</button> : null}
+        </div>
       </div>
 
       <div className="account-level-row">

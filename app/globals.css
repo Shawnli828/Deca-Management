@@ -1193,6 +1193,37 @@
             min-width: 260px;
         }
 
+        .date-filter {
+            display: inline-flex;
+            align-items: stretch;
+            gap: 8px;
+            min-height: 38px;
+            border: 1px solid var(--line);
+            border-radius: 7px;
+            padding: 4px;
+            background: var(--surface);
+        }
+
+        .date-filter label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .date-filter span {
+            color: var(--subtle);
+            font-size: 10px;
+            font-weight: 850;
+            text-transform: uppercase;
+        }
+
+        .date-filter .text-input {
+            min-width: 136px;
+            height: 28px;
+            border: 0;
+            background: var(--surface-soft);
+        }
+
         .account-level-row {
             display: flex;
             flex-wrap: wrap;
@@ -4596,4 +4627,154 @@
                 align-items: stretch;
                 flex-direction: column;
             }
+        }
+
+        /* Light workspace reset */
+        :root {
+            color-scheme: light;
+            --page: #ffffff;
+            --surface: #ffffff;
+            --surface-soft: #f7f8fa;
+            --surface-tint: #eef6ff;
+            --line: #dfe4ea;
+            --line-strong: #c7d0da;
+            --text: #111827;
+            --muted: #5f6673;
+            --subtle: #8b95a3;
+            --accent: #4f46e5;
+            --accent-strong: #4338ca;
+            --accent-soft: #eef2ff;
+            --blue: #2563eb;
+            --plum: #7c3aed;
+            --gold: #a16207;
+            --red: #dc2626;
+            --shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+        }
+
+        body {
+            background: #ffffff !important;
+            color: var(--text);
+        }
+
+        .app,
+        .app-layout,
+        .main,
+        .shell,
+        .side-menu,
+        .topbar,
+        .metrics,
+        .page,
+        .page-shell,
+        .page-card,
+        .pane,
+        .account-pool-head,
+        .account-pool-table-wrap,
+        .account-pool-table,
+        .pool-performance,
+        .database-panel,
+        .database-header,
+        .roaster-board,
+        .tag-page,
+        .tag-board,
+        .publish-check-board,
+        .country-sidebar,
+        .country-workspace,
+        .topic-panel,
+        .concept-group,
+        .detail,
+        .detail-grid,
+        .tag-card,
+        .tag-country-card,
+        .tag-account-row,
+        .tag-country-kpis div {
+            background: #ffffff !important;
+            color: var(--text);
+        }
+
+        .side-nav-btn:hover,
+        .side-nav-btn.active,
+        .account-pool-table th,
+        .account-pool-table tbody tr:hover,
+        .topbar,
+        .pane-header,
+        .context-line,
+        .topic-panel-head,
+        .country-sidebar-head,
+        .concept-group-header,
+        .pool-pill,
+        .pool-tags span,
+        .text-input,
+        .number-input,
+        .search-input,
+        .date-filter,
+        .btn,
+        .btn.ghost,
+        .icon-btn,
+        .product-folder,
+        .folder-items,
+        .list-item,
+        .metric,
+        .database-stat,
+        .concept-group-title,
+        .concept-name-shell,
+        .tag-chip,
+        .tag-account-avatar,
+        .creator-tag-pill {
+            background: #f7f8fa !important;
+            color: var(--text) !important;
+            border-color: var(--line) !important;
+        }
+
+        .account-posts-row td,
+        .account-pool-table tbody tr.account-posts-row:hover,
+        .pool-post-panel,
+        .pool-post-card,
+        .pool-post-body,
+        .slideshow-item,
+        .reelfarm-card,
+        .creator-header,
+        .creator-toolbar,
+        .slideshow-list,
+        .post-pager {
+            background: #ffffff !important;
+            color: var(--text) !important;
+            border-color: var(--line) !important;
+        }
+
+        .pool-post-thumb,
+        .material-preview {
+            background: #f1f5f9 !important;
+            color: var(--muted) !important;
+        }
+
+        .pool-post-thumb b,
+        .slide-counter {
+            background: rgba(255, 255, 255, 0.9) !important;
+            color: var(--text) !important;
+            border: 1px solid var(--line);
+        }
+
+        .pool-post-body h3,
+        .pool-post-metrics strong,
+        .pool-account-cell strong,
+        .pool-post-panel-head strong,
+        h1,
+        h2,
+        h3,
+        .metric-value,
+        .database-stat-value {
+            color: var(--text) !important;
+        }
+
+        .pool-post-body p,
+        .pool-post-metrics span,
+        .pool-account-cell small,
+        .pool-post-panel-head span,
+        .subtitle,
+        .pane-hint,
+        .item-meta,
+        .metric-label,
+        .database-subtitle,
+        .database-stat-label {
+            color: var(--muted) !important;
         }
