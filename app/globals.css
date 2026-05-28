@@ -5160,3 +5160,49 @@
             color: var(--accent-strong) !important;
             border-color: var(--line-strong) !important;
         }
+
+        .status-pill {
+            min-height: 34px !important;
+            border-color: var(--line) !important;
+            background: #ffffff !important;
+            color: var(--blue) !important;
+            padding: 0 14px !important;
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+        }
+
+        .date-range-filter {
+            margin-left: auto;
+        }
+
+        .date-range-trigger {
+            min-width: 300px !important;
+            min-height: 38px !important;
+            height: 38px !important;
+            gap: 10px !important;
+            border-color: var(--line) !important;
+            border-radius: 8px !important;
+            padding: 0 12px !important;
+            background: #ffffff !important;
+            color: var(--text) !important;
+            font-size: 12px !important;
+            font-weight: 700 !important;
+            box-shadow: none !important;
+        }
+
+        .date-range-icon {
+            width: 18px !important;
+            height: 18px !important;
+            color: var(--muted) !important;
+            border-width: 2px !important;
+        }
+
+        .date-range-icon::before {
+            top: 4px !important;
+        }
+
+        .date-range-icon::after {
+            top: -5px !important;
+            left: 4px !important;
+            width: 8px !important;
+            height: 6px !important;
+        }
