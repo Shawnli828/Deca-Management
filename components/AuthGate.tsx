@@ -25,6 +25,12 @@ export function AuthGate({ onLogin }: { onLogin: (username: string, password: st
   return (
     <section className="auth-overlay is-visible" aria-labelledby="authTitle">
       <form className="auth-card" onSubmit={submit}>
+        <div className="auth-brand-stage" aria-hidden="true">
+          <span className="auth-brand-word">Deca Growth</span>
+          <span className="auth-dot dot-one" />
+          <span className="auth-dot dot-two" />
+          <span className="auth-dot dot-three" />
+        </div>
         <div className="auth-hero">
           <div className="auth-copy">
             <p className="auth-kicker">

@@ -5,6 +5,7 @@ import { AuthGate } from '@/components/AuthGate';
 import { CountryList } from '@/components/CountryList';
 import { CountrySettingsModal } from '@/components/CountrySettingsModal';
 import { CountryWorkspace } from '@/components/CountryWorkspace';
+import { DashboardHome } from '@/components/DashboardHome';
 import { DatabaseModal } from '@/components/DatabaseModal';
 import { MetricsBar } from '@/components/MetricsBar';
 import { ProductList } from '@/components/ProductList';
@@ -33,7 +34,7 @@ const defaultRoaster: RoasterState = {
 export default function DashboardPage() {
   const [authenticated, setAuthenticated] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
-  const [tool, setTool] = useState<'slideshow' | 'roaster' | 'publishCheck' | 'tags'>('slideshow');
+  const [tool, setTool] = useState<'dashboard' | 'slideshow' | 'roaster' | 'publishCheck' | 'tags'>('dashboard');
   const [sideCollapsed, setSideCollapsed] = useState(false);
   const [page, setPage] = useState<'products' | 'product' | 'country'>('products');
   const [selectedProductId, setSelectedProductId] = useState('');
@@ -633,6 +634,12 @@ export default function DashboardPage() {
     setStatusError(false);
   }
 
+  async function resetDemo() {
+    const payload = await api.reset();
+    setProducts(payload.data || []);
+    setPage('products');
+  }
+
   if (!authenticated) return <AuthGate onLogin={login} />;
 
   return (
@@ -640,6 +647,18 @@ export default function DashboardPage() {
       <div className={`app-layout ${sideCollapsed ? 'side-collapsed' : ''}`}>
         <SideMenu tool={tool} setTool={setTool} collapsed={sideCollapsed} onToggle={() => setSideCollapsed(value => !value)} />
         <main className="shell">
+          <section className={`tool-page ${tool === 'dashboard' ? 'active' : ''}`}>
+            <DashboardHome
+              products={products}
+              status={status}
+              statusError={statusError}
+              syncAllRunning={syncAllRunning}
+              syncAllProgress={syncAllProgress}
+              onSyncAll={syncAllCountries}
+              onOpenDatabase={openDatabase}
+              onReset={resetDemo}
+            />
+          </section>
           <section className={`tool-page ${tool === 'slideshow' ? 'active' : ''}`}>
             <header className="topbar">
               <div>
@@ -652,11 +671,7 @@ export default function DashboardPage() {
                   {syncAllRunning ? `同步全部 ${syncAllProgress}` : '同步全部'}
                 </button>
                 <button className="btn ghost" type="button" onClick={openDatabase}>打开数据库</button>
-                <button className="btn ghost" type="button" onClick={async () => {
-                  const payload = await api.reset();
-                  setProducts(payload.data || []);
-                  setPage('products');
-                }}>恢复示例</button>
+                <button className="btn ghost" type="button" onClick={resetDemo}>恢复示例</button>
               </div>
             </header>
             <MetricsBar products={products} />
