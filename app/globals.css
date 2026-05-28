@@ -5408,18 +5408,21 @@
             position: relative;
             display: flex;
             align-items: center;
-            min-height: 92px;
-            margin: -4px 0 6px;
+            min-height: 64px;
+            margin: -4px 0 10px;
         }
 
         .auth-brand-word {
             position: relative;
             z-index: 1;
             color: var(--text);
-            font-size: clamp(34px, 8vw, 56px);
-            font-weight: 950;
-            line-height: 0.95;
+            margin: 0;
+            font-family: var(--font-sans);
+            font-size: clamp(24px, 6vw, 34px);
+            font-weight: 900;
+            line-height: 1;
             letter-spacing: 0;
+            text-transform: uppercase;
             animation: authBrandReveal 0.85s ease both;
         }
 
@@ -5476,7 +5479,7 @@
             }
         }
 
-        .auth-card .brand-mark,
+        .auth-brand-word,
         .auth-title {
             color: var(--text) !important;
         }

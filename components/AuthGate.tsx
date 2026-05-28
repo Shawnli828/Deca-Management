@@ -25,20 +25,11 @@ export function AuthGate({ onLogin }: { onLogin: (username: string, password: st
   return (
     <section className="auth-overlay is-visible" aria-labelledby="authTitle">
       <form className="auth-card" onSubmit={submit}>
-        <div className="auth-brand-stage" aria-hidden="true">
-          <span className="auth-brand-word">Deca Growth</span>
+        <div className="auth-brand-stage">
+          <h1 id="authTitle" className="auth-brand-word">DECAGROWTH<span className="brand-dot">.</span></h1>
           <span className="auth-dot dot-one" />
           <span className="auth-dot dot-two" />
           <span className="auth-dot dot-three" />
-        </div>
-        <div className="auth-hero">
-          <div className="auth-copy">
-            <p className="auth-kicker">
-              <span className="brand-mark">DECAGROWTH<span className="brand-dot">.</span></span>
-            </p>
-            <h1 id="authTitle" className="auth-title">欢迎回家，主人</h1>
-            <p className="auth-subtitle">请输入管理员账号和密码后进入工作台。</p>
-          </div>
         </div>
         <label className="auth-field">
           <span>管理员账号</span>
