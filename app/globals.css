@@ -5546,7 +5546,7 @@
         }
 
         .product-list {
-            grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)) !important;
+            grid-template-columns: repeat(auto-fill, minmax(380px, 420px)) !important;
             gap: 18px !important;
             justify-content: start !important;
             overflow: visible !important;
