@@ -3,6 +3,44 @@
 import type { Product, ProductKpis } from '@/lib/types';
 import { formatNumber, normalizeProductFolder } from '@/lib/utils';
 
+function UsersIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" />
+      <circle cx="9.5" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
+function MaterialIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+      <path d="M14 2v6h6" />
+      <path d="m10 11 5 3-5 3v-6Z" />
+    </svg>
+  );
+}
+
+function EyeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function HeartIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M19.5 13.5 12 21l-7.5-7.5A5 5 0 0 1 12 7a5 5 0 0 1 7.5 6.5Z" />
+    </svg>
+  );
+}
+
 export function ProductList({
   products,
   productKpis,
@@ -39,25 +77,25 @@ export function ProductList({
               const kpis = productKpis[product.id];
               const stats = [
                 {
-                  icon: '♟',
+                  icon: <UsersIcon />,
                   label: 'Creators who posted',
                   today: Number(kpis?.today?.creators) || 0,
                   avg: Number(kpis?.seven_day?.average_creators) || 0
                 },
                 {
-                  icon: '▤',
+                  icon: <MaterialIcon />,
                   label: 'Posts published',
                   today: Number(kpis?.today?.posts) || 0,
                   avg: Number(kpis?.seven_day?.average_posts) || 0
                 },
                 {
-                  icon: '◉',
+                  icon: <EyeIcon />,
                   label: 'Total views',
                   today: Number(kpis?.today?.views) || 0,
                   avg: Number(kpis?.seven_day?.average_views_per_day) || 0
                 },
                 {
-                  icon: '♡',
+                  icon: <HeartIcon />,
                   label: 'Total likes',
                   today: Number(kpis?.today?.likes) || 0,
                   avg: Number(kpis?.seven_day?.average_likes) || 0
@@ -76,8 +114,8 @@ export function ProductList({
                       </span>
                     </button>
                     <div className="product-card-actions">
-                      <span className="product-count-pill" title="账号数">👥 {formatNumber(product.creatorCount || 0)}</span>
-                      <span className="product-count-pill" title="素材数">▤ {formatNumber(product.materialCount || 0)}</span>
+                      <span className="product-count-pill" title="账号数"><UsersIcon /> {formatNumber(product.creatorCount || 0)}</span>
+                      <span className="product-count-pill" title="素材数"><MaterialIcon /> {formatNumber(product.materialCount || 0)}</span>
                       <button
                         className="product-settings-btn"
                         type="button"
