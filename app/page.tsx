@@ -84,6 +84,7 @@ export default function DashboardPage() {
     setSelectedProductId(data[0]?.id || '');
     setSelectedCountryId(data[0]?.countries?.[0]?.id || '');
     setTagProductId(data[0]?.id || '');
+    void Promise.all(data.map(product => loadProductKpis(product)));
     setStatus('已连接数据库');
     setStatusError(false);
     try {
@@ -650,13 +651,6 @@ export default function DashboardPage() {
           <section className={`tool-page ${tool === 'dashboard' ? 'active' : ''}`}>
             <DashboardHome
               products={products}
-              status={status}
-              statusError={statusError}
-              syncAllRunning={syncAllRunning}
-              syncAllProgress={syncAllProgress}
-              onSyncAll={syncAllCountries}
-              onOpenDatabase={openDatabase}
-              onReset={resetDemo}
             />
           </section>
           <section className={`tool-page ${tool === 'slideshow' ? 'active' : ''}`}>
@@ -676,7 +670,7 @@ export default function DashboardPage() {
             </header>
             <MetricsBar products={products} />
             <section className="page-shell">
-              {page === 'products' ? <ProductList products={products} onSelect={selectProduct} onAddProduct={addProduct} onEditProduct={product => setEditingProductId(product.id)} /> : null}
+              {page === 'products' ? <ProductList products={products} productKpis={productKpis} onSelect={selectProduct} onAddProduct={addProduct} onEditProduct={product => setEditingProductId(product.id)} /> : null}
               {page === 'product' && selectedProduct ? <CountryList product={selectedProduct} kpis={productKpis[selectedProduct.id]} onBack={() => setPage('products')} onSelect={selectCountry} onOpenSettings={() => setCountrySettingsOpen(true)} /> : null}
               {page === 'country' && selectedProduct && selectedCountry ? (
                 <CountryWorkspace

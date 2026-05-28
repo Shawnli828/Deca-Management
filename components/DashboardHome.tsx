@@ -4,23 +4,9 @@ import type { Product } from '@/lib/types';
 import { formatNumber } from '@/lib/utils';
 
 export function DashboardHome({
-  products,
-  status,
-  statusError,
-  syncAllRunning,
-  syncAllProgress,
-  onSyncAll,
-  onOpenDatabase,
-  onReset
+  products
 }: {
   products: Product[];
-  status: string;
-  statusError: boolean;
-  syncAllRunning: boolean;
-  syncAllProgress: string;
-  onSyncAll: () => void;
-  onOpenDatabase: () => void;
-  onReset: () => void;
 }) {
   const countries = products.reduce((sum, product) => sum + (product.countries?.length || 0), 0);
   const accounts = products.reduce((sum, product) => sum + (Number(product.creatorCount) || 0), 0);
@@ -42,15 +28,6 @@ export function DashboardHome({
         <div>
           <p className="dashboard-kicker">Welcome to</p>
           <h1>Deca Growth</h1>
-          <p>One cockpit for product growth, creator pools, publishing checks, and content intelligence.</p>
-        </div>
-        <div className="dashboard-actions">
-          <span className={`status-pill ${statusError ? 'error' : ''}`}>{status}</span>
-          <button className="btn ghost" type="button" onClick={onSyncAll} disabled={syncAllRunning || !products.length}>
-            {syncAllRunning ? `同步全部 ${syncAllProgress}` : '同步全部'}
-          </button>
-          <button className="btn ghost" type="button" onClick={onOpenDatabase}>打开数据库</button>
-          <button className="btn ghost" type="button" onClick={onReset}>恢复示例</button>
         </div>
       </header>
 

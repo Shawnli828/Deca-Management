@@ -2120,8 +2120,11 @@ def query_product_kpis(query):
         row = conn.execute(
             f"""
             SELECT
+                COUNT(DISTINCT CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN acc.id END) AS today_creators,
                 COUNT(DISTINCT CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.id END) AS today_posts,
                 COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.view_count ELSE 0 END), 0) AS today_views,
+                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.like_count ELSE 0 END), 0) AS today_likes,
+                COUNT(DISTINCT CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN acc.id END) AS seven_day_creators,
                 COUNT(DISTINCT CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.id END) AS seven_day_posts,
                 COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.view_count ELSE 0 END), 0) AS seven_day_views,
                 COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.like_count ELSE 0 END), 0) AS seven_day_likes,
@@ -2134,6 +2137,9 @@ def query_product_kpis(query):
             (
                 yesterday_start, yesterday_end,
                 yesterday_start, yesterday_end,
+                yesterday_start, yesterday_end,
+                yesterday_start, yesterday_end,
+                seven_start, seven_end,
                 seven_start, seven_end,
                 seven_start, seven_end,
                 seven_start, seven_end,
@@ -2144,12 +2150,16 @@ def query_product_kpis(query):
             ),
         ).fetchone()
     data = row_dict(row)
+    today_creators = int(data.get("today_creators") or 0)
     today_posts = int(data.get("today_posts") or 0)
     today_views = int(data.get("today_views") or 0)
+    today_likes = int(data.get("today_likes") or 0)
+    seven_creators = int(data.get("seven_day_creators") or 0)
     seven_posts = int(data.get("seven_day_posts") or 0)
     seven_views = int(data.get("seven_day_views") or 0)
+    seven_likes = int(data.get("seven_day_likes") or 0)
     interactions = (
-        int(data.get("seven_day_likes") or 0)
+        seven_likes
         + int(data.get("seven_day_comments") or 0)
         + int(data.get("seven_day_shares") or 0)
         + int(data.get("seven_day_bookmarks") or 0)
@@ -2158,15 +2168,23 @@ def query_product_kpis(query):
         "product_code": product_code,
         "country_code": country_code or None,
         "today": {
+            "creators": today_creators,
             "posts": today_posts,
             "views": today_views,
+            "likes": today_likes,
             "average_views": round(today_views / today_posts) if today_posts else 0,
             "utc_window": {"start": yesterday_start, "end": yesterday_end},
         },
         "seven_day": {
+            "creators": seven_creators,
             "posts": seven_posts,
             "views": seven_views,
+            "likes": seven_likes,
+            "average_creators": seven_creators / 7,
+            "average_posts": seven_posts / 7,
             "average_views": round(seven_views / seven_posts) if seven_posts else 0,
+            "average_views_per_day": seven_views / 7,
+            "average_likes": seven_likes / 7,
             "average_er": (interactions / seven_views * 100) if seven_views else 0,
             "interactions": interactions,
             "utc_window": {"start": seven_start, "end": seven_end},

@@ -36,15 +36,23 @@ export type Product = {
 export type ProductKpis = {
   product_code?: string;
   today?: {
+    creators?: number;
     posts?: number;
     views?: number;
+    likes?: number;
     average_views?: number;
     utc_window?: { start?: string; end?: string };
   };
   seven_day?: {
+    creators?: number;
     posts?: number;
     views?: number;
+    likes?: number;
+    average_creators?: number;
+    average_posts?: number;
     average_views?: number;
+    average_views_per_day?: number;
+    average_likes?: number;
     average_er?: number;
     interactions?: number;
     utc_window?: { start?: string; end?: string };
