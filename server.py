@@ -1472,6 +1472,19 @@ def readable_utc_datetime(value):
     return parsed.astimezone(timezone.utc).strftime("%Y/%m/%d %H:%M UTC")
 
 
+def parse_iso_datetime(value):
+    raw_value = str(value or "").strip()
+    if not raw_value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw_value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
 def compact_post(post):
     published_at = post.get("published_at")
     return {
@@ -2149,7 +2162,32 @@ def query_product_kpis(query):
                 *filter_params,
             ),
         ).fetchone()
+        daily_rows = conn.execute(
+            f"""
+            SELECT acc.id AS account_id, post.published_at AS published_at
+            {relational_base_from()}
+            WHERE ch.code = {placeholder}
+              AND p.code = {placeholder}{market_filter}
+              AND post.published_at >= {placeholder}
+              AND post.published_at < {placeholder}
+              AND post.id IS NOT NULL
+            """,
+            (*filter_params, seven_start, seven_end),
+        ).fetchall()
     data = row_dict(row)
+    daily_creator_sets = {
+        (seven_start_local + timedelta(days=day_index)).date().isoformat(): set()
+        for day_index in range(7)
+    }
+    for daily_row in daily_rows:
+        daily_data = row_dict(daily_row)
+        parsed = parse_iso_datetime(daily_data.get("published_at"))
+        if not parsed:
+            continue
+        local_day = parsed.astimezone(beijing).date().isoformat()
+        if local_day in daily_creator_sets and daily_data.get("account_id"):
+            daily_creator_sets[local_day].add(daily_data["account_id"])
+    average_daily_creators = sum(len(accounts) for accounts in daily_creator_sets.values()) / 7
     today_creators = int(data.get("today_creators") or 0)
     today_posts = int(data.get("today_posts") or 0)
     today_views = int(data.get("today_views") or 0)
@@ -2180,7 +2218,7 @@ def query_product_kpis(query):
             "posts": seven_posts,
             "views": seven_views,
             "likes": seven_likes,
-            "average_creators": seven_creators / 7,
+            "average_creators": average_daily_creators,
             "average_posts": seven_posts / 7,
             "average_views": round(seven_views / seven_posts) if seven_posts else 0,
             "average_views_per_day": seven_views / 7,
