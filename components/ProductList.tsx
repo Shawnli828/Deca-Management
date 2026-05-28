@@ -89,17 +89,11 @@ export function ProductList({
                       </button>
                     </div>
                   </div>
-                  <button className="product-card-info" type="button" onClick={() => onSelect(product)}>
-                    <span className="product-card-meta">
-                      {product.countries?.length || 0} 个国家/地区 · {product.creatorCount || 0} 个账号 · {product.materialCount || 0} 个素材
-                    </span>
-                  </button>
                   <div className="product-stat-grid">
                     {stats.map(stat => (
                       <div className="product-stat" key={stat.label}>
                         <span className="product-stat-icon">{stat.icon}</span>
-                        <strong>{formatNumber(stat.today)}</strong>
-                        <small>/ {formatNumber(stat.avg)}</small>
+                        <span className="product-stat-value"><strong>{formatNumber(stat.today)}</strong><small>/ {formatNumber(stat.avg)}</small></span>
                         <span className="product-stat-tooltip">
                           {stat.label}<br />
                           Yesterday: <b>{formatNumber(stat.today)}</b><br />
