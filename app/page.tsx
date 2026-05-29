@@ -714,11 +714,9 @@ export default function DashboardPage() {
                 <ProductList
                   products={products}
                   productKpis={productKpis}
-                  syncingProductId={syncProductId}
                   onSelect={selectProduct}
                   onAddProduct={addProduct}
                   onEditProduct={product => setEditingProductId(product.id)}
-                  onSyncProduct={syncProductCountries}
                 />
               ) : null}
               {page === 'product' && selectedProduct ? (

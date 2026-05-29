@@ -5769,33 +5769,6 @@
             background: #ffffff;
         }
 
-        .product-sync-btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 28px;
-            border: 1px solid #d9e0ea;
-            border-radius: 9px;
-            padding: 0 10px;
-            background: #ffffff;
-            color: #1f2a44;
-            font-size: 12px;
-            font-weight: 850;
-            white-space: nowrap;
-            transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
-        }
-
-        .product-sync-btn:hover:not(:disabled) {
-            border-color: #b8c7ff;
-            background: #f4f7ff;
-            transform: translateY(-1px);
-        }
-
-        .product-sync-btn:disabled {
-            cursor: not-allowed;
-            opacity: 0.58;
-        }
-
         .product-settings-panel {
             background: #ffffff !important;
             color: var(--text) !important;

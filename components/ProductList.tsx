@@ -44,19 +44,15 @@ function HeartIcon() {
 export function ProductList({
   products,
   productKpis,
-  syncingProductId,
   onSelect,
   onAddProduct,
-  onEditProduct,
-  onSyncProduct
+  onEditProduct
 }: {
   products: Product[];
   productKpis: Record<string, ProductKpis | null>;
-  syncingProductId?: string;
   onSelect: (product: Product) => void;
   onAddProduct: () => void;
   onEditProduct: (product: Product) => void;
-  onSyncProduct: (product: Product) => void;
 }) {
   const groups = products.reduce<Record<string, Product[]>>((map, product) => {
     const folder = normalizeProductFolder(product);
@@ -105,7 +101,6 @@ export function ProductList({
                   avg: Number(kpis?.seven_day?.average_likes) || 0
                 }
               ];
-              const syncing = syncingProductId === product.id;
               return (
                 <article className="product-card" key={product.id}>
                   <div className="product-card-top">
@@ -121,15 +116,6 @@ export function ProductList({
                     <div className="product-card-actions">
                       <span className="product-count-pill" title="账号数"><UsersIcon /> {formatNumber(product.creatorCount || 0)}</span>
                       <span className="product-count-pill" title="素材数"><MaterialIcon /> {formatNumber(product.materialCount || 0)}</span>
-                      <button
-                        className="product-sync-btn"
-                        type="button"
-                        disabled={syncing || !(product.countries || []).length}
-                        onClick={() => onSyncProduct(product)}
-                        title="只同步这个产品"
-                      >
-                        {syncing ? '同步中' : '同步'}
-                      </button>
                       <button
                         className="product-settings-btn"
                         type="button"
