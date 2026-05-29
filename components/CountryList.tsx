@@ -283,14 +283,14 @@ export function CountryList({
     const likes = filteredRows.reduce((sum, row) => sum + (Number(row.total_likes) || 0), 0);
     const comments = filteredRows.reduce((sum, row) => sum + (Number(row.total_comments) || 0), 0);
     const shares = filteredRows.reduce((sum, row) => sum + (Number(row.total_shares) || 0), 0);
-    const avgViews = accountCount ? Math.round(views / accountCount) : 0;
+    const avgViews = posts ? Math.round(views / posts) : 0;
     const engagement = views ? ((likes + comments + shares) / views) * 100 : 0;
 
     return [
       { label: 'POSTED', value: `${formatNumber(postedCount)}/${formatNumber(accountCount)}`, note: 'Accounts with posts / filtered accounts' },
       { label: 'POSTS', value: formatNumber(posts) },
       { label: 'VIEWS', value: formatNumber(views) },
-      { label: 'AVG VIEWS', value: formatNumber(avgViews), note: 'Filtered total views / filtered accounts' },
+      { label: 'AVG VIEWS', value: formatNumber(avgViews), note: 'Filtered total views / filtered posts' },
       { label: 'LIKES', value: formatNumber(likes) },
       { label: 'COMMENTS', value: formatNumber(comments) },
       { label: 'SHARES', value: formatNumber(shares) },
