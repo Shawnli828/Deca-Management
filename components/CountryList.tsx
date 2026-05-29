@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '@/lib/api';
 import type { AccountSummary, Country, DetailedPostRow, Product, ProductKpis } from '@/lib/types';
@@ -434,12 +434,38 @@ function CategoryTagFilter({
 }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<TagFilterRow[]>(filters);
+  const containerRef = useRef<HTMLDivElement>(null);
   const categories = useMemo(() => Array.from(new Set(tagOptions.map(getTagCategory))).filter(Boolean).sort(), [tagOptions]);
 
   function openFilter() {
+    if (open) {
+      setOpen(false);
+      return;
+    }
     setDraft(filters.length ? filters : [{ id: generateUiId(), category: categories[0] || '', tags: [] }]);
     setOpen(true);
   }
+
+  useEffect(() => {
+    if (!open) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (target instanceof Node && containerRef.current?.contains(target)) return;
+      setOpen(false);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false);
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
 
   function tagsForCategory(category: string) {
     return tagOptions.filter(tag => getTagCategory(tag) === category);
@@ -456,7 +482,7 @@ function CategoryTagFilter({
     : 'Tags';
 
   return (
-    <div className="category-tag-filter">
+    <div className="category-tag-filter" ref={containerRef}>
       <button className="text-input tag-filter-trigger" type="button" onClick={openFilter}>
         <span>{summary}</span>
         <span>⌄</span>
