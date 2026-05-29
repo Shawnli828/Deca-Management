@@ -76,15 +76,19 @@ const defaultDateRange = rangeForPreset('7d');
 export function CountryList({
   product,
   kpis,
+  syncing,
   onBack,
   onSelect,
-  onOpenSettings
+  onOpenSettings,
+  onSyncProduct
 }: {
   product: Product;
   kpis?: ProductKpis | null;
+  syncing?: boolean;
   onBack: () => void;
   onSelect: (country: Country) => void;
   onOpenSettings: () => void;
+  onSyncProduct: (product: Product) => void;
 }) {
   const countries = product.countries || [];
   const [rows, setRows] = useState<AccountPoolRow[]>([]);
@@ -240,6 +244,9 @@ export function CountryList({
           <p>{product.name} 下所有国家/地区的 TikTok 账号池。</p>
         </div>
         <div className="account-pool-actions">
+          <button className="btn primary" type="button" onClick={() => onSyncProduct(product)} disabled={syncing || !countries.length}>
+            {syncing ? '同步中...' : '同步当前产品'}
+          </button>
           <button className="btn ghost" type="button" onClick={loadAccountPool} disabled={loading}>{loading ? 'Refreshing...' : 'Refresh'}</button>
           <button className="product-settings-btn inline" type="button" onClick={onOpenSettings} title="国家/地区设置" aria-label="国家/地区设置">⚙</button>
         </div>

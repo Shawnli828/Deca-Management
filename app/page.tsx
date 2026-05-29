@@ -721,7 +721,17 @@ export default function DashboardPage() {
                   onSyncProduct={syncProductCountries}
                 />
               ) : null}
-              {page === 'product' && selectedProduct ? <CountryList product={selectedProduct} kpis={productKpis[selectedProduct.id]} onBack={() => setPage('products')} onSelect={selectCountry} onOpenSettings={() => setCountrySettingsOpen(true)} /> : null}
+              {page === 'product' && selectedProduct ? (
+                <CountryList
+                  product={selectedProduct}
+                  kpis={productKpis[selectedProduct.id]}
+                  syncing={syncProductId === selectedProduct.id}
+                  onBack={() => setPage('products')}
+                  onSelect={selectCountry}
+                  onOpenSettings={() => setCountrySettingsOpen(true)}
+                  onSyncProduct={syncProductCountries}
+                />
+              ) : null}
               {page === 'country' && selectedProduct && selectedCountry ? (
                 <CountryWorkspace
                   product={selectedProduct}
