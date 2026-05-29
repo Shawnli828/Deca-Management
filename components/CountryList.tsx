@@ -1,9 +1,11 @@
 'use client';
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '@/lib/api';
 import type { AccountSummary, Country, DetailedPostRow, Product, ProductKpis } from '@/lib/types';
 import { countryFlag, formatNumber, formatUtcReadable, getCountryReelFarmCode, getProductReelFarmCode } from '@/lib/utils';
+import { composeTag, formatTagLabel, getTagCategory, getTagName } from './ReelFarmAccountCard';
 
 type AccountPoolRow = AccountSummary & { country: Country; tags?: string[] };
 type AccountPostState = {
@@ -14,6 +16,7 @@ type AccountPostState = {
   hasMore: boolean;
   total?: number;
 };
+type TagFilterRow = { id: string; category: string; tags: string[] };
 
 const ACCOUNT_POST_PAGE_SIZE = 4;
 const DATE_PRESETS = [
@@ -96,11 +99,12 @@ export function CountryList({
   const [search, setSearch] = useState('');
   const [countryFilter, setCountryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [tagFilter, setTagFilter] = useState('all');
+  const [tagFilters, setTagFilters] = useState<TagFilterRow[]>([]);
   const [dateFrom, setDateFrom] = useState(defaultDateRange.from);
   const [dateTo, setDateTo] = useState(defaultDateRange.to);
   const [expandedAccounts, setExpandedAccounts] = useState<Record<string, boolean>>({});
   const [postCache, setPostCache] = useState<Record<string, AccountPostState>>({});
+  const [editingTagAccountId, setEditingTagAccountId] = useState('');
 
   function addDateFilters(params: URLSearchParams) {
     if (dateFrom) params.set('date_from', dateFrom);
@@ -216,6 +220,39 @@ export function CountryList({
   const tagOptions = useMemo(() => {
     return Array.from(new Set(rows.flatMap(row => row.tags || []))).sort((a, b) => a.localeCompare(b));
   }, [rows]);
+  const editingTagRow = editingTagAccountId ? rows.find(row => row.account_id === editingTagAccountId) : null;
+
+  async function addAccountTag(row: AccountPoolRow, tag: string) {
+    const accountId = String(row.account_id || '').trim();
+    const nextTag = tag.trim();
+    if (!accountId || !nextTag) return;
+    await api.createProductTag(getProductReelFarmCode(product), nextTag);
+    const payload = await api.addAccountTag(accountId, nextTag);
+    setRows(previous => previous.map(item => item.account_id === accountId
+      ? { ...item, tags: Array.from(new Set([...(item.tags || []), payload.tag])) }
+      : item
+    ));
+  }
+
+  async function removeAccountTag(row: AccountPoolRow, tag: string) {
+    const accountId = String(row.account_id || '').trim();
+    if (!accountId || !tag) return;
+    await api.deleteAccountTag(accountId, tag);
+    setRows(previous => previous.map(item => item.account_id === accountId
+      ? { ...item, tags: (item.tags || []).filter(value => value !== tag) }
+      : item
+    ));
+  }
+
+  function matchesTagFilters(row: AccountPoolRow) {
+    const activeFilters = tagFilters.filter(filter => filter.category && filter.tags.length);
+    if (!activeFilters.length) return true;
+    const rowTags = row.tags || [];
+    return activeFilters.every(filter => {
+      const selected = new Set(filter.tags);
+      return rowTags.some(tag => getTagCategory(tag) === filter.category && selected.has(tag));
+    });
+  }
 
   const filteredRows = rows.filter(row => {
     const query = search.trim().toLowerCase();
@@ -225,7 +262,7 @@ export function CountryList({
     if (query && !username.includes(query)) return false;
     if (countryFilter !== 'all' && countryCode !== countryFilter) return false;
     if (statusFilter !== 'all' && status !== statusFilter) return false;
-    if (tagFilter !== 'all' && !(row.tags || []).includes(tagFilter)) return false;
+    if (!matchesTagFilters(row)) return false;
     return true;
   });
 
@@ -262,10 +299,7 @@ export function CountryList({
           <option value="all">All Statuses</option>
           {statusOptions.map(status => <option value={status} key={status}>{status}</option>)}
         </select>
-        <select className="text-input" value={tagFilter} onChange={event => setTagFilter(event.target.value)}>
-          <option value="all">Tags</option>
-          {tagOptions.map(tag => <option value={tag} key={tag}>{tag}</option>)}
-        </select>
+        <CategoryTagFilter tagOptions={tagOptions} filters={tagFilters} onApply={setTagFilters} />
         <DateRangeFilter
           dateFrom={dateFrom}
           dateTo={dateTo}
@@ -331,8 +365,19 @@ export function CountryList({
                     <td>{formatNumber(row.post_count || 0)}</td>
                     <td>
                       <div className="pool-tags">
-                        {(row.tags || []).slice(0, 2).map(tag => <span key={tag}>{tag.replace(/^Creative:\s*/, '')}</span>)}
-                        {!(row.tags || []).length ? '—' : null}
+                        {(row.tags || []).map(tag => (
+                          <button
+                            className="pool-tag-chip"
+                            style={accountTagStyle(tag)}
+                            type="button"
+                            key={tag}
+                            onClick={() => removeAccountTag(row, tag)}
+                            title="点击删除这个 Tag"
+                          >
+                            {formatTagLabel(tag)} <span>×</span>
+                          </button>
+                        ))}
+                        <button className="pool-tag-add" type="button" onClick={() => setEditingTagAccountId(row.account_id)} title="添加 Tag">+</button>
                       </div>
                     </td>
                     <td>{row.last_synced_at ? formatUtcReadable(row.last_synced_at) : '—'}</td>
@@ -357,8 +402,233 @@ export function CountryList({
           </tbody>
         </table>
       </div>
+      {editingTagRow ? (
+        <AccountTagEditorModal
+          row={editingTagRow}
+          availableTags={tagOptions}
+          onClose={() => setEditingTagAccountId('')}
+          onAddTag={addAccountTag}
+          onRemoveTag={removeAccountTag}
+        />
+      ) : null}
     </section>
   );
+}
+
+function CategoryTagFilter({
+  tagOptions,
+  filters,
+  onApply
+}: {
+  tagOptions: string[];
+  filters: TagFilterRow[];
+  onApply: (filters: TagFilterRow[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<TagFilterRow[]>(filters);
+  const categories = useMemo(() => Array.from(new Set(tagOptions.map(getTagCategory))).filter(Boolean).sort(), [tagOptions]);
+
+  function openFilter() {
+    setDraft(filters.length ? filters : [{ id: generateUiId(), category: categories[0] || '', tags: [] }]);
+    setOpen(true);
+  }
+
+  function tagsForCategory(category: string) {
+    return tagOptions.filter(tag => getTagCategory(tag) === category);
+  }
+
+  function updateRow(id: string, updater: (row: TagFilterRow) => TagFilterRow) {
+    setDraft(previous => previous.map(row => row.id === id ? updater(row) : row));
+  }
+
+  const complete = draft.filter(row => row.category && row.tags.length);
+  const canApply = complete.length === draft.length && draft.length > 0;
+  const summary = filters.length
+    ? `${filters.length} Tag Filter${filters.length > 1 ? 's' : ''}`
+    : 'Tags';
+
+  return (
+    <div className="category-tag-filter">
+      <button className="text-input tag-filter-trigger" type="button" onClick={openFilter}>
+        <span>{summary}</span>
+        <span>⌄</span>
+      </button>
+      {open ? (
+        <div className="tag-filter-popover">
+          <div className="tag-filter-head">
+            <div>
+              <strong>Category + Tags</strong>
+              <span>One category per row. Tags in that row are multi-select.</span>
+            </div>
+            <button type="button" onClick={() => setDraft(previous => [...previous, { id: generateUiId(), category: categories[0] || '', tags: [] }])}>+ Add</button>
+          </div>
+          <div className="tag-filter-rows">
+            {draft.map(row => {
+              const options = tagsForCategory(row.category);
+              return (
+                <div className="tag-filter-row" key={row.id}>
+                  <select
+                    value={row.category}
+                    onChange={event => updateRow(row.id, () => ({ ...row, category: event.target.value, tags: [] }))}
+                  >
+                    <option value="">Category</option>
+                    {categories.map(category => <option value={category} key={category}>{category}</option>)}
+                  </select>
+                  <div className="tag-filter-tagbox">
+                    <button className="tag-filter-tagbox-summary" type="button">
+                      <span>{row.tags.length ? `${row.tags.length} selected` : 'Select tags'}</span>
+                      <b>{row.tags.length}</b>
+                      <span>⌄</span>
+                    </button>
+                    <div className="tag-filter-options">
+                      {options.length ? options.map(tag => {
+                        const checked = row.tags.includes(tag);
+                        return (
+                          <label key={tag}>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => updateRow(row.id, current => ({
+                                ...current,
+                                tags: checked ? current.tags.filter(item => item !== tag) : [...current.tags, tag]
+                              }))}
+                            />
+                            <span style={accountTagStyle(tag)}>{getTagName(tag)}</span>
+                          </label>
+                        );
+                      }) : <em>Select a category first</em>}
+                    </div>
+                  </div>
+                  <button className="tag-filter-remove" type="button" onClick={() => setDraft(previous => previous.filter(item => item.id !== row.id))}>×</button>
+                </div>
+              );
+            })}
+          </div>
+          <div className="tag-filter-actions">
+            <button type="button" onClick={() => { onApply([]); setDraft([]); }}>Clear All</button>
+            <span>{canApply ? 'Ready to apply filters.' : 'Select at least one tag for each selected category.'}</span>
+            <button
+              className="primary"
+              type="button"
+              disabled={!canApply}
+              onClick={() => {
+                onApply(complete);
+                setOpen(false);
+              }}
+            >
+              Apply Filters
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function AccountTagEditorModal({
+  row,
+  availableTags,
+  onClose,
+  onAddTag,
+  onRemoveTag
+}: {
+  row: AccountPoolRow;
+  availableTags: string[];
+  onClose: () => void;
+  onAddTag: (row: AccountPoolRow, tag: string) => void;
+  onRemoveTag: (row: AccountPoolRow, tag: string) => void;
+}) {
+  const [mounted, setMounted] = useState(false);
+  const [categoryInput, setCategoryInput] = useState('');
+  const [tagInput, setTagInput] = useState('');
+  const tags = row.tags || [];
+  const categories = Array.from(new Set(availableTags.map(getTagCategory).filter(Boolean)));
+  const tagOptions = availableTags.filter(tag => !categoryInput.trim() || getTagCategory(tag).toLowerCase() === categoryInput.trim().toLowerCase());
+  const modalId = `pool-tags-${row.account_id}`;
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
+
+  return createPortal(
+    <div className="tag-editor-backdrop" onClick={onClose}>
+      <div className="tag-editor-modal" onClick={event => event.stopPropagation()}>
+        <button className="tag-editor-close" type="button" onClick={onClose}>×</button>
+        <h3>Edit Creator Tags</h3>
+        <div className="tag-editor-current">
+          {tags.length ? tags.map(tag => (
+            <button className="creator-tag-chip" style={accountTagStyle(tag)} type="button" key={tag} onClick={() => onRemoveTag(row, tag)}>
+              {formatTagLabel(tag)} ×
+            </button>
+          )) : <span className="creator-tag-empty">No tags yet</span>}
+        </div>
+        <div className="tag-editor-section-title">Add Tag</div>
+        <div className="tag-editor-row">
+          <label className="tag-editor-field">
+            <span>⌕</span>
+            <input
+              value={categoryInput}
+              onChange={event => setCategoryInput(event.target.value)}
+              placeholder="Category (search or type new)"
+              list={`${modalId}-categories`}
+            />
+            <datalist id={`${modalId}-categories`}>
+              {categories.map(category => <option value={category} key={category} />)}
+            </datalist>
+          </label>
+          <label className="tag-editor-field">
+            <span>⌕</span>
+            <input
+              value={tagInput}
+              onChange={event => setTagInput(event.target.value)}
+              placeholder={categoryInput.trim() ? 'Select or type tag' : 'Select category first...'}
+              list={`${modalId}-options`}
+            />
+            <datalist id={`${modalId}-options`}>
+              {tagOptions.map(option => <option value={getTagName(option)} key={option} />)}
+            </datalist>
+          </label>
+          <button
+            className="tag-editor-add"
+            type="button"
+            disabled={!categoryInput.trim() || !tagInput.trim()}
+            onClick={() => {
+              onAddTag(row, composeTag(categoryInput, tagInput));
+              setTagInput('');
+            }}
+          >
+            + Add
+          </button>
+        </div>
+        <div className="tag-editor-actions">
+          <button className="tag-editor-cancel" type="button" onClick={onClose}>Cancel</button>
+          <button className="tag-editor-save" type="button" onClick={onClose}>Save Tags</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function generateUiId() {
+  return Math.random().toString(36).slice(2, 10);
+}
+
+function accountTagStyle(value: string) {
+  const palette = [
+    { background: '#dbeafe', borderColor: '#93c5fd', color: '#1d4ed8' },
+    { background: '#dcfce7', borderColor: '#86efac', color: '#15803d' },
+    { background: '#fef3c7', borderColor: '#fbbf24', color: '#92400e' },
+    { background: '#fce7f3', borderColor: '#f9a8d4', color: '#be185d' },
+    { background: '#ede9fe', borderColor: '#c4b5fd', color: '#6d28d9' },
+    { background: '#cffafe', borderColor: '#67e8f9', color: '#0e7490' }
+  ];
+  let hash = 0;
+  for (const char of getTagCategory(value)) hash = char.charCodeAt(0) + ((hash << 5) - hash);
+  const color = palette[Math.abs(hash) % palette.length];
+  return color;
 }
 
 function DateRangeFilter({

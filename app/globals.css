@@ -1587,7 +1587,7 @@
         }
 
         .pool-pill,
-        .pool-tags span {
+        .pool-tags > span {
             display: inline-flex;
             align-items: center;
             min-height: 22px;
@@ -1605,6 +1605,212 @@
             display: flex;
             flex-wrap: wrap;
             gap: 5px;
+            align-items: center;
+        }
+
+        .pool-tag-chip,
+        .pool-tag-add {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 28px;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            padding: 0 10px;
+            color: var(--text);
+            font-size: 12px;
+            font-weight: 750;
+            line-height: 1;
+            white-space: nowrap;
+        }
+
+        .pool-tag-chip {
+            gap: 6px;
+        }
+
+        .pool-tag-chip span {
+            font-weight: 800;
+            opacity: 0.78;
+        }
+
+        .pool-tag-add {
+            width: 30px;
+            padding: 0;
+            background: #f3f4f6;
+            color: var(--muted);
+            font-size: 18px;
+            font-weight: 650;
+        }
+
+        .category-tag-filter {
+            position: relative;
+        }
+
+        .tag-filter-trigger {
+            display: inline-flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            min-width: 170px;
+            text-align: left;
+        }
+
+        .tag-filter-popover {
+            position: absolute;
+            top: calc(100% + 10px);
+            left: 0;
+            z-index: 35;
+            display: grid;
+            gap: 16px;
+            width: min(620px, calc(100vw - 48px));
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 18px;
+            background: #ffffff;
+            box-shadow: 0 24px 70px rgba(15, 23, 42, 0.18);
+        }
+
+        .tag-filter-head,
+        .tag-filter-actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+        }
+
+        .tag-filter-head strong {
+            display: block;
+            color: var(--text);
+            font-size: 18px;
+            font-weight: 850;
+        }
+
+        .tag-filter-head span,
+        .tag-filter-actions span {
+            display: block;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 650;
+        }
+
+        .tag-filter-head button,
+        .tag-filter-actions button {
+            min-height: 38px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 0 14px;
+            background: #ffffff;
+            color: var(--text);
+            font-size: 13px;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+
+        .tag-filter-actions button.primary {
+            border-color: #b8c7ff;
+            background: #eef2ff;
+            color: #273a9a;
+        }
+
+        .tag-filter-actions button:disabled {
+            cursor: not-allowed;
+            opacity: 0.52;
+        }
+
+        .tag-filter-rows {
+            display: grid;
+            gap: 12px;
+        }
+
+        .tag-filter-row {
+            display: grid;
+            grid-template-columns: 170px minmax(0, 1fr) 36px;
+            gap: 10px;
+            align-items: start;
+        }
+
+        .tag-filter-row select,
+        .tag-filter-tagbox-summary {
+            width: 100%;
+            min-height: 42px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 0 12px;
+            background: #f8fafc;
+            color: var(--text);
+            font-size: 14px;
+            font-weight: 650;
+        }
+
+        .tag-filter-tagbox {
+            display: grid;
+            gap: 8px;
+        }
+
+        .tag-filter-tagbox-summary {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            text-align: left;
+        }
+
+        .tag-filter-tagbox-summary b {
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .tag-filter-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+            max-height: 118px;
+            overflow: auto;
+        }
+
+        .tag-filter-options label {
+            display: inline-flex;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .tag-filter-options input {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .tag-filter-options span {
+            display: inline-flex;
+            align-items: center;
+            min-height: 28px;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            padding: 0 10px;
+            font-size: 12px;
+            font-weight: 750;
+            opacity: 0.58;
+        }
+
+        .tag-filter-options input:checked + span {
+            opacity: 1;
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.10);
+        }
+
+        .tag-filter-options em {
+            color: var(--muted);
+            font-size: 12px;
+            font-style: normal;
+            font-weight: 650;
+        }
+
+        .tag-filter-remove {
+            width: 36px;
+            height: 42px;
+            border: 0;
+            background: transparent;
+            color: var(--muted);
+            font-size: 22px;
+            line-height: 1;
         }
 
         .pool-detail-btn {
@@ -4910,7 +5116,7 @@
         .country-sidebar-head,
         .concept-group-header,
         .pool-pill,
-        .pool-tags span,
+        .pool-tags > span,
         .text-input,
         .number-input,
         .search-input,
@@ -5126,11 +5332,26 @@
         }
 
         .tag-editor-modal,
+        .tag-editor-modal h3,
+        .tag-editor-section-title,
+        .tag-editor-field,
         .tag-editor-field input,
         .tag-editor-cancel {
             background: #ffffff !important;
             color: var(--text) !important;
             border-color: var(--line) !important;
+        }
+
+        .tag-editor-field {
+            background: #f8fafc !important;
+        }
+
+        .tag-editor-current .creator-tag-chip {
+            min-height: 32px !important;
+            border-radius: 999px !important;
+            padding: 0 12px !important;
+            font-size: 13px !important;
+            font-weight: 750 !important;
         }
 
         .product-folder,
