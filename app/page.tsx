@@ -1,13 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { ApiKeyPage } from '@/components/ApiKeyPage';
 import { AuthGate } from '@/components/AuthGate';
 import { CountryList } from '@/components/CountryList';
 import { CountrySettingsModal } from '@/components/CountrySettingsModal';
 import { CountryWorkspace } from '@/components/CountryWorkspace';
 import { DashboardHome } from '@/components/DashboardHome';
 import { DatabaseModal } from '@/components/DatabaseModal';
-import { MetricsBar } from '@/components/MetricsBar';
 import { ProductList } from '@/components/ProductList';
 import { ProductSettingsModal } from '@/components/ProductSettingsModal';
 import { PublishCheckBoard } from '@/components/PublishCheckBoard';
@@ -34,7 +34,7 @@ const defaultRoaster: RoasterState = {
 export default function DashboardPage() {
   const [authenticated, setAuthenticated] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
-  const [tool, setTool] = useState<'dashboard' | 'slideshow' | 'roaster' | 'publishCheck' | 'tags'>('dashboard');
+  const [tool, setTool] = useState<'dashboard' | 'slideshow' | 'roaster' | 'publishCheck' | 'tags' | 'apiKeys'>('dashboard');
   const [sideCollapsed, setSideCollapsed] = useState(false);
   const [page, setPage] = useState<'products' | 'product' | 'country'>('products');
   const [selectedProductId, setSelectedProductId] = useState('');
@@ -48,6 +48,7 @@ export default function DashboardPage() {
   const [postCache, setPostCache] = useState<Record<string, { data: any[]; pagination: { limit: number; offset: number; has_more: boolean; total?: number } }>>({});
   const [slideIndexes, setSlideIndexes] = useState<Record<string, number>>({});
   const [syncPrefix, setSyncPrefix] = useState('');
+  const [syncProductId, setSyncProductId] = useState('');
   const [syncAllRunning, setSyncAllRunning] = useState(false);
   const [syncAllProgress, setSyncAllProgress] = useState('');
   const [roaster, setRoaster] = useState<RoasterState>(defaultRoaster);
@@ -267,6 +268,17 @@ export default function DashboardPage() {
   useEffect(() => {
     if (authenticated && tool === 'tags' && tagProductId) {
       loadTagDashboard(tagProductId);
+    }
+  }, [authenticated, tool]);
+
+  useEffect(() => {
+    if (authenticated && tool === 'apiKeys') {
+      api.apiKeys()
+        .then(payload => setApiKeys(payload.keys || []))
+        .catch((error: any) => {
+          setStatus(error?.message || 'API Key 读取失败');
+          setStatusError(true);
+        });
     }
   }, [authenticated, tool]);
 
@@ -502,6 +514,49 @@ export default function DashboardPage() {
     }
   }
 
+  async function syncProductCountries(product: Product) {
+    const countries = product.countries || [];
+    if (!countries.length || syncProductId) return;
+    setSyncProductId(product.id);
+    setPostCache({});
+    setExpandedCards({});
+    setReelFarmResults({});
+    let failed = 0;
+    try {
+      for (let index = 0; index < countries.length; index += 1) {
+        const country = countries[index];
+        setSyncPrefix(`country:${country.id}`);
+        setStatus(`同步 ${product.name}：${index + 1}/${countries.length} ${country.name}`);
+        setStatusError(false);
+        try {
+          const payload = await api.syncCountry({
+            prefix: buildCountryAutomationPrefix(product, country),
+            product_id: product.id,
+            country_id: country.id,
+            product_code: getProductReelFarmCode(product),
+            country_code: getCountryReelFarmCode(country)
+          });
+          applySyncResult(product.id, country.id, payload);
+        } catch (error: any) {
+          failed += 1;
+          setStatus(`${product.name} · ${country.name} 同步失败：${error?.message || '未知错误'}`);
+          setStatusError(true);
+        }
+        if (index < countries.length - 1) await wait(1400);
+      }
+      await loadProductKpis(product);
+      if (selectedProductId === product.id && page === 'country') {
+        await loadCountryKpis(selectedProduct, selectedCountry);
+        await loadAccounts(selectedProduct, selectedCountry, true);
+      }
+      setStatus(failed ? `${product.name} 同步完成：${failed} 个地区失败` : `${product.name} 已同步完成`);
+      setStatusError(Boolean(failed));
+    } finally {
+      setSyncPrefix('');
+      setSyncProductId('');
+    }
+  }
+
   async function syncAllCountries() {
     if (syncAllRunning) return;
     const jobs = products.flatMap(product => (product.countries || []).map(country => ({ product, country })));
@@ -654,23 +709,18 @@ export default function DashboardPage() {
             />
           </section>
           <section className={`tool-page ${tool === 'slideshow' ? 'active' : ''}`}>
-            <header className="topbar">
-              <div>
-                <h1><span className="brand-mark">DECAGROWTH<span className="brand-dot">.</span></span><span className="brand-cn">中台</span></h1>
-                <p className="subtitle">Slide Show (Reel Farm) · 按「产品 → 国家/地区 → 创意」逐层管理，适合大量产品和市场内容。</p>
-              </div>
-              <div className="top-actions">
-                <span className={`status-pill ${statusError ? 'error' : ''}`}>{status}</span>
-                <button className="btn ghost" type="button" onClick={syncAllCountries} disabled={syncAllRunning || !products.length}>
-                  {syncAllRunning ? `同步全部 ${syncAllProgress}` : '同步全部'}
-                </button>
-                <button className="btn ghost" type="button" onClick={openDatabase}>打开数据库</button>
-                <button className="btn ghost" type="button" onClick={resetDemo}>恢复示例</button>
-              </div>
-            </header>
-            <MetricsBar products={products} />
-            <section className="page-shell">
-              {page === 'products' ? <ProductList products={products} productKpis={productKpis} onSelect={selectProduct} onAddProduct={addProduct} onEditProduct={product => setEditingProductId(product.id)} /> : null}
+            <section className="page-shell slideshow-shell">
+              {page === 'products' ? (
+                <ProductList
+                  products={products}
+                  productKpis={productKpis}
+                  syncingProductId={syncProductId}
+                  onSelect={selectProduct}
+                  onAddProduct={addProduct}
+                  onEditProduct={product => setEditingProductId(product.id)}
+                  onSyncProduct={syncProductCountries}
+                />
+              ) : null}
               {page === 'product' && selectedProduct ? <CountryList product={selectedProduct} kpis={productKpis[selectedProduct.id]} onBack={() => setPage('products')} onSelect={selectCountry} onOpenSettings={() => setCountrySettingsOpen(true)} /> : null}
               {page === 'country' && selectedProduct && selectedCountry ? (
                 <CountryWorkspace
@@ -695,6 +745,15 @@ export default function DashboardPage() {
                 />
               ) : null}
             </section>
+          </section>
+          <section className={`tool-page ${tool === 'apiKeys' ? 'active' : ''}`}>
+            <ApiKeyPage
+              keys={apiKeys}
+              generatedKey={generatedKey}
+              onCreateKey={createKey}
+              onRevokeKey={revokeKey}
+              onCopy={copy}
+            />
           </section>
           <section className={`tool-page ${tool === 'roaster' ? 'active' : ''}`}>
             <header className="topbar">

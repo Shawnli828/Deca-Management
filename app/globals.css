@@ -5762,3 +5762,160 @@
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
         }
+
+        .slideshow-shell {
+            min-height: 100vh;
+            padding-top: 18px;
+            background: #ffffff;
+        }
+
+        .product-sync-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 28px;
+            border: 1px solid #d9e0ea;
+            border-radius: 9px;
+            padding: 0 10px;
+            background: #ffffff;
+            color: #1f2a44;
+            font-size: 12px;
+            font-weight: 850;
+            white-space: nowrap;
+            transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+        }
+
+        .product-sync-btn:hover:not(:disabled) {
+            border-color: #b8c7ff;
+            background: #f4f7ff;
+            transform: translateY(-1px);
+        }
+
+        .product-sync-btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.58;
+        }
+
+        .product-settings-panel {
+            background: #ffffff !important;
+            color: var(--text) !important;
+        }
+
+        .product-settings-panel .database-header {
+            background: #ffffff !important;
+            border-bottom-color: var(--line) !important;
+        }
+
+        .product-settings-panel .database-title {
+            color: var(--text) !important;
+        }
+
+        .product-settings-panel .database-subtitle,
+        .product-settings-panel .settings-field > span {
+            color: var(--muted) !important;
+        }
+
+        .product-settings-panel .icon-btn {
+            background: #f8fafc !important;
+            color: var(--text) !important;
+        }
+
+        .product-settings-body {
+            background: #ffffff !important;
+        }
+
+        .product-settings-body .text-input {
+            border-color: var(--line) !important;
+            background: #f8fafc !important;
+            color: var(--text) !important;
+        }
+
+        .product-settings-body .settings-logo-preview {
+            border-color: var(--line) !important;
+            background: #f8fafc !important;
+            color: var(--muted) !important;
+        }
+
+        .api-key-page {
+            min-height: 100vh;
+            padding: 28px;
+            background: #ffffff;
+        }
+
+        .api-key-page-head {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 16px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .api-key-page-head h1 {
+            margin: 0;
+            color: var(--text);
+            font-size: 28px;
+        }
+
+        .api-key-page-head p {
+            margin: 8px 0 0;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .api-key-page-card {
+            display: grid;
+            gap: 14px;
+            margin-top: 18px;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 18px;
+            background: #ffffff;
+            box-shadow: 0 14px 34px rgba(15, 23, 42, 0.05);
+        }
+
+        .api-key-page .api-key-panel,
+        .api-key-page .api-key-row,
+        .api-key-page .api-modal-tabs,
+        .api-key-page .api-doc-panel,
+        .api-key-page .api-doc-block,
+        .api-key-page .api-doc-grid > div {
+            background: #ffffff !important;
+        }
+
+        .api-key-page .api-key-head h3,
+        .api-key-page .api-key-name {
+            color: var(--text) !important;
+        }
+
+        .api-key-page .api-key-head p,
+        .api-key-page .api-key-meta,
+        .api-key-page .generated-api-key-label {
+            color: var(--muted) !important;
+        }
+
+        .api-key-page .generated-api-key code,
+        .api-key-doc-card pre {
+            overflow: auto;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 12px;
+            background: #f8fafc !important;
+            color: #1f2a44 !important;
+            font-size: 12px;
+            line-height: 1.55;
+            white-space: pre;
+        }
+
+        .api-key-doc-card h3 {
+            margin: 0;
+            color: var(--text);
+            font-size: 18px;
+        }
+
+        .api-key-doc-card p {
+            margin: 6px 0 0;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.6;
+        }
