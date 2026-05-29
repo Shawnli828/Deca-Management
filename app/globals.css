@@ -4666,6 +4666,11 @@
             align-items: center;
         }
 
+        .tag-editor-combobox {
+            position: relative;
+            min-width: 0;
+        }
+
         .tag-editor-field {
             display: grid;
             grid-template-columns: 28px minmax(0, 1fr) 18px;
@@ -4696,13 +4701,64 @@
             opacity: 0.56;
         }
 
-        .tag-editor-chevron {
+        .tag-editor-menu-toggle {
+            display: grid;
+            place-items: center;
+            width: 22px;
+            height: 22px;
+            border: 0;
+            background: transparent;
             color: #91887f;
-            font-size: 15px;
+            cursor: pointer;
+            font-size: 16px;
             font-weight: 850;
             line-height: 1;
-            pointer-events: none;
-            text-align: right;
+        }
+
+        .tag-editor-menu-toggle:disabled {
+            cursor: not-allowed;
+            opacity: 0.45;
+        }
+
+        .tag-editor-list {
+            position: absolute;
+            z-index: 30;
+            top: calc(100% + 8px);
+            left: 0;
+            right: 0;
+            display: grid;
+            max-height: 220px;
+            overflow: auto;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 6px;
+            background: #ffffff;
+            box-shadow: 0 18px 44px rgba(15, 23, 42, 0.16);
+        }
+
+        .tag-editor-list button {
+            width: 100%;
+            border: 0;
+            border-radius: 8px;
+            padding: 12px 14px;
+            background: transparent;
+            color: var(--text);
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 750;
+            text-align: left;
+        }
+
+        .tag-editor-list button:hover {
+            background: #eef2ff;
+            color: var(--accent-strong);
+        }
+
+        .tag-editor-list-empty {
+            padding: 12px 14px;
+            color: var(--muted);
+            font-size: 14px;
+            font-weight: 700;
         }
 
         .tag-editor-add,
@@ -5360,7 +5416,7 @@
             background: #f8fafc !important;
         }
 
-        .tag-editor-chevron {
+        .tag-editor-menu-toggle {
             color: var(--muted) !important;
         }
 

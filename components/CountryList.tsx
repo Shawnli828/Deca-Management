@@ -575,21 +575,42 @@ function AccountTagEditorModal({
   const [mounted, setMounted] = useState(false);
   const [categoryInput, setCategoryInput] = useState('');
   const [tagInput, setTagInput] = useState('');
+  const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
+  const [tagMenuOpen, setTagMenuOpen] = useState(false);
+  const categoryMenuRef = useRef<HTMLDivElement>(null);
+  const tagMenuRef = useRef<HTMLDivElement>(null);
   const tags = row.tags || [];
   const categories = Array.from(new Set(availableTags.map(getTagCategory).filter(Boolean))).sort((a, b) => a.localeCompare(b));
   const normalizedCategory = categoryInput.trim().toLowerCase();
   const tagOptions = availableTags.filter(tag => !normalizedCategory || getTagCategory(tag).toLowerCase() === normalizedCategory);
-  const modalId = `pool-tags-${row.account_id}`;
+  const categorySuggestions = categories.filter(category => !normalizedCategory || category.toLowerCase().includes(normalizedCategory));
+  const normalizedTag = tagInput.trim().toLowerCase();
+  const tagSuggestions = Array.from(new Set(tagOptions.map(getTagName)))
+    .filter(tag => !normalizedTag || tag.toLowerCase().includes(normalizedTag))
+    .sort((a, b) => a.localeCompare(b));
   const canAddTag = Boolean(categoryInput.trim() && tagInput.trim());
 
   function commitTag() {
     if (!canAddTag) return;
     onAddTag(row, composeTag(categoryInput, tagInput));
     setTagInput('');
+    setTagMenuOpen(false);
   }
 
   useEffect(() => {
     setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (!categoryMenuRef.current?.contains(target)) setCategoryMenuOpen(false);
+      if (!tagMenuRef.current?.contains(target)) setTagMenuOpen(false);
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
   }, []);
 
   if (!mounted) return null;
@@ -608,44 +629,97 @@ function AccountTagEditorModal({
         </div>
         <div className="tag-editor-section-title">Add Tag</div>
         <div className="tag-editor-row">
-          <label className="tag-editor-field">
-            <span>⌕</span>
-            <input
-              value={categoryInput}
-              onChange={event => {
-                setCategoryInput(event.target.value);
-                setTagInput('');
-              }}
-              placeholder="Select or type category"
-              list={`${modalId}-categories`}
-              autoComplete="off"
-            />
-            <b className="tag-editor-chevron">⌄</b>
-            <datalist id={`${modalId}-categories`}>
-              {categories.map(category => <option value={category} key={category} />)}
-            </datalist>
-          </label>
-          <label className="tag-editor-field">
-            <span>⌕</span>
-            <input
-              value={tagInput}
-              onChange={event => setTagInput(event.target.value)}
-              onKeyDown={event => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  commitTag();
-                }
-              }}
-              placeholder={categoryInput.trim() ? 'Select or type tag' : 'Select category first...'}
-              list={`${modalId}-options`}
-              autoComplete="off"
-              disabled={!categoryInput.trim()}
-            />
-            <b className="tag-editor-chevron">⌄</b>
-            <datalist id={`${modalId}-options`}>
-              {tagOptions.map(option => <option value={getTagName(option)} key={option} />)}
-            </datalist>
-          </label>
+          <div className="tag-editor-combobox" ref={categoryMenuRef}>
+            <div className="tag-editor-field">
+              <span>⌕</span>
+              <input
+                value={categoryInput}
+                onFocus={() => setCategoryMenuOpen(true)}
+                onChange={event => {
+                  setCategoryInput(event.target.value);
+                  setTagInput('');
+                  setCategoryMenuOpen(true);
+                }}
+                placeholder="Select or type category"
+                autoComplete="off"
+              />
+              <button
+                className="tag-editor-menu-toggle"
+                type="button"
+                aria-label="选择 Category"
+                onClick={() => setCategoryMenuOpen(previous => !previous)}
+              >
+                ⌄
+              </button>
+            </div>
+            {categoryMenuOpen ? (
+              <div className="tag-editor-list">
+                {categorySuggestions.length ? categorySuggestions.map(category => (
+                  <button
+                    type="button"
+                    key={category}
+                    onClick={() => {
+                      setCategoryInput(category);
+                      setTagInput('');
+                      setCategoryMenuOpen(false);
+                      setTagMenuOpen(true);
+                    }}
+                  >
+                    {category}
+                  </button>
+                )) : <span className="tag-editor-list-empty">No existing category. Type to create new.</span>}
+              </div>
+            ) : null}
+          </div>
+          <div className="tag-editor-combobox" ref={tagMenuRef}>
+            <div className="tag-editor-field">
+              <span>⌕</span>
+              <input
+                value={tagInput}
+                onFocus={() => {
+                  if (categoryInput.trim()) setTagMenuOpen(true);
+                }}
+                onChange={event => {
+                  setTagInput(event.target.value);
+                  setTagMenuOpen(Boolean(categoryInput.trim()));
+                }}
+                onKeyDown={event => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    commitTag();
+                  }
+                }}
+                placeholder={categoryInput.trim() ? 'Select or type tag' : 'Select category first...'}
+                autoComplete="off"
+                disabled={!categoryInput.trim()}
+              />
+              <button
+                className="tag-editor-menu-toggle"
+                type="button"
+                aria-label="选择 Tag"
+                disabled={!categoryInput.trim()}
+                onClick={() => setTagMenuOpen(previous => categoryInput.trim() ? !previous : false)}
+              >
+                ⌄
+              </button>
+            </div>
+            {tagMenuOpen ? (
+              <div className="tag-editor-list">
+                {tagSuggestions.length ? tagSuggestions.map(tag => (
+                  <button
+                    type="button"
+                    key={tag}
+                    onClick={() => {
+                      setTagInput(tag);
+                      setTagMenuOpen(false);
+                    }}
+                  >
+                    {tag}
+                  </button>
+                )) : <span className="tag-editor-list-empty">No existing tag. Type to create new.</span>}
+              </div>
+            ) : null}
+          </div>
           <button
             className="tag-editor-add"
             type="button"
