@@ -5919,3 +5919,19 @@
             font-size: 13px;
             line-height: 1.6;
         }
+
+        .breadcrumbs {
+            color: var(--muted) !important;
+        }
+
+        .crumb-btn {
+            border: 1px solid var(--line) !important;
+            background: #ffffff !important;
+            color: var(--text) !important;
+            box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
+        }
+
+        .crumb-btn:hover {
+            background: #f7f8fa !important;
+            border-color: var(--line-strong) !important;
+        }
