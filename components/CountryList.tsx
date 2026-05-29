@@ -105,6 +105,7 @@ export function CountryList({
   const [expandedAccounts, setExpandedAccounts] = useState<Record<string, boolean>>({});
   const [postCache, setPostCache] = useState<Record<string, AccountPostState>>({});
   const [editingTagAccountId, setEditingTagAccountId] = useState('');
+  const [productTagOptions, setProductTagOptions] = useState<string[]>([]);
 
   function addDateFilters(params: URLSearchParams) {
     if (dateFrom) params.set('date_from', dateFrom);
@@ -117,7 +118,8 @@ export function CountryList({
     setLoading(true);
     try {
       const productCode = getProductReelFarmCode(product);
-      const chunks = await Promise.all(countries.map(async country => {
+      const productTagsRequest = api.productTags(productCode).catch(() => ({ ok: false, product_code: productCode, tags: [] as string[] }));
+      const accountsRequest = Promise.all(countries.map(async country => {
         const params = addDateFilters(new URLSearchParams({
           resource: 'accounts',
           product_code: productCode,
@@ -126,6 +128,8 @@ export function CountryList({
         const payload = await api.dataQuery<{ ok: boolean; data: AccountSummary[] }>(params);
         return (payload.data || []).map(account => ({ ...account, country }));
       }));
+      const [chunks, productTagsPayload] = await Promise.all([accountsRequest, productTagsRequest]);
+      setProductTagOptions(productTagsPayload.tags || []);
       const accounts = chunks.flat();
       const accountIds = accounts.map(account => account.account_id).filter(Boolean);
       const tagMap: Record<string, string[]> = {};
@@ -218,15 +222,19 @@ export function CountryList({
   }
 
   const tagOptions = useMemo(() => {
-    return Array.from(new Set(rows.flatMap(row => row.tags || []))).sort((a, b) => a.localeCompare(b));
-  }, [rows]);
+    return Array.from(new Set([
+      ...productTagOptions,
+      ...rows.flatMap(row => row.tags || [])
+    ])).filter(Boolean).sort((a, b) => a.localeCompare(b));
+  }, [productTagOptions, rows]);
   const editingTagRow = editingTagAccountId ? rows.find(row => row.account_id === editingTagAccountId) : null;
 
   async function addAccountTag(row: AccountPoolRow, tag: string) {
     const accountId = String(row.account_id || '').trim();
     const nextTag = tag.trim();
     if (!accountId || !nextTag) return;
-    await api.createProductTag(getProductReelFarmCode(product), nextTag);
+    const productTagsPayload = await api.createProductTag(getProductReelFarmCode(product), nextTag);
+    setProductTagOptions(productTagsPayload.tags || []);
     const payload = await api.addAccountTag(accountId, nextTag);
     setRows(previous => previous.map(item => item.account_id === accountId
       ? { ...item, tags: Array.from(new Set([...(item.tags || []), payload.tag])) }
@@ -542,9 +550,17 @@ function AccountTagEditorModal({
   const [categoryInput, setCategoryInput] = useState('');
   const [tagInput, setTagInput] = useState('');
   const tags = row.tags || [];
-  const categories = Array.from(new Set(availableTags.map(getTagCategory).filter(Boolean)));
-  const tagOptions = availableTags.filter(tag => !categoryInput.trim() || getTagCategory(tag).toLowerCase() === categoryInput.trim().toLowerCase());
+  const categories = Array.from(new Set(availableTags.map(getTagCategory).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  const normalizedCategory = categoryInput.trim().toLowerCase();
+  const tagOptions = availableTags.filter(tag => !normalizedCategory || getTagCategory(tag).toLowerCase() === normalizedCategory);
   const modalId = `pool-tags-${row.account_id}`;
+  const canAddTag = Boolean(categoryInput.trim() && tagInput.trim());
+
+  function commitTag() {
+    if (!canAddTag) return;
+    onAddTag(row, composeTag(categoryInput, tagInput));
+    setTagInput('');
+  }
 
   useEffect(() => {
     setMounted(true);
@@ -570,10 +586,15 @@ function AccountTagEditorModal({
             <span>⌕</span>
             <input
               value={categoryInput}
-              onChange={event => setCategoryInput(event.target.value)}
-              placeholder="Category (search or type new)"
+              onChange={event => {
+                setCategoryInput(event.target.value);
+                setTagInput('');
+              }}
+              placeholder="Select or type category"
               list={`${modalId}-categories`}
+              autoComplete="off"
             />
+            <b className="tag-editor-chevron">⌄</b>
             <datalist id={`${modalId}-categories`}>
               {categories.map(category => <option value={category} key={category} />)}
             </datalist>
@@ -583,9 +604,18 @@ function AccountTagEditorModal({
             <input
               value={tagInput}
               onChange={event => setTagInput(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  commitTag();
+                }
+              }}
               placeholder={categoryInput.trim() ? 'Select or type tag' : 'Select category first...'}
               list={`${modalId}-options`}
+              autoComplete="off"
+              disabled={!categoryInput.trim()}
             />
+            <b className="tag-editor-chevron">⌄</b>
             <datalist id={`${modalId}-options`}>
               {tagOptions.map(option => <option value={getTagName(option)} key={option} />)}
             </datalist>
@@ -593,11 +623,8 @@ function AccountTagEditorModal({
           <button
             className="tag-editor-add"
             type="button"
-            disabled={!categoryInput.trim() || !tagInput.trim()}
-            onClick={() => {
-              onAddTag(row, composeTag(categoryInput, tagInput));
-              setTagInput('');
-            }}
+            disabled={!canAddTag}
+            onClick={commitTag}
           >
             + Add
           </button>

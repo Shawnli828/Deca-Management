@@ -4668,7 +4668,7 @@
 
         .tag-editor-field {
             display: grid;
-            grid-template-columns: 28px minmax(0, 1fr);
+            grid-template-columns: 28px minmax(0, 1fr) 18px;
             align-items: center;
             min-height: 48px;
             border: 1px solid #3d3731;
@@ -4689,6 +4689,20 @@
 
         .tag-editor-field input::placeholder {
             color: #857d74;
+        }
+
+        .tag-editor-field input:disabled {
+            cursor: not-allowed;
+            opacity: 0.56;
+        }
+
+        .tag-editor-chevron {
+            color: #91887f;
+            font-size: 15px;
+            font-weight: 850;
+            line-height: 1;
+            pointer-events: none;
+            text-align: right;
         }
 
         .tag-editor-add,
@@ -5344,6 +5358,10 @@
 
         .tag-editor-field {
             background: #f8fafc !important;
+        }
+
+        .tag-editor-chevron {
+            color: var(--muted) !important;
         }
 
         .tag-editor-current .creator-tag-chip {
