@@ -275,6 +275,28 @@ export function CountryList({
   });
 
   const statusOptions = Array.from(new Set(rows.map(row => String(row.status || 'unknown').toLowerCase()))).sort();
+  const performanceMetrics = useMemo(() => {
+    const accountCount = filteredRows.length;
+    const postedCount = filteredRows.filter(row => Number(row.post_count) > 0).length;
+    const posts = filteredRows.reduce((sum, row) => sum + (Number(row.post_count) || 0), 0);
+    const views = filteredRows.reduce((sum, row) => sum + (Number(row.total_views) || 0), 0);
+    const likes = filteredRows.reduce((sum, row) => sum + (Number(row.total_likes) || 0), 0);
+    const comments = filteredRows.reduce((sum, row) => sum + (Number(row.total_comments) || 0), 0);
+    const shares = filteredRows.reduce((sum, row) => sum + (Number(row.total_shares) || 0), 0);
+    const avgViews = accountCount ? Math.round(views / accountCount) : 0;
+    const engagement = views ? ((likes + comments + shares) / views) * 100 : 0;
+
+    return [
+      { label: 'POSTED', value: `${formatNumber(postedCount)}/${formatNumber(accountCount)}`, note: 'Accounts with posts / filtered accounts' },
+      { label: 'POSTS', value: formatNumber(posts) },
+      { label: 'VIEWS', value: formatNumber(views) },
+      { label: 'AVG VIEWS', value: formatNumber(avgViews), note: 'Filtered total views / filtered accounts' },
+      { label: 'LIKES', value: formatNumber(likes) },
+      { label: 'COMMENTS', value: formatNumber(comments) },
+      { label: 'SHARES', value: formatNumber(shares) },
+      { label: 'ENGAGEMENT', value: `${engagement.toFixed(2)}%`, note: '(Likes + comments + shares) / views' }
+    ];
+  }, [filteredRows]);
 
   return (
     <section className="page active">
@@ -325,11 +347,24 @@ export function CountryList({
       </div>
 
       <section className="pool-performance">
-        <div>
-          <strong>Performance Dashboard</strong>
-          <span>Aggregated across all accounts matching the current filters.</span>
+        <div className="pool-performance-head">
+          <div>
+            <strong>Performance Dashboard</strong>
+            <span>Aggregated across all accounts matching the current filters.</span>
+          </div>
+          <span>Filter-aware</span>
         </div>
-        <span>Filter-aware</span>
+        <div className="pool-performance-grid">
+          {performanceMetrics.map(metric => (
+            <div className="pool-performance-card" key={metric.label}>
+              <div className="pool-performance-label">
+                <span>{metric.label}</span>
+                {metric.note ? <b title={metric.note}>i</b> : null}
+              </div>
+              <strong>{metric.value}</strong>
+            </div>
+          ))}
+        </div>
       </section>
 
       <div className="account-pool-table-wrap">

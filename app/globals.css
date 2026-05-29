@@ -1460,38 +1460,92 @@
         .dot.star { background: #a78bfa; }
 
         .pool-performance {
+            display: grid;
+            gap: 14px;
+            border: 1px solid var(--line);
+            border-radius: 7px;
+            padding: 16px;
+            background: var(--surface);
+        }
+
+        .pool-performance-head {
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 12px;
-            border: 1px solid var(--line);
-            border-radius: 7px;
-            padding: 14px 16px;
-            background: var(--surface);
         }
 
-        .pool-performance strong,
-        .pool-performance span {
+        .pool-performance-head strong,
+        .pool-performance-head span {
             display: block;
         }
 
-        .pool-performance strong {
+        .pool-performance-head strong {
             color: var(--text);
             font-size: 15px;
         }
 
-        .pool-performance span {
+        .pool-performance-head span {
             margin-top: 3px;
             color: var(--muted);
             font-size: 12px;
             font-weight: 700;
         }
 
-        .pool-performance > span {
+        .pool-performance-head > span {
             margin-top: 0;
             border: 1px solid var(--line);
             border-radius: 999px;
             padding: 4px 8px;
+        }
+
+        .pool-performance-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .pool-performance-card {
+            display: grid;
+            align-content: space-between;
+            min-height: 86px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 14px;
+            background: #ffffff;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+        }
+
+        .pool-performance-label {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 850;
+            letter-spacing: 0.06em;
+        }
+
+        .pool-performance-label b {
+            display: inline-grid;
+            place-items: center;
+            width: 16px;
+            height: 16px;
+            border: 1px solid var(--line);
+            border-radius: 50%;
+            color: var(--muted);
+            font-size: 11px;
+            font-style: normal;
+            letter-spacing: 0;
+            text-transform: none;
+        }
+
+        .pool-performance-card strong {
+            color: var(--text);
+            font-size: 22px;
+            font-weight: 850;
+            line-height: 1;
         }
 
         .account-pool-table-wrap {
@@ -1979,6 +2033,10 @@
         }
 
         @media (max-width: 1200px) {
+            .pool-performance-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
             .pool-post-grid {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
@@ -1995,6 +2053,10 @@
             }
 
             .pool-post-grid {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            .pool-performance-grid {
                 grid-template-columns: minmax(0, 1fr);
             }
         }
