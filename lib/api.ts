@@ -7,6 +7,7 @@ import type {
   PublishCheckState,
   Product,
   ProductKpis,
+  ProductRollup,
   ReelFarmResult,
   RoasterState,
   TagDashboard
@@ -49,9 +50,18 @@ export const api = {
     }, 'Failed to save data'),
   reset: () => apiFetch<{ data: Product[] }>('/api/reset', { method: 'POST' }, 'Failed to reset'),
   dataQuery: <T>(params: URLSearchParams) => apiFetch<T>(`/api/data/query?${params.toString()}`),
-  productKpis: (productCode: string, countryCode?: string) =>
+  productKpis: (productCode: string, countryCode?: string, source?: string) =>
     api.dataQuery<{ ok: boolean; data: ProductKpis }>(
-      new URLSearchParams({ resource: 'product_kpis', product_code: productCode, ...(countryCode ? { country_code: countryCode } : {}) })
+      new URLSearchParams({
+        resource: 'product_kpis',
+        product_code: productCode,
+        ...(countryCode ? { country_code: countryCode } : {}),
+        ...(source ? { source } : {})
+      })
+    ),
+  productRollups: (source?: string) =>
+    api.dataQuery<{ ok: boolean; data: ProductRollup[] }>(
+      new URLSearchParams({ resource: 'product_rollups', ...(source ? { source } : {}) })
     ),
   accounts: (productCode: string, countryCode: string, days: number) =>
     api.dataQuery<{ ok: boolean; data: AccountSummary[] }>(

@@ -15,7 +15,7 @@ import { RoasterBoard } from '@/components/RoasterBoard';
 import { SideMenu } from '@/components/SideMenu';
 import { TagBoard } from '@/components/TagBoard';
 import { accountSummaryToCard, api, mergePostRowsIntoCard } from '@/lib/api';
-import type { Country, DatabaseSnapshot, ExternalApiKey, Product, ProductKpis, PublishCheckState, ReelFarmCard, ReelFarmResult, RoasterState, TagDashboard } from '@/lib/types';
+import type { Country, DatabaseSnapshot, ExternalApiKey, Product, ProductKpis, ProductRollup, PublishCheckState, ReelFarmCard, ReelFarmResult, RoasterState, TagDashboard } from '@/lib/types';
 import { buildCountryAutomationPrefix, cardStateKey, codeFromName, getCountryReelFarmCode, getProductReelFarmCode } from '@/lib/utils';
 
 const defaultRoaster: RoasterState = {
@@ -62,6 +62,8 @@ export default function DashboardPage() {
   const [apiKeys, setApiKeys] = useState<ExternalApiKey[]>([]);
   const [generatedKey, setGeneratedKey] = useState('');
   const [productKpis, setProductKpis] = useState<Record<string, ProductKpis | null>>({});
+  const [cloneProducts, setCloneProducts] = useState<Product[]>([]);
+  const [cloneProductKpis, setCloneProductKpis] = useState<Record<string, ProductKpis | null>>({});
   const [countryKpis, setCountryKpis] = useState<Record<string, ProductKpis | null>>({});
   const [tagProductId, setTagProductId] = useState('');
   const [tagDashboard, setTagDashboard] = useState<TagDashboard | null>(null);
@@ -72,6 +74,27 @@ export default function DashboardPage() {
   const selectedCountry = useMemo(() => selectedProduct?.countries?.find(country => country.id === selectedCountryId) || selectedProduct?.countries?.[0] || null, [selectedProduct, selectedCountryId]);
   const editingProduct = useMemo(() => products.find(product => product.id === editingProductId) || null, [products, editingProductId]);
   const currentPrefix = selectedProduct && selectedCountry ? buildCountryAutomationPrefix(selectedProduct, selectedCountry) : '';
+  const cloneDisplayProducts = useMemo(() => (
+    cloneProducts.length ? cloneProducts : products.map(product => ({
+      ...product,
+      creatorCount: 0,
+      automationCount: 0,
+      materialCount: 0,
+      postCount: 0,
+      countries: (product.countries || []).map(country => ({
+        ...country,
+        creatorCount: 0,
+        automationCount: 0,
+        materialCount: 0,
+        postCount: 0,
+        reelFarmSyncedAt: ''
+      }))
+    }))
+  ), [cloneProducts, products]);
+  const selectedCloneProduct = useMemo(
+    () => cloneDisplayProducts.find(product => product.id === selectedProductId) || cloneDisplayProducts[0] || null,
+    [cloneDisplayProducts, selectedProductId]
+  );
 
   useEffect(() => {
     document.title = 'DECAGROWTH中台';
@@ -340,6 +363,60 @@ export default function DashboardPage() {
     }
   }
 
+  function buildProductsFromRollups(sourceProducts: Product[], rollups: ProductRollup[]) {
+    const rollupMap = new Map(
+      (rollups || []).map(rollup => [String(rollup.product_code || '').toUpperCase(), rollup])
+    );
+
+    return sourceProducts.map(product => {
+      const productCode = getProductReelFarmCode(product);
+      const rollup = rollupMap.get(productCode);
+      const countryRollups = new Map(
+        (rollup?.countries || []).map(country => [String(country.country_code || '').toUpperCase(), country])
+      );
+      const countries = (product.countries || []).map(country => {
+        const countryRollup = countryRollups.get(getCountryReelFarmCode(country));
+        return {
+          ...country,
+          creatorCount: Number(countryRollup?.creator_count) || 0,
+          materialCount: Number(countryRollup?.material_count) || 0,
+          postCount: Number(countryRollup?.post_count) || 0,
+          reelFarmSyncedAt: countryRollup?.last_synced_at || ''
+        };
+      });
+
+      return {
+        ...product,
+        creatorCount: Number(rollup?.creator_count) || 0,
+        materialCount: Number(rollup?.material_count) || 0,
+        postCount: Number(rollup?.post_count) || 0,
+        countries
+      };
+    });
+  }
+
+  async function loadCloneProductData(sourceProducts = products) {
+    if (!sourceProducts.length) return;
+    try {
+      const rollupPayload = await api.productRollups('museon_clone');
+      setCloneProducts(buildProductsFromRollups(sourceProducts, rollupPayload.data || []));
+      const entries = await Promise.all(sourceProducts.map(async product => {
+        try {
+          const payload = await api.productKpis(getProductReelFarmCode(product), undefined, 'museon_clone');
+          return [product.id, payload.data || null] as const;
+        } catch {
+          return [product.id, null] as const;
+        }
+      }));
+      setCloneProductKpis(Object.fromEntries(entries));
+    } catch (error: any) {
+      setCloneProducts(buildProductsFromRollups(sourceProducts, []));
+      setCloneProductKpis({});
+      setStatus(error?.message || 'Clone Slide Show 数据加载失败');
+      setStatusError(true);
+    }
+  }
+
   async function loadCountryKpis(product = selectedProduct, country = selectedCountry) {
     if (!product || !country) return;
     const key = `${product.id}:${country.id}`;
@@ -357,6 +434,12 @@ export default function DashboardPage() {
     setPage('product');
     loadProductKpis(product);
   }
+
+  useEffect(() => {
+    if (authenticated && tool === 'cloneSlideshow' && products.length) {
+      loadCloneProductData(products);
+    }
+  }, [authenticated, tool, products]);
 
   function selectCountry(country: Country) {
     setSelectedCountryId(country.id);
@@ -758,8 +841,8 @@ export default function DashboardPage() {
             <section className="page-shell slideshow-shell">
               {page === 'products' ? (
                 <ProductList
-                  products={products}
-                  productKpis={productKpis}
+                  products={cloneDisplayProducts}
+                  productKpis={cloneProductKpis}
                   onSelect={selectProduct}
                   onAddProduct={addProduct}
                   onEditProduct={product => setEditingProductId(product.id)}
@@ -767,8 +850,8 @@ export default function DashboardPage() {
               ) : null}
               {page !== 'products' && selectedProduct ? (
                 <CountryList
-                  product={selectedProduct}
-                  kpis={productKpis[selectedProduct.id]}
+                  product={selectedCloneProduct || selectedProduct}
+                  kpis={cloneProductKpis[selectedProduct.id]}
                   dataSource="museon_clone"
                   onBack={() => setPage('products')}
                   onSelect={selectCountry}

@@ -1881,6 +1881,7 @@ def database_snapshot():
 DATA_QUERY_RESOURCES = {
     "summary",
     "product_kpis",
+    "product_rollups",
     "country_cards",
     "countries",
     "accounts",
@@ -2114,6 +2115,10 @@ def query_countries(query):
 
 
 def query_product_kpis(query):
+    source = query_value(query, "source").lower()
+    if source in {"museon_clone", "clone", "museon"}:
+        return query_museon_clone_product_kpis(query)
+
     product_code = query_value(query, "product_code").upper()
     country_code = (query_value(query, "country_code") or query_value(query, "market_code")).upper()
     if not product_code:
@@ -2186,6 +2191,198 @@ def query_product_kpis(query):
         (seven_start_local + timedelta(days=day_index)).date().isoformat(): set()
         for day_index in range(7)
     }
+
+
+def museon_post_published_at(post):
+    return post.get("published_at") or post.get("created_at") or post.get("posted_at") or ""
+
+
+def query_museon_clone_product_kpis(query):
+    product_code = query_value(query, "product_code").upper()
+    country_code = (query_value(query, "country_code") or query_value(query, "market_code")).upper()
+    if not product_code:
+        raise ValueError("product_code is required.")
+
+    beijing = timezone(timedelta(hours=8))
+    current_local = datetime.now(timezone.utc).astimezone(beijing)
+    today_start_local = datetime(current_local.year, current_local.month, current_local.day, tzinfo=beijing)
+    yesterday_start_local = today_start_local - timedelta(days=1)
+    seven_start_local = yesterday_start_local - timedelta(days=6)
+    seven_end_local = today_start_local
+    yesterday_start_dt = yesterday_start_local.astimezone(timezone.utc)
+    yesterday_end_dt = today_start_local.astimezone(timezone.utc)
+    seven_start_dt = seven_start_local.astimezone(timezone.utc)
+    seven_end_dt = seven_end_local.astimezone(timezone.utc)
+
+    today_creators = set()
+    seven_creators = set()
+    daily_creator_sets = {
+        (seven_start_local + timedelta(days=day_index)).date().isoformat(): set()
+        for day_index in range(7)
+    }
+    today_posts = today_views = today_likes = 0
+    seven_posts = seven_views = seven_likes = 0
+    seven_comments = seven_shares = seven_bookmarks = 0
+
+    for context in museon_clone_campaigns_for_product(product_code, country_code):
+        campaign = context.get("campaign")
+        if not campaign:
+            continue
+        posts = museon_all_posts(campaign.get("id"), seven_start_dt.isoformat(), seven_end_dt.isoformat())
+        for post in posts:
+            published = parse_iso_datetime(museon_post_published_at(post))
+            if not published:
+                continue
+            account = museon_account_from_post(post)
+            account_key = normalize_username(account.get("username")) or str(account.get("id") or "")
+            metrics = museon_post_metrics(post)
+
+            if seven_start_dt <= published < seven_end_dt:
+                seven_posts += 1
+                seven_views += metrics["view_count"]
+                seven_likes += metrics["like_count"]
+                seven_comments += metrics["comment_count"]
+                seven_shares += metrics["share_count"]
+                seven_bookmarks += metrics["bookmark_count"]
+                if account_key:
+                    seven_creators.add(account_key)
+                    local_day = published.astimezone(beijing).date().isoformat()
+                    if local_day in daily_creator_sets:
+                        daily_creator_sets[local_day].add(account_key)
+
+            if yesterday_start_dt <= published < yesterday_end_dt:
+                today_posts += 1
+                today_views += metrics["view_count"]
+                today_likes += metrics["like_count"]
+                if account_key:
+                    today_creators.add(account_key)
+
+    interactions = seven_likes + seven_comments + seven_shares + seven_bookmarks
+    return {
+        "product_code": product_code,
+        "country_code": country_code or None,
+        "source": "museon_clone",
+        "today": {
+            "creators": len(today_creators),
+            "posts": today_posts,
+            "views": today_views,
+            "likes": today_likes,
+            "average_views": round(today_views / today_posts) if today_posts else 0,
+            "utc_window": {"start": yesterday_start_dt.isoformat(), "end": yesterday_end_dt.isoformat()},
+        },
+        "seven_day": {
+            "creators": len(seven_creators),
+            "posts": seven_posts,
+            "views": seven_views,
+            "likes": seven_likes,
+            "average_creators": sum(len(accounts) for accounts in daily_creator_sets.values()) / 7,
+            "average_posts": seven_posts / 7,
+            "average_views": round(seven_views / seven_posts) if seven_posts else 0,
+            "average_views_per_day": seven_views / 7,
+            "average_likes": seven_likes / 7,
+            "average_er": (interactions / seven_views * 100) if seven_views else 0,
+            "interactions": interactions,
+            "utc_window": {"start": seven_start_dt.isoformat(), "end": seven_end_dt.isoformat()},
+        },
+    }
+
+
+def query_product_rollups(query):
+    source = query_value(query, "source").lower()
+    if source in {"museon_clone", "clone", "museon"}:
+        return query_museon_clone_product_rollups(query)
+
+    rows = query_countries(query)
+    product_map = {}
+    for row in rows:
+        product_code = str(row.get("product_code") or "").upper()
+        item = product_map.setdefault(product_code, {
+            "product_id": row.get("product_id"),
+            "product_code": product_code,
+            "product_name": row.get("product_name"),
+            "creator_count": 0,
+            "material_count": 0,
+            "post_count": 0,
+            "last_synced_at": "",
+            "countries": [],
+        })
+        country = {
+            "country_id": row.get("country_id") or row.get("market_id"),
+            "country_code": row.get("country_code") or row.get("market_code"),
+            "country_name": row.get("country_name"),
+            "creator_count": int(row.get("creator_count") or 0),
+            "material_count": int(row.get("material_count") or 0),
+            "post_count": int(row.get("post_count") or 0),
+            "last_synced_at": row.get("last_synced_at") or "",
+        }
+        item["countries"].append(country)
+        item["creator_count"] += country["creator_count"]
+        item["material_count"] += country["material_count"]
+        item["post_count"] += country["post_count"]
+        if country["last_synced_at"] and country["last_synced_at"] > item["last_synced_at"]:
+            item["last_synced_at"] = country["last_synced_at"]
+    return list(product_map.values())
+
+
+def query_museon_clone_product_rollups(query):
+    product_filter = query_value(query, "product_code").upper()
+    country_filter = (query_value(query, "country_code") or query_value(query, "market_code")).upper()
+    products = load_data()
+    results = []
+
+    for product in products if isinstance(products, list) else []:
+        product_code = str(product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
+        if product_filter and product_code != product_filter:
+            continue
+        product_row = {
+            "product_id": product.get("id"),
+            "product_code": product_code,
+            "product_name": product.get("name") or product_code,
+            "source": "museon_clone",
+            "creator_count": 0,
+            "material_count": 0,
+            "post_count": 0,
+            "last_synced_at": "",
+            "countries": [],
+        }
+        for country in product.get("countries") or []:
+            country_code = str(country.get("reelFarmCode") or COUNTRY_CODES.get(country.get("name"), "") or code_from_name(country.get("name"))).upper()
+            if country_filter and country_code != country_filter:
+                continue
+            campaign = museon_clone_campaign(product_code, country_code)
+            account_ids = set()
+            post_count = 0
+            latest = ""
+            if campaign:
+                posts = museon_all_posts(campaign.get("id"))
+                for post in posts:
+                    post_count += 1
+                    account = museon_account_from_post(post)
+                    account_key = normalize_username(account.get("username")) or str(account.get("id") or "")
+                    if account_key:
+                        account_ids.add(account_key)
+                    published_at = museon_post_published_at(post)
+                    if published_at and published_at > latest:
+                        latest = published_at
+            country_row = {
+                "country_id": country.get("id"),
+                "country_code": country_code,
+                "country_name": country.get("name") or country_code,
+                "creator_count": len(account_ids),
+                "material_count": post_count,
+                "post_count": post_count,
+                "last_synced_at": latest,
+                "campaign_id": campaign.get("id") if campaign else None,
+                "campaign_name": (campaign.get("name") or campaign.get("title")) if campaign else None,
+            }
+            product_row["countries"].append(country_row)
+            product_row["creator_count"] += country_row["creator_count"]
+            product_row["material_count"] += country_row["material_count"]
+            product_row["post_count"] += country_row["post_count"]
+            if latest and latest > product_row["last_synced_at"]:
+                product_row["last_synced_at"] = latest
+        results.append(product_row)
+    return results
     for daily_row in daily_rows:
         daily_data = row_dict(daily_row)
         parsed = parse_iso_datetime(daily_data.get("published_at"))
@@ -2615,6 +2812,30 @@ def museon_clone_campaign(product_code, country_code):
         if "CLONE" in tokens and product_code in tokens and country_code in tokens:
             fallback = fallback or campaign
     return fallback
+
+
+def museon_clone_campaigns_for_product(product_code, country_code=""):
+    product_code = str(product_code or "").strip().upper()
+    country_code = str(country_code or "").strip().upper()
+    if not product_code:
+        return []
+    if country_code:
+        campaign = museon_clone_campaign(product_code, country_code)
+        return [{"country_code": country_code, "campaign": campaign}] if campaign else []
+
+    contexts = []
+    products = load_data()
+    for product in products if isinstance(products, list) else []:
+        code = str(product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
+        if code != product_code:
+            continue
+        for country in product.get("countries") or []:
+            ccode = str(country.get("reelFarmCode") or COUNTRY_CODES.get(country.get("name"), "") or code_from_name(country.get("name"))).upper()
+            campaign = museon_clone_campaign(product_code, ccode)
+            if campaign:
+                contexts.append({"country_code": ccode, "campaign": campaign})
+        break
+    return contexts
 
 
 def museon_pagination_total(payload, fallback_count=0):
@@ -3445,6 +3666,8 @@ def data_query_payload(query):
         response["data"] = query_summary(query)
     elif resource == "product_kpis":
         response["data"] = query_product_kpis(query)
+    elif resource == "product_rollups":
+        response["data"] = query_product_rollups(query)
     elif resource == "country_cards":
         response["data"] = query_country_cards(query)
     elif resource == "countries":

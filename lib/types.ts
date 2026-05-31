@@ -59,6 +59,30 @@ export type ProductKpis = {
   };
 };
 
+export type ProductRollupCountry = {
+  country_id?: string;
+  country_code?: string;
+  country_name?: string;
+  creator_count?: number;
+  material_count?: number;
+  post_count?: number;
+  last_synced_at?: string;
+  campaign_id?: string;
+  campaign_name?: string;
+};
+
+export type ProductRollup = {
+  product_id?: string;
+  product_code?: string;
+  product_name?: string;
+  source?: string;
+  creator_count?: number;
+  material_count?: number;
+  post_count?: number;
+  last_synced_at?: string;
+  countries?: ProductRollupCountry[];
+};
+
 export type TagDashboardAccount = {
   account_id: string;
   username?: string;
