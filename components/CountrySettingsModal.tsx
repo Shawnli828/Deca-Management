@@ -68,7 +68,7 @@ export function CountrySettingsModal({
         <header className="database-header">
           <div>
             <h2 id="countrySettingsTitle" className="database-title">国家/地区设置</h2>
-            <p className="database-subtitle">管理 {product.name} 下面的国家/地区和 Country Code。</p>
+            <p className="database-subtitle">添加、删除或修改 {product.name} 下面的国家/地区和 Country Code。</p>
           </div>
           <button className="icon-btn" type="button" onClick={onClose} title="关闭">×</button>
         </header>
@@ -89,7 +89,7 @@ export function CountrySettingsModal({
             ))}
           </div>
           <div className="settings-actions spread">
-            <button className="btn ghost" type="button" onClick={addCountry}>添加国家</button>
+            <button className="btn ghost" type="button" onClick={addCountry}>添加国家/地区 + Code</button>
             <span>
               <button className="btn ghost" type="button" onClick={onClose}>取消</button>
               <button className="btn primary" type="submit" disabled={saving}>{saving ? '保存中...' : '保存设置'}</button>

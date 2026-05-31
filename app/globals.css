@@ -1176,6 +1176,10 @@
             gap: 8px;
         }
 
+        .country-code-settings-btn {
+            white-space: nowrap;
+        }
+
         .account-pool-filters {
             flex-wrap: wrap;
             padding: 8px 0;

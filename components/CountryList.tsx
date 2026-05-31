@@ -324,7 +324,9 @@ export function CountryList({
             {syncing ? '同步中...' : dataSource === 'museon_clone' ? '同步 Clone 产品' : '同步当前产品'}
           </button>
           <button className="btn ghost" type="button" onClick={loadAccountPool} disabled={loading}>{loading ? 'Refreshing...' : 'Refresh'}</button>
-          <button className="product-settings-btn inline" type="button" onClick={onOpenSettings} title="国家/地区设置" aria-label="国家/地区设置">⚙</button>
+          <button className="btn ghost country-code-settings-btn" type="button" onClick={onOpenSettings}>
+            国家/地区与 Code
+          </button>
         </div>
       </div>
 
