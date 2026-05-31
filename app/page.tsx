@@ -640,6 +640,40 @@ export default function DashboardPage() {
     }
   }
 
+  async function syncCloneProductCountries(product: Product) {
+    const countries = product.countries || [];
+    if (!countries.length || syncProductId) return;
+    setSyncProductId(product.id);
+    let failed = 0;
+    try {
+      for (let index = 0; index < countries.length; index += 1) {
+        const country = countries[index];
+        setSyncPrefix(`clone:${country.id}`);
+        setStatus(`同步 Clone ${product.name}：${index + 1}/${countries.length} ${country.name}`);
+        setStatusError(false);
+        try {
+          await api.syncMuseonCloneCountry({
+            product_id: product.id,
+            country_id: country.id,
+            product_code: getProductReelFarmCode(product),
+            country_code: getCountryReelFarmCode(country)
+          });
+        } catch (error: any) {
+          failed += 1;
+          setStatus(`Clone ${product.name} · ${country.name} 同步失败：${error?.message || '未知错误'}`);
+          setStatusError(true);
+        }
+        if (index < countries.length - 1) await wait(900);
+      }
+      await loadCloneProductData(products);
+      setStatus(failed ? `Clone ${product.name} 同步完成：${failed} 个地区失败` : `Clone ${product.name} 已同步完成`);
+      setStatusError(Boolean(failed));
+    } finally {
+      setSyncPrefix('');
+      setSyncProductId('');
+    }
+  }
+
   async function syncAllCountries() {
     if (syncAllRunning) return;
     const jobs = products.flatMap(product => (product.countries || []).map(country => ({ product, country })));
@@ -853,10 +887,11 @@ export default function DashboardPage() {
                   product={selectedCloneProduct || selectedProduct}
                   kpis={cloneProductKpis[selectedProduct.id]}
                   dataSource="museon_clone"
+                  syncing={syncProductId === selectedProduct.id}
                   onBack={() => setPage('products')}
                   onSelect={selectCountry}
                   onOpenSettings={() => setCountrySettingsOpen(true)}
-                  onSyncProduct={syncProductCountries}
+                  onSyncProduct={syncCloneProductCountries}
                 />
               ) : null}
             </section>

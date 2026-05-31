@@ -576,6 +576,10 @@ def int_or_none(value):
         return None
 
 
+def data_source_channel_code(source):
+    return "MUSEON_CLONE" if str(source or "").strip().lower() in {"museon_clone", "clone", "museon"} else "TIKTOK"
+
+
 def upsert_row(conn, table, values, conflict_cols, update_cols=None):
     placeholder = db_placeholder()
     columns = list(values.keys())
@@ -1992,7 +1996,7 @@ def row_dict(row):
 def common_where(query, date_column="post.published_at", include_post_dates=True):
     placeholder = db_placeholder()
     where = ["ch.code = " + placeholder]
-    params = ["TIKTOK"]
+    params = [data_source_channel_code(query_value(query, "source"))]
     product_code = query_value(query, "product_code").upper()
     market_code = (query_value(query, "country_code") or query_value(query, "market_code")).upper()
     account_id = query_value(query, "account_id")
@@ -2115,10 +2119,7 @@ def query_countries(query):
 
 
 def query_product_kpis(query):
-    source = query_value(query, "source").lower()
-    if source in {"museon_clone", "clone", "museon"}:
-        return query_museon_clone_product_kpis(query)
-
+    channel_code = data_source_channel_code(query_value(query, "source"))
     product_code = query_value(query, "product_code").upper()
     country_code = (query_value(query, "country_code") or query_value(query, "market_code")).upper()
     if not product_code:
@@ -2136,7 +2137,7 @@ def query_product_kpis(query):
     seven_start = seven_start_local.astimezone(timezone.utc).isoformat()
     seven_end = seven_end_local.astimezone(timezone.utc).isoformat()
     market_filter = ""
-    filter_params = ["TIKTOK", product_code]
+    filter_params = [channel_code, product_code]
     if country_code:
         market_filter = f" AND m.code = {placeholder}"
         filter_params.append(country_code)
@@ -2337,10 +2338,6 @@ def query_museon_clone_product_kpis(query):
 
 
 def query_product_rollups(query):
-    source = query_value(query, "source").lower()
-    if source in {"museon_clone", "clone", "museon"}:
-        return query_museon_clone_product_rollups(query)
-
     rows = query_countries(query)
     product_map = {}
     for row in rows:
@@ -2927,6 +2924,275 @@ def museon_post_metrics(post):
     }
 
 
+def museon_post_images(post):
+    candidates = [
+        post.get("slideshow_images"),
+        post.get("images"),
+        post.get("media_urls"),
+        post.get("image_urls"),
+    ]
+    content = post.get("content") if isinstance(post.get("content"), dict) else {}
+    candidates.extend([
+        content.get("slideshow_images"),
+        content.get("images"),
+        content.get("media_urls"),
+        content.get("image_urls"),
+    ])
+
+    images = []
+    for candidate in candidates:
+        if not isinstance(candidate, list):
+            continue
+        for item in candidate:
+            if isinstance(item, str):
+                images.append(item)
+            elif isinstance(item, dict):
+                url = item.get("url") or item.get("src") or item.get("download_url") or item.get("image_url")
+                if url:
+                    images.append(url)
+    seen = set()
+    deduped = []
+    for image in images:
+        if image in seen:
+            continue
+        seen.add(image)
+        deduped.append(image)
+    return deduped
+
+
+def local_product_country_record(product_id="", country_id="", product_code="", country_code=""):
+    product_code = str(product_code or "").strip().upper()
+    country_code = str(country_code or "").strip().upper()
+    for product in load_data():
+        if not isinstance(product, dict):
+            continue
+        pcode = str(product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
+        if product_id and str(product.get("id") or "") != str(product_id):
+            continue
+        if product_code and pcode != product_code:
+            continue
+        for country in product.get("countries") or []:
+            if not isinstance(country, dict):
+                continue
+            ccode = str(country.get("reelFarmCode") or COUNTRY_CODES.get(country.get("name"), "") or code_from_name(country.get("name"))).upper()
+            if country_id and str(country.get("id") or "") != str(country_id):
+                continue
+            if country_code and ccode != country_code:
+                continue
+            return product, country, pcode, ccode
+    return (
+        {
+            "id": product_id or stable_id("product", product_code),
+            "name": product_code or "Product",
+            "reelFarmCode": product_code,
+            "folder": "",
+            "logo": "",
+        },
+        {
+            "id": country_id or stable_id("country", country_code),
+            "name": country_code or "Country",
+            "reelFarmCode": country_code,
+        },
+        product_code,
+        country_code,
+    )
+
+
+def sync_museon_clone_country(product_id="", country_id="", product_code="", country_code=""):
+    product, country, product_code, country_code = local_product_country_record(product_id, country_id, product_code, country_code)
+    if not product_code or not country_code:
+        raise ValueError("Missing product_code or country_code.")
+
+    started = time.perf_counter()
+    synced_at = datetime.now(timezone.utc).isoformat()
+    campaign = museon_clone_campaign(product_code, country_code)
+    if not campaign:
+        return {
+            "ok": True,
+            "skipped": True,
+            "source": "museon_clone",
+            "product_code": product_code,
+            "country_code": country_code,
+            "creator_count": 0,
+            "material_count": 0,
+            "post_count": 0,
+            "synced_at": synced_at,
+            "message": f"No Museon clone campaign found for {country_code}-{product_code}.",
+        }
+
+    posts = museon_all_posts(campaign.get("id"))
+    channel_id = stable_id("channel", "MUSEON_CLONE")
+    product_row_id = str(product.get("id") or stable_id("product", product_code))
+    market_id = stable_id("market", country_code)
+    product_market_id = stable_id("product_market", product_row_id, market_id)
+    product_market_channel_id = stable_id("product_market_channel", product_market_id, channel_id)
+    campaign_name = str(campaign.get("name") or campaign.get("title") or f"{country_code}-{product_code}-Clone")
+    campaign_id = str(campaign.get("id") or stable_id("museon_campaign", campaign_name))
+    account_ids = set()
+    material_count = 0
+    post_count = 0
+
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        upsert_row(conn, "channels", {"id": channel_id, "name": "Clone Slide Show", "code": "MUSEON_CLONE"}, ["code"])
+        upsert_row(
+            conn,
+            "products",
+            {
+                "id": product_row_id,
+                "name": str(product.get("name") or product_code),
+                "code": product_code,
+                "owner_type": product.get("folder") or product.get("owner_type") or "",
+                "logo_url": product.get("logo") or product.get("logo_url") or "",
+                "created_at": product.get("created_at") or synced_at,
+                "updated_at": synced_at,
+            },
+            ["id"],
+        )
+        upsert_row(conn, "markets", {"id": market_id, "name": str(country.get("name") or country_code), "code": country_code}, ["code"])
+        upsert_row(conn, "product_markets", {"id": product_market_id, "product_id": product_row_id, "market_id": market_id}, ["product_id", "market_id"])
+        upsert_row(
+            conn,
+            "product_market_channels",
+            {"id": product_market_channel_id, "product_market_id": product_market_id, "channel_id": channel_id},
+            ["product_market_id", "channel_id"],
+        )
+
+        for post in posts:
+            if not isinstance(post, dict):
+                continue
+            account = museon_account_from_post(post)
+            username = normalize_username(account.get("username")) or normalize_username(account.get("display_name"))
+            if not username:
+                continue
+            museon_account_id = str(account.get("id") or username)
+            account_source_id = f"museon:{museon_account_id}"
+            account_id = stable_id("museon_account", product_market_channel_id, account_source_id)
+            automation_source_id = f"museon:{campaign_id}:{museon_account_id}"
+            automation_id = stable_id("museon_automation", automation_source_id)
+            post_source_id = str(post.get("id") or post.get("post_id") or post.get("content_id") or stable_id("museon_post_source", campaign_id, username, museon_post_published_at(post)))
+            material_source_id = str(post.get("content_id") or post_source_id)
+            reelfarm_video_id = f"museon:{campaign_id}:{material_source_id}"
+            reelfarm_post_id = f"museon:{campaign_id}:{post_source_id}"
+            material_id = stable_id("museon_material", reelfarm_video_id)
+            post_id = stable_id("museon_post", reelfarm_post_id)
+            metrics = museon_post_metrics(post)
+            published_at = museon_post_published_at(post)
+            images = museon_post_images(post)
+
+            account_ids.add(account_id)
+            material_count += 1
+            post_count += 1
+
+            upsert_row(
+                conn,
+                "accounts",
+                {
+                    "id": account_id,
+                    "product_market_channel_id": product_market_channel_id,
+                    "reelfarm_account_id": account_source_id,
+                    "username": account.get("username") or username,
+                    "display_name": account.get("display_name") or account.get("username") or username,
+                    "avatar_url": account.get("avatar_url") or "",
+                    "status": account.get("status") or "active",
+                },
+                ["product_market_channel_id", "reelfarm_account_id"],
+            )
+            upsert_row(
+                conn,
+                "automations",
+                {
+                    "id": automation_id,
+                    "product_market_channel_id": product_market_channel_id,
+                    "account_id": account_id,
+                    "reelfarm_automation_id": automation_source_id,
+                    "name": campaign_name,
+                    "status": "active",
+                    "schedule": "[]",
+                    "settings_json": db_json({"source": "museon_clone", "campaign": campaign, "account": account}),
+                    "created_at": campaign.get("created_at") or "",
+                    "synced_at": synced_at,
+                },
+                ["reelfarm_automation_id"],
+            )
+            upsert_row(
+                conn,
+                "materials",
+                {
+                    "id": material_id,
+                    "automation_id": automation_id,
+                    "product_market_channel_id": product_market_channel_id,
+                    "account_id": account_id,
+                    "concept_id": None,
+                    "format_id": None,
+                    "reelfarm_video_id": reelfarm_video_id,
+                    "video_type": post.get("content_type") or "slideshow",
+                    "hook": post.get("title") or post.get("description") or "",
+                    "prompt": post.get("caption") or post.get("description") or "",
+                    "images_json": db_json(images),
+                    "slide_count": int_or_none(post.get("slide_count")) or len(images),
+                    "status": post.get("status") or "",
+                    "created_at": post.get("created_at") or published_at or "",
+                    "finished_at": post.get("finished_at") or "",
+                    "synced_at": synced_at,
+                },
+                ["reelfarm_video_id"],
+            )
+            upsert_row(
+                conn,
+                "posts",
+                {
+                    "id": post_id,
+                    "material_id": material_id,
+                    "account_id": account_id,
+                    "reelfarm_post_id": reelfarm_post_id,
+                    "status": post.get("status") or "",
+                    "title": post.get("title") or post.get("description") or "",
+                    "published_at": published_at,
+                    "published_at_readable": readable_utc_datetime(published_at),
+                    "view_count": metrics["view_count"],
+                    "like_count": metrics["like_count"],
+                    "comment_count": metrics["comment_count"],
+                    "share_count": metrics["share_count"],
+                    "bookmark_count": metrics["bookmark_count"],
+                    "synced_at": synced_at,
+                },
+                ["reelfarm_post_id"],
+            )
+            snapshot_date = utc_snapshot_date()
+            upsert_row(
+                conn,
+                "post_daily_snapshots",
+                {
+                    "id": stable_id("post_daily_snapshot", post_id, snapshot_date),
+                    "post_id": post_id,
+                    "snapshot_date": snapshot_date,
+                    "view_count": metrics["view_count"],
+                    "like_count": metrics["like_count"],
+                    "comment_count": metrics["comment_count"],
+                    "share_count": metrics["share_count"],
+                    "bookmark_count": metrics["bookmark_count"],
+                    "synced_at": synced_at,
+                },
+                ["post_id", "snapshot_date"],
+            )
+        conn.commit()
+
+    return {
+        "ok": True,
+        "source": "museon_clone",
+        "product_code": product_code,
+        "country_code": country_code,
+        "campaign_id": campaign_id,
+        "campaign_name": campaign_name,
+        "creator_count": len(account_ids),
+        "material_count": material_count,
+        "post_count": post_count,
+        "synced_at": synced_at,
+        "duration_total_seconds": round(time.perf_counter() - started, 3),
+    }
+
+
 def query_museon_clone_accounts(query):
     product_code = query_value(query, "product_code").upper()
     country_code = (query_value(query, "country_code") or query_value(query, "market_code")).upper()
@@ -3173,9 +3439,6 @@ def query_reelfarm_accounts(query):
 
 
 def query_accounts(query):
-    source = query_value(query, "source").lower()
-    if source in {"museon_clone", "clone", "museon"}:
-        return query_museon_clone_accounts(query)
     return query_reelfarm_accounts(query)
 
 
@@ -3675,10 +3938,7 @@ def data_query_payload(query):
     elif resource == "accounts":
         response["data"] = query_accounts(query)
     elif resource in {"posts", "account_posts"}:
-        if resource == "account_posts" and query_value(query, "source").lower() in {"museon_clone", "clone", "museon"}:
-            rows, pagination = query_museon_clone_account_posts(query)
-        else:
-            rows, pagination = query_posts(query)
+        rows, pagination = query_posts(query)
         response["data"] = rows[: pagination["limit"]]
         response["pagination"] = pagination
     elif resource == "materials":
@@ -4181,6 +4441,29 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
                     200,
                     sync_reelfarm_country(
                         prefix,
+                        str(payload.get("product_id", "") if isinstance(payload, dict) else "").strip(),
+                        str(payload.get("country_id", "") if isinstance(payload, dict) else "").strip(),
+                        str(payload.get("product_code", "") if isinstance(payload, dict) else "").strip(),
+                        str(payload.get("country_code", "") if isinstance(payload, dict) else "").strip(),
+                    ),
+                )
+            except ValueError as error:
+                self.send_json(400, {"error": str(error)})
+            except RuntimeError as error:
+                self.send_json(502, {"error": str(error)})
+            return
+
+        if path == "/api/museon/sync-country":
+            try:
+                payload = self.read_json_body()
+            except json.JSONDecodeError:
+                self.send_json(400, {"error": "Invalid JSON"})
+                return
+
+            try:
+                self.send_json(
+                    200,
+                    sync_museon_clone_country(
                         str(payload.get("product_id", "") if isinstance(payload, dict) else "").strip(),
                         str(payload.get("country_id", "") if isinstance(payload, dict) else "").strip(),
                         str(payload.get("product_code", "") if isinstance(payload, dict) else "").strip(),

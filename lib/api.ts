@@ -85,6 +85,12 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     }, 'Failed to sync ReelFarm country'),
+  syncMuseonCloneCountry: (payload: Record<string, unknown>) =>
+    apiFetch<{ ok: boolean; skipped?: boolean; creator_count: number; material_count: number; post_count?: number; synced_at?: string }>('/api/museon/sync-country', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }, 'Failed to sync Museon clone country'),
   roaster: () => apiFetch<RoasterState>('/api/roaster', undefined, 'Failed to load roaster'),
   saveRoaster: (state: RoasterState) =>
     apiFetch<{ ok: boolean; state: RoasterState }>('/api/roaster', {

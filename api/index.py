@@ -41,6 +41,7 @@ from server import (
     save_roaster_state,
     send_publish_check_reminder,
     sync_all_reelfarm_records,
+    sync_museon_clone_country,
     sync_reelfarm_country,
     sync_reelfarm_prefix,
     tag_dashboard_payload,
@@ -439,6 +440,22 @@ def post_reelfarm_sync_country(request: Request, payload: dict[str, Any] = Body(
     try:
         return sync_reelfarm_country(
             str(payload.get("prefix", "")).strip(),
+            str(payload.get("product_id", "")).strip(),
+            str(payload.get("country_id", "")).strip(),
+            str(payload.get("product_code", "")).strip(),
+            str(payload.get("country_code", "")).strip(),
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@app.post("/api/museon/sync-country")
+def post_museon_sync_country(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
+    require_dashboard_auth(request)
+    try:
+        return sync_museon_clone_country(
             str(payload.get("product_id", "")).strip(),
             str(payload.get("country_id", "")).strip(),
             str(payload.get("product_code", "")).strip(),
