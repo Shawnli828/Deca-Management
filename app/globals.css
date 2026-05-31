@@ -1640,6 +1640,20 @@
             font-weight: 700;
         }
 
+        .pool-automation-name {
+            display: block;
+            margin-top: 3px;
+            max-width: 260px;
+            overflow: hidden;
+            color: #475569;
+            font-size: 10px;
+            font-style: normal;
+            font-weight: 750;
+            line-height: 1.25;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
         .pool-pill,
         .pool-tags > span {
             display: inline-flex;
@@ -5315,6 +5329,7 @@
         .pool-post-body p,
         .pool-post-metrics span,
         .pool-account-cell small,
+        .pool-automation-name,
         .pool-post-panel-head span,
         .subtitle,
         .pane-hint,

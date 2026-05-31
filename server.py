@@ -2535,6 +2535,11 @@ def query_accounts(query):
         metric_condition += f" AND post.published_at <= {placeholder}"
         metric_params.append(post_datetime_bound(date_to, end=True))
     metric_condition_count = 8
+    automation_names_sql = (
+        "STRING_AGG(DISTINCT a.name, ' | ')"
+        if using_postgres()
+        else "GROUP_CONCAT(DISTINCT a.name)"
+    )
     with connect_db() as conn:
         init_relational_schema(conn)
         rows = conn.execute(
@@ -2547,6 +2552,8 @@ def query_accounts(query):
                 acc.avatar_url,
                 acc.status,
                 COUNT(DISTINCT a.id) AS automation_count,
+                MAX(a.name) AS automation_name,
+                {automation_names_sql} AS automation_names,
                 COUNT(DISTINCT CASE WHEN {metric_condition} THEN mat.id END) AS material_count,
                 COUNT(DISTINCT CASE WHEN {metric_condition} THEN post.id END) AS post_count,
                 COALESCE(SUM(CASE WHEN {metric_condition} THEN post.view_count ELSE 0 END), 0) AS total_views,

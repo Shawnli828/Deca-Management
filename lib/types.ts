@@ -105,6 +105,8 @@ export type AccountSummary = {
   avatar_url?: string;
   status?: string;
   automation_count?: number;
+  automation_name?: string;
+  automation_names?: string;
   material_count?: number;
   post_count?: number;
   total_views?: number;

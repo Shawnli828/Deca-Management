@@ -399,6 +399,11 @@ export function CountryList({
                         <span>
                           <strong>{row.display_name || row.username || 'Unknown'}</strong>
                           <small>@{String(row.username || row.account_id).replace(/^@/, '')}</small>
+                          {(row.automation_names || row.automation_name) ? (
+                            <em className="pool-automation-name" title={row.automation_names || row.automation_name}>
+                              {row.automation_names || row.automation_name}
+                            </em>
+                          ) : null}
                         </span>
                       </div>
                     </td>
