@@ -2191,6 +2191,55 @@ def query_product_kpis(query):
         (seven_start_local + timedelta(days=day_index)).date().isoformat(): set()
         for day_index in range(7)
     }
+    for daily_row in daily_rows:
+        daily_data = row_dict(daily_row)
+        parsed = parse_iso_datetime(daily_data.get("published_at"))
+        if not parsed:
+            continue
+        local_day = parsed.astimezone(beijing).date().isoformat()
+        if local_day in daily_creator_sets and daily_data.get("account_id"):
+            daily_creator_sets[local_day].add(daily_data["account_id"])
+    average_daily_creators = sum(len(accounts) for accounts in daily_creator_sets.values()) / 7
+    today_creators = int(data.get("today_creators") or 0)
+    today_posts = int(data.get("today_posts") or 0)
+    today_views = int(data.get("today_views") or 0)
+    today_likes = int(data.get("today_likes") or 0)
+    seven_creators = int(data.get("seven_day_creators") or 0)
+    seven_posts = int(data.get("seven_day_posts") or 0)
+    seven_views = int(data.get("seven_day_views") or 0)
+    seven_likes = int(data.get("seven_day_likes") or 0)
+    interactions = (
+        seven_likes
+        + int(data.get("seven_day_comments") or 0)
+        + int(data.get("seven_day_shares") or 0)
+        + int(data.get("seven_day_bookmarks") or 0)
+    )
+    return {
+        "product_code": product_code,
+        "country_code": country_code or None,
+        "today": {
+            "creators": today_creators,
+            "posts": today_posts,
+            "views": today_views,
+            "likes": today_likes,
+            "average_views": round(today_views / today_posts) if today_posts else 0,
+            "utc_window": {"start": yesterday_start, "end": yesterday_end},
+        },
+        "seven_day": {
+            "creators": seven_creators,
+            "posts": seven_posts,
+            "views": seven_views,
+            "likes": seven_likes,
+            "average_creators": average_daily_creators,
+            "average_posts": seven_posts / 7,
+            "average_views": round(seven_views / seven_posts) if seven_posts else 0,
+            "average_views_per_day": seven_views / 7,
+            "average_likes": seven_likes / 7,
+            "average_er": (interactions / seven_views * 100) if seven_views else 0,
+            "interactions": interactions,
+            "utc_window": {"start": seven_start, "end": seven_end},
+        },
+    }
 
 
 def museon_post_published_at(post):
@@ -2383,55 +2432,6 @@ def query_museon_clone_product_rollups(query):
                 product_row["last_synced_at"] = latest
         results.append(product_row)
     return results
-    for daily_row in daily_rows:
-        daily_data = row_dict(daily_row)
-        parsed = parse_iso_datetime(daily_data.get("published_at"))
-        if not parsed:
-            continue
-        local_day = parsed.astimezone(beijing).date().isoformat()
-        if local_day in daily_creator_sets and daily_data.get("account_id"):
-            daily_creator_sets[local_day].add(daily_data["account_id"])
-    average_daily_creators = sum(len(accounts) for accounts in daily_creator_sets.values()) / 7
-    today_creators = int(data.get("today_creators") or 0)
-    today_posts = int(data.get("today_posts") or 0)
-    today_views = int(data.get("today_views") or 0)
-    today_likes = int(data.get("today_likes") or 0)
-    seven_creators = int(data.get("seven_day_creators") or 0)
-    seven_posts = int(data.get("seven_day_posts") or 0)
-    seven_views = int(data.get("seven_day_views") or 0)
-    seven_likes = int(data.get("seven_day_likes") or 0)
-    interactions = (
-        seven_likes
-        + int(data.get("seven_day_comments") or 0)
-        + int(data.get("seven_day_shares") or 0)
-        + int(data.get("seven_day_bookmarks") or 0)
-    )
-    return {
-        "product_code": product_code,
-        "country_code": country_code or None,
-        "today": {
-            "creators": today_creators,
-            "posts": today_posts,
-            "views": today_views,
-            "likes": today_likes,
-            "average_views": round(today_views / today_posts) if today_posts else 0,
-            "utc_window": {"start": yesterday_start, "end": yesterday_end},
-        },
-        "seven_day": {
-            "creators": seven_creators,
-            "posts": seven_posts,
-            "views": seven_views,
-            "likes": seven_likes,
-            "average_creators": average_daily_creators,
-            "average_posts": seven_posts / 7,
-            "average_views": round(seven_views / seven_posts) if seven_posts else 0,
-            "average_views_per_day": seven_views / 7,
-            "average_likes": seven_likes / 7,
-            "average_er": (interactions / seven_views * 100) if seven_views else 0,
-            "interactions": interactions,
-            "utc_window": {"start": seven_start, "end": seven_end},
-        },
-    }
 
 
 def previous_complete_windows(now_utc=None):
