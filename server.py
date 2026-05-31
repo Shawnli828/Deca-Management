@@ -36,6 +36,9 @@ ROASTER_STATE_KEY = "roaster_state"
 PUBLISH_CHECK_STATE_KEY = "publish_check_state"
 EXTERNAL_API_KEYS_KEY = "external_api_keys"
 REELFARM_BASE_URL = "https://reel.farm/api/v1"
+MUSEON_BASE_URL = os.environ.get("MUSEON_BASE_URL", "https://api.museon.ai/external/api/v1").strip().rstrip("/")
+MUSEON_API_KEY = os.environ.get("MUSEON_API_KEY", "").strip()
+MUSEON_WORKSPACE_ID = os.environ.get("MUSEON_WORKSPACE_ID", "b5e25f84-b3ed-484b-b467-901a4afcd9c6").strip()
 FEISHU_WEBHOOK_URL = os.environ.get("FEISHU_WEBHOOK_URL", "").strip()
 FEISHU_WEBHOOK_SECRET = os.environ.get("FEISHU_WEBHOOK_SECRET", "").strip()
 SEED_DATA_PATH = BASE_DIR / "seed_data.json"
@@ -182,6 +185,10 @@ def prefixes_equivalent(left, right):
     left_values = {candidate.upper() for candidate in automation_prefix_candidates(left)}
     right_value = str(right or "").strip().upper()
     return bool(right_value and right_value in left_values)
+
+
+def normalize_username(value):
+    return re.sub(r"[^a-z0-9_.]+", "", str(value or "").strip().lower().lstrip("@"))
 
 
 def default_data():
@@ -2519,7 +2526,378 @@ def tag_dashboard_payload(product_code):
     return {"ok": True, "product_code": product_code, "windows": windows, "tags": tags}
 
 
-def query_accounts(query):
+_MUSEON_CAMPAIGN_CACHE = {"loaded_at": 0, "campaigns": []}
+
+
+def museon_request(path, params=None):
+    if not MUSEON_API_KEY:
+        raise RuntimeError("MUSEON_API_KEY is not configured.")
+    clean_path = "/" + str(path or "").lstrip("/")
+    query = urlencode(params or {}, doseq=True)
+    url = f"{MUSEON_BASE_URL}{clean_path}" + (f"?{query}" if query else "")
+    request = Request(url, headers={
+        "X-API-KEY": MUSEON_API_KEY,
+        "Accept": "application/json",
+        "User-Agent": "DecaGrowth/1.0",
+    })
+    try:
+        with urlopen(request, timeout=20, context=make_ssl_context()) as response:
+            raw = response.read().decode("utf-8", errors="replace")
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Museon returned HTTP {exc.code}: {detail[:300]}") from exc
+    except URLError as exc:
+        raise RuntimeError(f"Could not reach Museon API: {exc.reason}") from exc
+
+    try:
+        payload = json.loads(raw) if raw else {}
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("Museon returned a non-JSON response.") from exc
+    if isinstance(payload, dict) and payload.get("error"):
+        error = payload.get("error") or {}
+        raise RuntimeError(error.get("message") or error.get("code") or "Museon API error")
+    return payload
+
+
+def museon_list_payload(payload):
+    if isinstance(payload, dict):
+        data = payload.get("data")
+        if isinstance(data, list):
+            return data
+        if isinstance(payload.get("items"), list):
+            return payload["items"]
+    return payload if isinstance(payload, list) else []
+
+
+def museon_campaigns(force=False):
+    now = time.time()
+    if not force and _MUSEON_CAMPAIGN_CACHE["campaigns"] and now - _MUSEON_CAMPAIGN_CACHE["loaded_at"] < 300:
+        return _MUSEON_CAMPAIGN_CACHE["campaigns"]
+
+    campaigns = []
+    page = 1
+    while page <= 20:
+        payload = museon_request(
+            "/campaigns",
+            {"workspace_id": MUSEON_WORKSPACE_ID, "page": page, "page_size": 100},
+        )
+        items = museon_list_payload(payload)
+        campaigns.extend([item for item in items if isinstance(item, dict)])
+        pagination = payload.get("pagination") if isinstance(payload, dict) else {}
+        total = int((pagination or {}).get("total") or 0)
+        if not items or (total and len(campaigns) >= total):
+            break
+        page += 1
+
+    _MUSEON_CAMPAIGN_CACHE["campaigns"] = campaigns
+    _MUSEON_CAMPAIGN_CACHE["loaded_at"] = now
+    return campaigns
+
+
+def museon_clone_campaign(product_code, country_code):
+    product_code = str(product_code or "").strip().upper()
+    country_code = str(country_code or "").strip().upper()
+    if not product_code or not country_code:
+        return None
+    exact_names = {
+        f"{country_code}-{product_code}-CLONE",
+        f"{product_code}-{country_code}-CLONE",
+        f"{country_code}_{product_code}_CLONE",
+        f"{product_code}_{country_code}_CLONE",
+    }
+    fallback = None
+    for campaign in museon_campaigns():
+        name = str(campaign.get("name") or campaign.get("title") or "").strip()
+        upper_name = name.upper()
+        tokens = {token for token in re.split(r"[^A-Z0-9]+", upper_name) if token}
+        if upper_name in exact_names:
+            return campaign
+        if "CLONE" in tokens and product_code in tokens and country_code in tokens:
+            fallback = fallback or campaign
+    return fallback
+
+
+def museon_pagination_total(payload, fallback_count=0):
+    if isinstance(payload, dict):
+        pagination = payload.get("pagination") or payload.get("meta") or {}
+        for key in ("total", "total_count", "count"):
+            if isinstance(pagination, dict) and pagination.get(key) is not None:
+                try:
+                    return int(pagination.get(key) or 0)
+                except (TypeError, ValueError):
+                    pass
+    return fallback_count
+
+
+def museon_posts(campaign_id, date_from="", date_to="", username="", page=1, page_size=100, sort="recent"):
+    params = {"page": page, "page_size": page_size, "sort": sort}
+    if username:
+        params["username"] = username
+    if date_from:
+        params["published_after"] = post_datetime_bound(date_from)
+    if date_to:
+        params["published_before"] = post_datetime_bound(date_to, end=True)
+    payload = museon_request(f"/campaigns/{quote(str(campaign_id), safe='')}/posts", params)
+    return museon_list_payload(payload), museon_pagination_total(payload)
+
+
+def museon_all_posts(campaign_id, date_from="", date_to="", max_pages=40):
+    posts = []
+    page = 1
+    total = 0
+    while page <= max_pages:
+        items, total = museon_posts(campaign_id, date_from, date_to, page=page, page_size=100)
+        posts.extend([item for item in items if isinstance(item, dict)])
+        if not items or (total and len(posts) >= total):
+            break
+        page += 1
+    return posts
+
+
+def local_product_country_context(product_code, country_code):
+    products = load_data()
+    product_context = {"id": None, "code": product_code, "name": product_code}
+    country_context = {"id": None, "code": country_code, "name": country_code}
+    for product in products if isinstance(products, list) else []:
+        code = str(product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
+        if code != product_code:
+            continue
+        product_context = {"id": product.get("id"), "code": code, "name": product.get("name") or product_code}
+        for country in product.get("countries") or []:
+            ccode = str(country.get("reelFarmCode") or COUNTRY_CODES.get(country.get("name"), "") or code_from_name(country.get("name"))).upper()
+            if ccode == country_code:
+                country_context = {"id": country.get("id"), "code": ccode, "name": country.get("name") or country_code}
+                break
+        break
+    return product_context, country_context
+
+
+def reelfarm_account_lookup(product_code, country_code):
+    lookup = {}
+    query = {"product_code": [product_code], "country_code": [country_code]}
+    for row in query_reelfarm_accounts(query):
+        username = normalize_username(row.get("username") or row.get("display_name"))
+        if username:
+            lookup[username] = row
+    return lookup
+
+
+def museon_account_from_post(post):
+    account = post.get("account") if isinstance(post.get("account"), dict) else {}
+    username = account.get("username") or post.get("username") or post.get("account_username")
+    return {
+        "id": account.get("id") or post.get("creator_id") or post.get("account_id") or username,
+        "username": username,
+        "display_name": account.get("display_name") or account.get("name") or username,
+        "avatar_url": account.get("avatar_url") or account.get("image_url") or account.get("profile_image_url"),
+        "status": account.get("status") or post.get("status") or "active",
+        "category_tags": account.get("category_tags") or [],
+    }
+
+
+def museon_post_metrics(post):
+    metrics = post.get("metrics") if isinstance(post.get("metrics"), dict) else {}
+    return {
+        "view_count": int(metrics.get("views") or metrics.get("view_count") or post.get("views") or 0),
+        "like_count": int(metrics.get("likes") or metrics.get("like_count") or post.get("likes") or 0),
+        "comment_count": int(metrics.get("comments") or metrics.get("comment_count") or post.get("comments") or 0),
+        "share_count": int(metrics.get("shares") or metrics.get("share_count") or post.get("shares") or 0),
+        "bookmark_count": int(metrics.get("saves") or metrics.get("bookmark_count") or metrics.get("bookmarks") or 0),
+    }
+
+
+def query_museon_clone_accounts(query):
+    product_code = query_value(query, "product_code").upper()
+    country_code = (query_value(query, "country_code") or query_value(query, "market_code")).upper()
+    date_from = query_value(query, "date_from")
+    date_to = query_value(query, "date_to")
+    if not date_from and not date_to:
+        date_from, date_to = query_days_window(query)
+    campaign = museon_clone_campaign(product_code, country_code)
+    if not campaign:
+        return []
+
+    campaign_id = campaign.get("id")
+    posts = museon_all_posts(campaign_id, date_from, date_to)
+    rf_lookup = reelfarm_account_lookup(product_code, country_code)
+    grouped = {}
+    for post in posts:
+        account = museon_account_from_post(post)
+        username_key = normalize_username(account.get("username"))
+        if not username_key:
+            continue
+        row = grouped.setdefault(username_key, {
+            "account": account,
+            "posts": 0,
+            "views": 0,
+            "likes": 0,
+            "comments": 0,
+            "shares": 0,
+            "bookmarks": 0,
+            "latest_post_at": "",
+        })
+        row["posts"] += 1
+        metrics = museon_post_metrics(post)
+        row["views"] += metrics["view_count"]
+        row["likes"] += metrics["like_count"]
+        row["comments"] += metrics["comment_count"]
+        row["shares"] += metrics["share_count"]
+        row["bookmarks"] += metrics["bookmark_count"]
+        published_at = post.get("published_at") or post.get("created_at") or ""
+        if published_at and published_at > row["latest_post_at"]:
+            row["latest_post_at"] = published_at
+
+    rows = []
+    for username_key, grouped_row in grouped.items():
+        account = grouped_row["account"]
+        rf_row = rf_lookup.get(username_key, {})
+        synthetic_id = f"museon:{product_code}:{country_code}:{username_key}"
+        rows.append({
+            "account_id": synthetic_id,
+            "reelfarm_account_id": rf_row.get("reelfarm_account_id"),
+            "museon_account_id": account.get("id"),
+            "username": account.get("username"),
+            "display_name": account.get("display_name") or account.get("username"),
+            "avatar_url": account.get("avatar_url") or rf_row.get("avatar_url"),
+            "status": account.get("status") or rf_row.get("status") or "active",
+            "automation_count": rf_row.get("automation_count") or 0,
+            "automation_name": rf_row.get("automation_name"),
+            "automation_names": rf_row.get("automation_names"),
+            "material_count": grouped_row["posts"],
+            "post_count": grouped_row["posts"],
+            "total_views": grouped_row["views"],
+            "total_likes": grouped_row["likes"],
+            "total_comments": grouped_row["comments"],
+            "total_shares": grouped_row["shares"],
+            "total_bookmarks": grouped_row["bookmarks"],
+            "latest_post_at": grouped_row["latest_post_at"],
+            "last_synced_at": grouped_row["latest_post_at"],
+            "data_source": "museon_clone",
+            "campaign_id": campaign_id,
+            "campaign_name": campaign.get("name") or campaign.get("title"),
+        })
+    return sorted(rows, key=lambda row: (int(row.get("total_views") or 0), int(row.get("post_count") or 0)), reverse=True)
+
+
+def reelfarm_detailed_rows_for_username(product_code, country_code, username):
+    username_key = normalize_username(username)
+    if not username_key:
+        return []
+    placeholder = db_placeholder()
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        rows = conn.execute(
+            f"""
+            SELECT {detailed_select()}
+            {relational_base_from()}
+            WHERE ch.code = {placeholder}
+              AND p.code = {placeholder}
+              AND m.code = {placeholder}
+              AND LOWER(REPLACE(acc.username, '@', '')) = {placeholder}
+              AND post.id IS NOT NULL
+            ORDER BY post.published_at DESC
+            LIMIT 500
+            """,
+            ("TIKTOK", product_code, country_code, username_key),
+        ).fetchall()
+    return [detailed_row(row) for row in rows]
+
+
+def nearest_reelfarm_row(museon_post, rf_rows):
+    published = parse_iso_datetime(museon_post.get("published_at"))
+    if not published:
+        return None
+    best = None
+    best_delta = 10**9
+    for row in rf_rows:
+        candidate = parse_iso_datetime((row.get("post") or {}).get("published_at"))
+        if not candidate:
+            continue
+        delta = abs((candidate - published).total_seconds())
+        if delta < best_delta:
+            best_delta = delta
+            best = row
+    return best if best and best_delta <= 15 * 60 else None
+
+
+def museon_post_to_detailed_row(post, product, country, rf_match=None):
+    account = museon_account_from_post(post)
+    metrics = museon_post_metrics(post)
+    published_at = post.get("published_at") or post.get("created_at") or ""
+    base = rf_match or {
+        "product": product,
+        "country": country,
+        "market": country,
+        "account": {},
+        "automation": {},
+        "material": {},
+        "post": {},
+        "metrics": {},
+    }
+    material = dict(base.get("material") or {})
+    material.update({
+        "id": material.get("id") or post.get("content_id") or post.get("id"),
+        "reelfarm_video_id": material.get("reelfarm_video_id") or post.get("content_id"),
+        "video_type": material.get("video_type") or post.get("content_type") or "slideshow",
+        "hook": material.get("hook") or post.get("title") or post.get("description"),
+        "prompt": material.get("prompt") or post.get("description"),
+        "status": material.get("status") or post.get("status"),
+    })
+    return {
+        "product": product,
+        "country": country,
+        "market": country,
+        "account": {
+            "id": (base.get("account") or {}).get("id") or f"museon:{product.get('code')}:{country.get('code')}:{normalize_username(account.get('username'))}",
+            "reelfarm_account_id": (base.get("account") or {}).get("reelfarm_account_id"),
+            "museon_account_id": account.get("id"),
+            "username": account.get("username"),
+            "display_name": account.get("display_name"),
+            "avatar_url": account.get("avatar_url") or (base.get("account") or {}).get("avatar_url"),
+            "status": account.get("status"),
+        },
+        "automation": base.get("automation") or {},
+        "material": material,
+        "post": {
+            "id": post.get("id"),
+            "reelfarm_post_id": (base.get("post") or {}).get("reelfarm_post_id"),
+            "museon_post_id": post.get("id"),
+            "status": post.get("status"),
+            "title": post.get("title") or post.get("description"),
+            "published_at": published_at,
+            "published_at_readable": readable_utc_datetime(published_at),
+            "synced_at": post.get("synced_at") or post.get("updated_at"),
+        },
+        "metrics": metrics,
+    }
+
+
+def query_museon_clone_account_posts(query):
+    product_code = query_value(query, "product_code").upper()
+    country_code = (query_value(query, "country_code") or query_value(query, "market_code")).upper()
+    account_id = query_value(query, "account_id")
+    date_from = query_value(query, "date_from")
+    date_to = query_value(query, "date_to")
+    if not date_from and not date_to:
+        date_from, date_to = query_days_window(query)
+    limit, offset = query_limit_offset(query)
+    campaign = museon_clone_campaign(product_code, country_code)
+    if not campaign:
+        return [], pagination_payload(limit, offset, [], 0)
+    username = account_id
+    if account_id.startswith("museon:"):
+        username = account_id.split(":")[-1]
+    page = (offset // limit) + 1
+    posts, total = museon_posts(campaign.get("id"), date_from, date_to, username=username, page=page, page_size=limit)
+    product, country = local_product_country_context(product_code, country_code)
+    rf_rows = reelfarm_detailed_rows_for_username(product_code, country_code, username)
+    rows = []
+    for post in posts:
+        rows.append(museon_post_to_detailed_row(post, product, country, nearest_reelfarm_row(post, rf_rows)))
+    return rows, pagination_payload(limit, offset, rows, total)
+
+
+def query_reelfarm_accounts(query):
     where_sql, params = common_where(query, include_post_dates=False)
     date_from = query_value(query, "date_from")
     date_to = query_value(query, "date_to")
@@ -2571,6 +2949,13 @@ def query_accounts(query):
             tuple(metric_params * metric_condition_count + params),
         ).fetchall()
     return [row_dict(row) for row in rows]
+
+
+def query_accounts(query):
+    source = query_value(query, "source").lower()
+    if source in {"museon_clone", "clone", "museon"}:
+        return query_museon_clone_accounts(query)
+    return query_reelfarm_accounts(query)
 
 
 def beijing_day_window(now=None):
@@ -3067,7 +3452,10 @@ def data_query_payload(query):
     elif resource == "accounts":
         response["data"] = query_accounts(query)
     elif resource in {"posts", "account_posts"}:
-        rows, pagination = query_posts(query)
+        if resource == "account_posts" and query_value(query, "source").lower() in {"museon_clone", "clone", "museon"}:
+            rows, pagination = query_museon_clone_account_posts(query)
+        else:
+            rows, pagination = query_posts(query)
         response["data"] = rows[: pagination["limit"]]
         response["pagination"] = pagination
     elif resource == "materials":

@@ -100,6 +100,7 @@ export type TagDashboard = {
 export type AccountSummary = {
   account_id: string;
   reelfarm_account_id?: string;
+  museon_account_id?: string;
   username?: string;
   display_name?: string;
   avatar_url?: string;
@@ -116,6 +117,9 @@ export type AccountSummary = {
   total_bookmarks?: number;
   latest_post_at?: string;
   last_synced_at?: string;
+  data_source?: string;
+  campaign_id?: string;
+  campaign_name?: string;
 };
 
 export type MaterialRow = {
@@ -148,6 +152,7 @@ export type DetailedPostRow = {
   account?: {
     id?: string;
     reelfarm_account_id?: string;
+    museon_account_id?: string;
     username?: string;
     display_name?: string;
     avatar_url?: string;

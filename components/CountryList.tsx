@@ -79,6 +79,7 @@ const defaultDateRange = rangeForPreset('7d');
 export function CountryList({
   product,
   kpis,
+  dataSource = 'reelfarm',
   syncing,
   onBack,
   onSelect,
@@ -87,6 +88,7 @@ export function CountryList({
 }: {
   product: Product;
   kpis?: ProductKpis | null;
+  dataSource?: 'reelfarm' | 'museon_clone';
   syncing?: boolean;
   onBack: () => void;
   onSelect: (country: Country) => void;
@@ -125,6 +127,7 @@ export function CountryList({
           product_code: productCode,
           country_code: getCountryReelFarmCode(country)
         }));
+        if (dataSource !== 'reelfarm') params.set('source', dataSource);
         const payload = await api.dataQuery<{ ok: boolean; data: AccountSummary[] }>(params);
         return (payload.data || []).map(account => ({ ...account, country }));
       }));
@@ -145,12 +148,12 @@ export function CountryList({
 
   useEffect(() => {
     loadAccountPool().catch(() => setLoading(false));
-  }, [product.id, dateFrom, dateTo]);
+  }, [product.id, dataSource, dateFrom, dateTo]);
 
   useEffect(() => {
     setExpandedAccounts({});
     setPostCache({});
-  }, [product.id, dateFrom, dateTo]);
+  }, [product.id, dataSource, dateFrom, dateTo]);
 
   function accountRowKey(row: AccountPoolRow) {
     return `${row.country.id}:${row.account_id}:${dateFrom || 'start'}:${dateTo || 'end'}`;
@@ -182,6 +185,7 @@ export function CountryList({
         limit: String(ACCOUNT_POST_PAGE_SIZE),
         offset: String(offset)
       }));
+      if (dataSource !== 'reelfarm') params.set('source', dataSource);
       const payload = await api.dataQuery<{
         ok: boolean;
         data: DetailedPostRow[];
@@ -308,12 +312,14 @@ export function CountryList({
       <div className="account-pool-head">
         <div>
           <h2>Pool Accounts <span>{filteredRows.length}</span></h2>
-          <p>{product.name} 下所有国家/地区的 TikTok 账号池。</p>
+          <p>{product.name} 下所有国家/地区的 {dataSource === 'museon_clone' ? 'Clone Slide Show 账号池。' : 'TikTok 账号池。'}</p>
         </div>
         <div className="account-pool-actions">
-          <button className="btn primary" type="button" onClick={() => onSyncProduct(product)} disabled={syncing || !countries.length}>
-            {syncing ? '同步中...' : '同步当前产品'}
-          </button>
+          {dataSource === 'reelfarm' ? (
+            <button className="btn primary" type="button" onClick={() => onSyncProduct(product)} disabled={syncing || !countries.length}>
+              {syncing ? '同步中...' : '同步当前产品'}
+            </button>
+          ) : null}
           <button className="btn ghost" type="button" onClick={loadAccountPool} disabled={loading}>{loading ? 'Refreshing...' : 'Refresh'}</button>
           <button className="product-settings-btn inline" type="button" onClick={onOpenSettings} title="国家/地区设置" aria-label="国家/地区设置">⚙</button>
         </div>

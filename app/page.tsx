@@ -34,7 +34,7 @@ const defaultRoaster: RoasterState = {
 export default function DashboardPage() {
   const [authenticated, setAuthenticated] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
-  const [tool, setTool] = useState<'dashboard' | 'slideshow' | 'roaster' | 'publishCheck' | 'tags' | 'apiKeys'>('dashboard');
+  const [tool, setTool] = useState<'dashboard' | 'slideshow' | 'cloneSlideshow' | 'roaster' | 'publishCheck' | 'tags' | 'apiKeys'>('dashboard');
   const [sideCollapsed, setSideCollapsed] = useState(false);
   const [page, setPage] = useState<'products' | 'product' | 'country'>('products');
   const [selectedProductId, setSelectedProductId] = useState('');
@@ -750,6 +750,30 @@ export default function DashboardPage() {
                   onAddTag={addCardTag}
                   onRemoveTag={removeCardTag}
                   productTags={productTags[getProductReelFarmCode(selectedProduct)] || []}
+                />
+              ) : null}
+            </section>
+          </section>
+          <section className={`tool-page ${tool === 'cloneSlideshow' ? 'active' : ''}`}>
+            <section className="page-shell slideshow-shell">
+              {page === 'products' ? (
+                <ProductList
+                  products={products}
+                  productKpis={productKpis}
+                  onSelect={selectProduct}
+                  onAddProduct={addProduct}
+                  onEditProduct={product => setEditingProductId(product.id)}
+                />
+              ) : null}
+              {page !== 'products' && selectedProduct ? (
+                <CountryList
+                  product={selectedProduct}
+                  kpis={productKpis[selectedProduct.id]}
+                  dataSource="museon_clone"
+                  onBack={() => setPage('products')}
+                  onSelect={selectCountry}
+                  onOpenSettings={() => setCountrySettingsOpen(true)}
+                  onSyncProduct={syncProductCountries}
                 />
               ) : null}
             </section>
