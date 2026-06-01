@@ -968,8 +968,10 @@ function PoolPostCard({ item }: { item: DetailedPostRow }) {
   const material = item.material || {};
   const post = item.post || {};
   const metrics = item.metrics || {};
-  const images = Array.isArray(material.slideshow_images) ? material.slideshow_images : [];
-  const firstImage = images.find(image => image?.image_url)?.image_url;
+  const images = (Array.isArray(material.slideshow_images) ? material.slideshow_images : []) as Array<{ image_url?: string } | string>;
+  const firstImage = images
+    .map(image => typeof image === 'string' ? image : image?.image_url)
+    .find(Boolean);
   const title = material.hook || post.title || material.reelfarm_video_id || post.reelfarm_post_id || 'Untitled post';
   const publishedAt = post.published_at_readable || formatUtcReadable(post.published_at || '');
 

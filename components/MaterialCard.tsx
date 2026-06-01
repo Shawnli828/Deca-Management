@@ -19,10 +19,11 @@ export function MaterialCard({
   onMoveSlide: (videoId: string, direction: number, total: number) => void;
 }) {
   const title = video.hook || post?.title || video.video_id || video.id || 'Slideshow';
-  const images = Array.isArray(video.slideshow_images) ? video.slideshow_images : [];
+  const images = (Array.isArray(video.slideshow_images) ? video.slideshow_images : []) as Array<{ image_url?: string } | string>;
   const imageCount = video.slide_count || images.length;
   const currentIndex = Math.min(slideIndex, Math.max(0, images.length - 1));
   const current = images[currentIndex];
+  const currentUrl = typeof current === 'string' ? current : current?.image_url;
   const displayAccount = String(accountName || '').startsWith('@') ? accountName : `@${accountName || 'unknown'}`;
   const publishedReadable = post?.published_at_readable || formatUtcReadable(post?.published_at_meta || post?.published_at || '');
   const dataRows: Array<[string, unknown]> = [
@@ -43,9 +44,9 @@ export function MaterialCard({
         <span className="tiktok-pill">♪</span>
       </div>
       <div className="material-preview">
-        {current?.image_url ? (
+        {currentUrl ? (
           <>
-            <img src={current.image_url} alt="" loading="lazy" decoding="async" />
+            <img src={currentUrl} alt="" loading="lazy" decoding="async" />
             {images.length > 1 ? (
               <>
                 <button className="slide-nav prev" type="button" onClick={() => onMoveSlide(String(video.video_id || video.id), -1, images.length)}>‹</button>

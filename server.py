@@ -39,6 +39,7 @@ REELFARM_BASE_URL = "https://reel.farm/api/v1"
 MUSEON_BASE_URL = os.environ.get("MUSEON_BASE_URL", "https://api.museon.ai/external/api/v1").strip().rstrip("/")
 MUSEON_API_KEY = os.environ.get("MUSEON_API_KEY", "").strip()
 MUSEON_WORKSPACE_ID = os.environ.get("MUSEON_WORKSPACE_ID", "b5e25f84-b3ed-484b-b467-901a4afcd9c6").strip()
+MUSEON_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/124 Safari/537.36"
 FEISHU_WEBHOOK_URL = os.environ.get("FEISHU_WEBHOOK_URL", "").strip()
 FEISHU_WEBHOOK_SECRET = os.environ.get("FEISHU_WEBHOOK_SECRET", "").strip()
 SEED_DATA_PATH = BASE_DIR / "seed_data.json"
@@ -2732,7 +2733,7 @@ def museon_request(path, params=None):
     request = Request(url, headers={
         "X-API-KEY": MUSEON_API_KEY,
         "Accept": "application/json",
-        "User-Agent": "DecaGrowth/1.0",
+        "User-Agent": MUSEON_USER_AGENT,
     })
     try:
         with urlopen(request, timeout=20, context=make_ssl_context()) as response:
@@ -2847,8 +2848,10 @@ def museon_pagination_total(payload, fallback_count=0):
     return fallback_count
 
 
-def museon_posts(campaign_id, date_from="", date_to="", username="", page=1, page_size=100, sort="recent"):
-    params = {"page": page, "page_size": page_size, "sort": sort}
+def museon_posts(campaign_id, date_from="", date_to="", username="", page=1, page_size=100, sort=""):
+    params = {"page": page, "page_size": page_size}
+    if sort:
+        params["sort"] = sort
     if username:
         params["username"] = username
     if date_from:
@@ -2863,7 +2866,9 @@ def museon_all_posts(campaign_id, date_from="", date_to="", max_pages=40):
     posts = []
     page = 1
     total = 0
-    while page <= max_pages:
+    while True:
+        if max_pages and page > max_pages:
+            break
         items, total = museon_posts(campaign_id, date_from, date_to, page=page, page_size=100)
         posts.extend([item for item in items if isinstance(item, dict)])
         if not items or (total and len(posts) >= total):
@@ -2924,6 +2929,29 @@ def museon_post_metrics(post):
     }
 
 
+def normalize_image_entries(values):
+    images = []
+    for item in values or []:
+        if isinstance(item, str):
+            url = item
+        elif isinstance(item, dict):
+            url = item.get("image_url") or item.get("url") or item.get("src") or item.get("download_url")
+        else:
+            url = ""
+        if url:
+            images.append({"image_url": url})
+
+    seen = set()
+    deduped = []
+    for image in images:
+        url = image.get("image_url")
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        deduped.append(image)
+    return deduped
+
+
 def museon_post_images(post):
     candidates = [
         post.get("slideshow_images"),
@@ -2941,23 +2969,28 @@ def museon_post_images(post):
 
     images = []
     for candidate in candidates:
-        if not isinstance(candidate, list):
-            continue
-        for item in candidate:
-            if isinstance(item, str):
-                images.append(item)
-            elif isinstance(item, dict):
-                url = item.get("url") or item.get("src") or item.get("download_url") or item.get("image_url")
-                if url:
-                    images.append(url)
-    seen = set()
-    deduped = []
-    for image in images:
-        if image in seen:
-            continue
-        seen.add(image)
-        deduped.append(image)
-    return deduped
+        if isinstance(candidate, list):
+            images.extend(candidate)
+    return normalize_image_entries(images)
+
+
+def museon_content_download_images(content_id):
+    if not content_id:
+        return []
+    try:
+        payload = museon_request(f"/content/{quote(str(content_id), safe='')}/download-urls")
+    except RuntimeError:
+        return []
+    data = payload.get("data") if isinstance(payload, dict) else {}
+    if not isinstance(data, dict):
+        return []
+    values = []
+    for key in ("download_urls", "image_urls", "media_urls"):
+        if isinstance(data.get(key), list):
+            values.extend(data.get(key) or [])
+    if data.get("thumbnail_url"):
+        values.append(data.get("thumbnail_url"))
+    return normalize_image_entries(values)
 
 
 def local_product_country_record(product_id="", country_id="", product_code="", country_code=""):
@@ -3020,7 +3053,7 @@ def sync_museon_clone_country(product_id="", country_id="", product_code="", cou
             "message": f"No Museon clone campaign found for {country_code}-{product_code}.",
         }
 
-    posts = museon_all_posts(campaign.get("id"))
+    posts = museon_all_posts(campaign.get("id"), max_pages=0)
     channel_id = stable_id("channel", "MUSEON_CLONE")
     product_row_id = str(product.get("id") or stable_id("product", product_code))
     market_id = stable_id("market", country_code)
@@ -3031,6 +3064,7 @@ def sync_museon_clone_country(product_id="", country_id="", product_code="", cou
     account_ids = set()
     material_count = 0
     post_count = 0
+    download_image_cache = {}
 
     with connect_db() as conn:
         init_relational_schema(conn)
@@ -3079,6 +3113,10 @@ def sync_museon_clone_country(product_id="", country_id="", product_code="", cou
             metrics = museon_post_metrics(post)
             published_at = museon_post_published_at(post)
             images = museon_post_images(post)
+            if not images and material_source_id:
+                if material_source_id not in download_image_cache:
+                    download_image_cache[material_source_id] = museon_content_download_images(material_source_id)
+                images = download_image_cache.get(material_source_id) or []
 
             account_ids.add(account_id)
             material_count += 1
@@ -3206,7 +3244,6 @@ def query_museon_clone_accounts(query):
 
     campaign_id = campaign.get("id")
     posts = museon_all_posts(campaign_id, date_from, date_to)
-    rf_lookup = reelfarm_account_lookup(product_code, country_code)
     grouped = {}
     for post in posts:
         account = museon_account_from_post(post)
@@ -3237,19 +3274,18 @@ def query_museon_clone_accounts(query):
     rows = []
     for username_key, grouped_row in grouped.items():
         account = grouped_row["account"]
-        rf_row = rf_lookup.get(username_key, {})
         synthetic_id = f"museon:{product_code}:{country_code}:{username_key}"
         rows.append({
             "account_id": synthetic_id,
-            "reelfarm_account_id": rf_row.get("reelfarm_account_id"),
+            "reelfarm_account_id": None,
             "museon_account_id": account.get("id"),
             "username": account.get("username"),
             "display_name": account.get("display_name") or account.get("username"),
-            "avatar_url": account.get("avatar_url") or rf_row.get("avatar_url"),
-            "status": account.get("status") or rf_row.get("status") or "active",
-            "automation_count": rf_row.get("automation_count") or 0,
-            "automation_name": rf_row.get("automation_name"),
-            "automation_names": rf_row.get("automation_names"),
+            "avatar_url": account.get("avatar_url"),
+            "status": account.get("status") or "active",
+            "automation_count": 1,
+            "automation_name": campaign.get("name") or campaign.get("title"),
+            "automation_names": campaign.get("name") or campaign.get("title"),
             "material_count": grouped_row["posts"],
             "post_count": grouped_row["posts"],
             "total_views": grouped_row["views"],
@@ -3311,6 +3347,10 @@ def museon_post_to_detailed_row(post, product, country, rf_match=None):
     account = museon_account_from_post(post)
     metrics = museon_post_metrics(post)
     published_at = post.get("published_at") or post.get("created_at") or ""
+    content_id = post.get("content_id") or post.get("id")
+    images = museon_post_images(post)
+    if not images and content_id:
+        images = museon_content_download_images(content_id)
     base = rf_match or {
         "product": product,
         "country": country,
@@ -3328,6 +3368,8 @@ def museon_post_to_detailed_row(post, product, country, rf_match=None):
         "video_type": material.get("video_type") or post.get("content_type") or "slideshow",
         "hook": material.get("hook") or post.get("title") or post.get("description"),
         "prompt": material.get("prompt") or post.get("description"),
+        "slideshow_images": material.get("slideshow_images") or images,
+        "slide_count": material.get("slide_count") or len(images),
         "status": material.get("status") or post.get("status"),
     })
     return {
@@ -3377,10 +3419,9 @@ def query_museon_clone_account_posts(query):
     page = (offset // limit) + 1
     posts, total = museon_posts(campaign.get("id"), date_from, date_to, username=username, page=page, page_size=limit)
     product, country = local_product_country_context(product_code, country_code)
-    rf_rows = reelfarm_detailed_rows_for_username(product_code, country_code, username)
     rows = []
     for post in posts:
-        rows.append(museon_post_to_detailed_row(post, product, country, nearest_reelfarm_row(post, rf_rows)))
+        rows.append(museon_post_to_detailed_row(post, product, country))
     return rows, pagination_payload(limit, offset, rows, total)
 
 
