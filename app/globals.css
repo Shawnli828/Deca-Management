@@ -1584,6 +1584,30 @@
             text-transform: none;
         }
 
+        .pool-sort-head {
+            appearance: none;
+            border: 0;
+            background: transparent;
+            color: inherit;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 0;
+            font: inherit;
+            text-align: left;
+        }
+
+        .pool-sort-head:hover {
+            color: var(--text);
+        }
+
+        .pool-sort-head span {
+            color: var(--accent);
+            font-size: 12px;
+            line-height: 1;
+        }
+
         .account-pool-table tbody tr:hover {
             background: rgba(124, 131, 255, 0.06);
         }

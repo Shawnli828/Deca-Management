@@ -17,6 +17,7 @@ type AccountPostState = {
   total?: number;
 };
 type TagFilterRow = { id: string; category: string; tags: string[] };
+type ViewSortDirection = 'none' | 'desc' | 'asc';
 
 const ACCOUNT_POST_PAGE_SIZE = 4;
 const DATE_PRESETS = [
@@ -76,6 +77,12 @@ function sameDate(left: string, right: string) {
 
 const defaultDateRange = rangeForPreset('7d');
 
+function getAccountAvgViews(row: AccountPoolRow) {
+  const posts = Number(row.post_count) || 0;
+  if (!posts) return 0;
+  return Math.round((Number(row.total_views) || 0) / posts);
+}
+
 export function CountryList({
   product,
   kpis,
@@ -104,6 +111,7 @@ export function CountryList({
   const [tagFilters, setTagFilters] = useState<TagFilterRow[]>([]);
   const [dateFrom, setDateFrom] = useState(defaultDateRange.from);
   const [dateTo, setDateTo] = useState(defaultDateRange.to);
+  const [viewSort, setViewSort] = useState<ViewSortDirection>('none');
   const [expandedAccounts, setExpandedAccounts] = useState<Record<string, boolean>>({});
   const [postCache, setPostCache] = useState<Record<string, AccountPostState>>({});
   const [editingTagAccountId, setEditingTagAccountId] = useState('');
@@ -282,6 +290,22 @@ export function CountryList({
     if (!matchesTagFilters(row)) return false;
     return true;
   });
+  const sortedRows = useMemo(() => {
+    if (viewSort === 'none') return filteredRows;
+    return [...filteredRows].sort((left, right) => {
+      const leftViews = getAccountAvgViews(left);
+      const rightViews = getAccountAvgViews(right);
+      if (leftViews === rightViews) {
+        return String(left.username || left.display_name || left.account_id || '')
+          .localeCompare(String(right.username || right.display_name || right.account_id || ''));
+      }
+      return viewSort === 'desc' ? rightViews - leftViews : leftViews - rightViews;
+    });
+  }, [filteredRows, viewSort]);
+
+  function toggleViewSort() {
+    setViewSort(previous => previous === 'desc' ? 'asc' : 'desc');
+  }
 
   const statusOptions = Array.from(new Set(rows.map(row => String(row.status || 'unknown').toLowerCase()))).sort();
   const performanceMetrics = useMemo(() => {
@@ -384,7 +408,11 @@ export function CountryList({
             <tr>
               <th><input type="checkbox" aria-label="Select all accounts" /></th>
               <th>Account</th>
-              <th>Avg Views</th>
+              <th>
+                <button className="pool-sort-head" type="button" onClick={toggleViewSort} aria-label="Sort by average views">
+                  Avg Views <span>{viewSort === 'asc' ? '↑' : viewSort === 'desc' ? '↓' : '↕'}</span>
+                </button>
+              </th>
               <th>Country</th>
               <th>Status</th>
               <th>Posts</th>
@@ -396,8 +424,8 @@ export function CountryList({
           <tbody>
             {loading ? (
               <tr><td colSpan={9} className="pool-empty">Loading accounts...</td></tr>
-            ) : filteredRows.length ? filteredRows.map(row => {
-              const avgViews = row.post_count ? Math.round((Number(row.total_views) || 0) / Number(row.post_count)) : 0;
+            ) : sortedRows.length ? sortedRows.map(row => {
+              const avgViews = getAccountAvgViews(row);
               const rowKey = accountRowKey(row);
               const isExpanded = Boolean(expandedAccounts[rowKey]);
               return (
