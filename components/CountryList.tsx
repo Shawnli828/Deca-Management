@@ -93,6 +93,11 @@ function getPublishMethod(row: AccountPoolRow, dataSource: 'reelfarm' | 'museon_
   const storedMethod = String(row.publish_method || '').trim().toLowerCase();
   if (['manual', 'api', 'rpa'].includes(storedMethod)) return storedMethod;
 
+  const postMode = String(row.post_mode || '').trim().toUpperCase();
+  if (postMode === 'MEDIA_UPLOAD') return 'manual';
+  if (postMode === 'DIRECT_POST') return 'api';
+  if (postMode === 'RPA') return 'rpa';
+
   const sourceText = [
     row.data_source,
     row.automation_names,

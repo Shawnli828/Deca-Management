@@ -354,6 +354,7 @@ def init_relational_schema(conn):
             status TEXT,
             schedule TEXT,
             settings_json TEXT,
+            post_mode TEXT,
             publish_method TEXT,
             created_at TEXT,
             synced_at TEXT
@@ -459,6 +460,7 @@ def init_relational_schema(conn):
     ]
     for statement in statements:
         conn.execute(statement)
+    ensure_column(conn, "automations", "post_mode", "TEXT")
     ensure_column(conn, "automations", "publish_method", "TEXT")
 
 
@@ -630,16 +632,67 @@ def nested_value(payload, keys):
     return None
 
 
+REELFARM_POST_AS_DRAFT_KEYS = {
+    "post_as_draft",
+    "postAsDraft",
+    "post_as_draft_enabled",
+    "postAsDraftEnabled",
+}
+
+
+def reelfarm_tiktok_post_settings(automation):
+    if not isinstance(automation, dict):
+        return {}
+    settings = automation.get("tiktok_post_settings")
+    if isinstance(settings, dict):
+        return settings
+    settings = automation.get("tiktokPostSettings")
+    if isinstance(settings, dict):
+        return settings
+    return {}
+
+
+def reelfarm_post_mode(automation):
+    settings = reelfarm_tiktok_post_settings(automation)
+    post_mode = str(settings.get("post_mode") or settings.get("postMode") or "").strip().upper()
+    if post_mode:
+        return post_mode
+    auto_post = settings.get("auto_post", settings.get("autoPost"))
+    if auto_post is not None:
+        return "DIRECT_POST" if bool_from_api(auto_post) else "MEDIA_UPLOAD"
+    return ""
+
+
+def reelfarm_post_as_draft_value(automation):
+    post_mode = reelfarm_post_mode(automation)
+    if post_mode:
+        return post_mode == "MEDIA_UPLOAD"
+
+    exact = nested_value(automation, REELFARM_POST_AS_DRAFT_KEYS)
+    if exact is not None:
+        return exact
+
+    def walk(payload):
+        if isinstance(payload, dict):
+            for key, value in payload.items():
+                normalized = re.sub(r"[^a-z0-9]+", "", str(key).lower())
+                if "draft" in normalized and ("post" in normalized or "publish" in normalized):
+                    return value
+                found = walk(value)
+                if found is not None:
+                    return found
+        elif isinstance(payload, list):
+            for value in payload:
+                found = walk(value)
+                if found is not None:
+                    return found
+        return None
+
+    return walk(automation)
+
+
 def reelfarm_publish_method(automation):
-    post_as_draft = nested_value(
-        automation,
-        {
-            "post_as_draft",
-            "postAsDraft",
-            "post_as_draft_enabled",
-            "postAsDraftEnabled",
-        },
-    )
+    post_as_draft = reelfarm_post_as_draft_value(automation)
     return "manual" if bool_from_api(post_as_draft) else "api"
 
 
@@ -867,6 +920,7 @@ def project_products_to_relational(data=None, product_code_filter="", market_cod
                             "status": automation.get("status") or "",
                             "schedule": db_json(automation.get("schedule", [])),
                             "settings_json": db_json(automation),
+                            "post_mode": automation.get("post_mode") or reelfarm_post_mode(automation),
                             "publish_method": automation.get("publish_method") or reelfarm_publish_method(automation),
                             "created_at": automation.get("created_at") or "",
                             "synced_at": synced_at,
@@ -1040,6 +1094,7 @@ def stored_reelfarm_country(product_code, market_code):
                 a.name AS automation_name,
                 a.status AS automation_status,
                 a.schedule AS automation_schedule,
+                a.post_mode AS automation_post_mode,
                 a.publish_method AS automation_publish_method,
                 a.created_at AS automation_created_at,
                 acc.reelfarm_account_id,
@@ -1097,6 +1152,7 @@ def stored_reelfarm_country(product_code, market_code):
                     "status": row["automation_status"],
                     "tiktok_account_id": account_id,
                     "schedule": parse_json_list(row["automation_schedule"]),
+                    "post_mode": row["automation_post_mode"] or "",
                     "publish_method": row["automation_publish_method"] or "api",
                     "created_at": row["automation_created_at"],
                 },
@@ -1497,15 +1553,8 @@ def compact_automation(automation):
         "status": automation.get("status"),
         "tiktok_account_id": automation.get("tiktok_account_id"),
         "schedule": automation.get("schedule", []),
-        "post_as_draft": nested_value(
-            automation,
-            {
-                "post_as_draft",
-                "postAsDraft",
-                "post_as_draft_enabled",
-                "postAsDraftEnabled",
-            },
-        ),
+        "post_mode": reelfarm_post_mode(automation),
+        "post_as_draft": reelfarm_post_as_draft_value(automation),
         "publish_method": reelfarm_publish_method(automation),
         "created_at": automation.get("created_at"),
     }
@@ -1628,7 +1677,11 @@ def reelfarm_matches(prefix):
     def build_card(automation):
         automation_id = automation.get("automation_id")
         details = automation
-        if automation_id and not automation.get("tiktok_account_id"):
+        needs_details = (
+            not automation.get("tiktok_account_id")
+            or reelfarm_post_as_draft_value(automation) is None
+        )
+        if automation_id and needs_details:
             try:
                 details = reelfarm_request(f"/automations/{quote(str(automation_id), safe='')}")
             except RuntimeError:
@@ -3227,6 +3280,7 @@ def sync_museon_clone_country(product_id="", country_id="", product_code="", cou
                     "status": "active",
                     "schedule": "[]",
                     "settings_json": db_json({"source": "museon_clone", "campaign": campaign, "account": account}),
+                    "post_mode": "RPA",
                     "publish_method": "rpa",
                     "created_at": campaign.get("created_at") or "",
                     "synced_at": synced_at,
@@ -3541,6 +3595,7 @@ def query_reelfarm_accounts(query):
                 COUNT(DISTINCT a.id) AS automation_count,
                 MAX(a.name) AS automation_name,
                 {automation_names_sql} AS automation_names,
+                MAX(a.post_mode) AS post_mode,
                 CASE
                     WHEN SUM(CASE WHEN a.publish_method = 'manual' THEN 1 ELSE 0 END) > 0 THEN 'manual'
                     WHEN SUM(CASE WHEN a.publish_method = 'rpa' THEN 1 ELSE 0 END) > 0 THEN 'rpa'

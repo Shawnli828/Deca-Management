@@ -132,6 +132,7 @@ export type AccountSummary = {
   automation_count?: number;
   automation_name?: string;
   automation_names?: string;
+  post_mode?: string;
   publish_method?: string;
   material_count?: number;
   post_count?: number;
