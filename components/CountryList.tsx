@@ -83,6 +83,12 @@ function getAccountAvgViews(row: AccountPoolRow) {
   return Math.round((Number(row.total_views) || 0) / posts);
 }
 
+function getAutomationDisplay(row: AccountPoolRow, dataSource: 'reelfarm' | 'museon_clone') {
+  const names = String(row.automation_names || row.automation_name || '').trim();
+  if (names) return names;
+  return dataSource === 'museon_clone' ? 'api' : 'rpa';
+}
+
 export function CountryList({
   product,
   kpis,
@@ -413,12 +419,12 @@ export function CountryList({
                   Avg Views <span>{viewSort === 'asc' ? '↑' : viewSort === 'desc' ? '↓' : '↕'}</span>
                 </button>
               </th>
+              <th>Automation</th>
               <th>Country</th>
               <th>Status</th>
               <th>Posts</th>
               <th>Tags</th>
               <th>Synced</th>
-              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -428,25 +434,31 @@ export function CountryList({
               const avgViews = getAccountAvgViews(row);
               const rowKey = accountRowKey(row);
               const isExpanded = Boolean(expandedAccounts[rowKey]);
+              const automationDisplay = getAutomationDisplay(row, dataSource);
               return (
                 <Fragment key={rowKey}>
                   <tr key={rowKey}>
                     <td><input type="checkbox" aria-label={`Select ${row.username || row.account_id}`} /></td>
                     <td>
                       <div className="pool-account-cell">
+                        <button
+                          className={isExpanded ? 'pool-expand-btn open' : 'pool-expand-btn'}
+                          type="button"
+                          onClick={() => toggleAccount(row)}
+                          aria-label={isExpanded ? 'Close posts' : 'Open posts'}
+                          aria-expanded={isExpanded}
+                        />
                         <span className="pool-avatar">{row.avatar_url ? <img src={row.avatar_url} alt="" /> : (row.username || '?').slice(0, 2).toUpperCase()}</span>
                         <span>
                           <strong>{row.display_name || row.username || 'Unknown'}</strong>
                           <small>@{String(row.username || row.account_id).replace(/^@/, '')}</small>
-                          {(row.automation_names || row.automation_name) ? (
-                            <em className="pool-automation-name" title={row.automation_names || row.automation_name}>
-                              {row.automation_names || row.automation_name}
-                            </em>
-                          ) : null}
                         </span>
                       </div>
                     </td>
                     <td>{avgViews ? formatNumber(avgViews) : '—'}</td>
+                    <td>
+                      <span className="pool-automation-list" title={automationDisplay}>{automationDisplay}</span>
+                    </td>
                     <td>{countryFlag(row.country)} {row.country.name}</td>
                     <td><span className="pool-pill">{row.status || 'N/A'}</span></td>
                     <td>{formatNumber(row.post_count || 0)}</td>
@@ -468,7 +480,6 @@ export function CountryList({
                       </div>
                     </td>
                     <td>{row.last_synced_at ? formatUtcReadable(row.last_synced_at) : '—'}</td>
-                    <td><button className="pool-detail-btn" type="button" onClick={() => toggleAccount(row)}>{isExpanded ? 'Close' : 'Details'}</button></td>
                   </tr>
                   {isExpanded ? (
                     <tr className="account-posts-row" key={`${rowKey}:posts`}>
@@ -964,6 +975,8 @@ function AccountPostPanel({
   const offset = state?.offset || 0;
   const currentPage = Math.floor(offset / ACCOUNT_POST_PAGE_SIZE) + 1;
   const totalPages = state?.total ? Math.max(1, Math.ceil(state.total / ACCOUNT_POST_PAGE_SIZE)) : undefined;
+  const canGoNext = Boolean(state?.hasMore)
+    || (rows.length === ACCOUNT_POST_PAGE_SIZE && (!state?.total || offset + rows.length < state.total));
 
   return (
     <div className="pool-post-panel">
@@ -975,7 +988,7 @@ function AccountPostPanel({
         <div className="pool-post-pager">
           <button className="pool-detail-btn" type="button" disabled={state?.loading || offset <= 0} onClick={() => onPage(Math.max(0, offset - ACCOUNT_POST_PAGE_SIZE))}>Previous</button>
           <span>{currentPage}{totalPages ? ` / ${totalPages}` : ''}</span>
-          <button className="pool-detail-btn" type="button" disabled={state?.loading || !state?.hasMore} onClick={() => onPage(offset + ACCOUNT_POST_PAGE_SIZE)}>Next</button>
+          <button className="pool-detail-btn" type="button" disabled={state?.loading || !canGoNext} onClick={() => onPage(offset + ACCOUNT_POST_PAGE_SIZE)}>Next</button>
         </div>
       </div>
 
@@ -997,17 +1010,33 @@ function PoolPostCard({ item }: { item: DetailedPostRow }) {
   const post = item.post || {};
   const metrics = item.metrics || {};
   const images = (Array.isArray(material.slideshow_images) ? material.slideshow_images : []) as Array<{ image_url?: string } | string>;
-  const firstImage = images
-    .map(image => typeof image === 'string' ? image : image?.image_url)
-    .find(Boolean);
+  const [slideIndex, setSlideIndex] = useState(0);
+  const currentIndex = Math.min(slideIndex, Math.max(0, images.length - 1));
+  const currentImage = images[currentIndex];
+  const currentImageUrl = typeof currentImage === 'string' ? currentImage : currentImage?.image_url;
   const title = material.hook || post.title || material.reelfarm_video_id || post.reelfarm_post_id || 'Untitled post';
   const publishedAt = post.published_at_readable || formatUtcReadable(post.published_at || '');
+
+  function moveSlide(direction: number) {
+    if (images.length <= 1) return;
+    setSlideIndex(previous => (previous + direction + images.length) % images.length);
+  }
 
   return (
     <article className="pool-post-card">
       <div className="pool-post-thumb">
-        {firstImage ? <img src={firstImage} alt="" loading="lazy" decoding="async" /> : <span>No image</span>}
-        {images.length ? <b>{images.length}</b> : null}
+        {currentImageUrl ? (
+          <>
+            <img src={currentImageUrl} alt="" loading="lazy" decoding="async" />
+            {images.length > 1 ? (
+              <>
+                <button className="slide-nav prev" type="button" onClick={() => moveSlide(-1)} aria-label="Previous slide">‹</button>
+                <button className="slide-nav next" type="button" onClick={() => moveSlide(1)} aria-label="Next slide">›</button>
+                <span className="slide-counter">{currentIndex + 1}/{images.length}</span>
+              </>
+            ) : null}
+          </>
+        ) : <span>No image</span>}
       </div>
       <div className="pool-post-body">
         <h3>{title}</h3>

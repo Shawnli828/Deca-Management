@@ -1618,12 +1618,81 @@
             text-align: center;
         }
 
+        .account-pool-table th:nth-child(2),
+        .account-pool-table td:nth-child(2) {
+            width: 260px;
+        }
+
+        .account-pool-table th:nth-child(3),
+        .account-pool-table td:nth-child(3) {
+            width: 95px;
+        }
+
+        .account-pool-table th:nth-child(4),
+        .account-pool-table td:nth-child(4) {
+            width: 220px;
+        }
+
+        .account-pool-table th:nth-child(5),
+        .account-pool-table td:nth-child(5) {
+            width: 140px;
+        }
+
+        .account-pool-table th:nth-child(6),
+        .account-pool-table td:nth-child(6),
+        .account-pool-table th:nth-child(7),
+        .account-pool-table td:nth-child(7) {
+            width: 80px;
+        }
+
+        .account-pool-table th:nth-child(8),
+        .account-pool-table td:nth-child(8) {
+            width: 180px;
+        }
+
+        .account-pool-table th:nth-child(9),
+        .account-pool-table td:nth-child(9) {
+            width: 145px;
+        }
+
         .pool-account-cell {
             display: grid;
-            grid-template-columns: 34px minmax(0, 1fr);
+            grid-template-columns: 16px 34px minmax(0, 1fr);
             gap: 9px;
             align-items: center;
             min-width: 0;
+        }
+
+        .pool-expand-btn {
+            position: relative;
+            width: 16px;
+            height: 24px;
+            border: 0;
+            border-radius: 6px;
+            background: transparent;
+            cursor: pointer;
+        }
+
+        .pool-expand-btn::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 7px;
+            height: 7px;
+            border-right: 2px solid #64748b;
+            border-bottom: 2px solid #64748b;
+            transform: translate(-60%, -50%) rotate(-45deg);
+            transition: transform 160ms ease, border-color 160ms ease;
+        }
+
+        .pool-expand-btn:hover::before,
+        .pool-expand-btn.open::before {
+            border-color: var(--text);
+        }
+
+        .pool-expand-btn.open::before {
+            transform: translate(-50%, -65%) rotate(45deg);
         }
 
         .pool-avatar {
@@ -1678,6 +1747,18 @@
             font-style: normal;
             font-weight: 750;
             line-height: 1.25;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .pool-automation-list {
+            display: block;
+            max-width: 220px;
+            overflow: hidden;
+            color: #334155;
+            font-size: 11px;
+            font-weight: 800;
+            line-height: 1.35;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
