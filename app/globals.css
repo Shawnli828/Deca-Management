@@ -1561,7 +1561,7 @@
 
         .account-pool-table {
             width: 100%;
-            min-width: 1080px;
+            min-width: 1280px;
             border-collapse: collapse;
             table-layout: fixed;
         }
@@ -1635,11 +1635,14 @@
 
         .account-pool-table th:nth-child(5),
         .account-pool-table td:nth-child(5) {
-            width: 140px;
+            width: 125px;
         }
 
         .account-pool-table th:nth-child(6),
-        .account-pool-table td:nth-child(6),
+        .account-pool-table td:nth-child(6) {
+            width: 140px;
+        }
+
         .account-pool-table th:nth-child(7),
         .account-pool-table td:nth-child(7) {
             width: 80px;
@@ -1647,11 +1650,16 @@
 
         .account-pool-table th:nth-child(8),
         .account-pool-table td:nth-child(8) {
-            width: 180px;
+            width: 80px;
         }
 
         .account-pool-table th:nth-child(9),
         .account-pool-table td:nth-child(9) {
+            width: 180px;
+        }
+
+        .account-pool-table th:nth-child(10),
+        .account-pool-table td:nth-child(10) {
             width: 145px;
         }
 
@@ -1761,6 +1769,42 @@
             line-height: 1.35;
             text-overflow: ellipsis;
             white-space: nowrap;
+        }
+
+        .pool-method-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 54px;
+            min-height: 24px;
+            border: 1px solid #dbe3f0;
+            border-radius: 999px;
+            padding: 0 9px;
+            background: #f8fafc;
+            color: #475569;
+            font-size: 11px;
+            font-weight: 900;
+            letter-spacing: 0;
+            text-transform: lowercase;
+            white-space: nowrap;
+        }
+
+        .pool-method-pill.api {
+            border-color: #bfdbfe;
+            background: #eff6ff;
+            color: #1d4ed8;
+        }
+
+        .pool-method-pill.rpa {
+            border-color: #ddd6fe;
+            background: #f5f3ff;
+            color: #5b21b6;
+        }
+
+        .pool-method-pill.manual {
+            border-color: #fed7aa;
+            background: #fff7ed;
+            color: #c2410c;
         }
 
         .pool-pill,

@@ -265,6 +265,30 @@ def connect_db():
     return conn
 
 
+def column_exists(conn, table, column):
+    if using_postgres():
+        placeholder = db_placeholder()
+        row = conn.execute(
+            f"""
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_name = {placeholder}
+              AND column_name = {placeholder}
+            LIMIT 1
+            """,
+            (table, column),
+        ).fetchone()
+        return bool(row)
+
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return any(str(row["name"]) == column for row in rows)
+
+
+def ensure_column(conn, table, column, definition):
+    if not column_exists(conn, table, column):
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
 def init_relational_schema(conn):
     statements = [
         """
@@ -330,6 +354,7 @@ def init_relational_schema(conn):
             status TEXT,
             schedule TEXT,
             settings_json TEXT,
+            publish_method TEXT,
             created_at TEXT,
             synced_at TEXT
         )
@@ -434,6 +459,7 @@ def init_relational_schema(conn):
     ]
     for statement in statements:
         conn.execute(statement)
+    ensure_column(conn, "automations", "publish_method", "TEXT")
 
 
 def init_db():
@@ -575,6 +601,46 @@ def int_or_none(value):
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def bool_from_api(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    text = str(value or "").strip().lower()
+    if text in {"1", "true", "yes", "y", "on", "enabled"}:
+        return True
+    if text in {"0", "false", "no", "n", "off", "disabled"}:
+        return False
+    return False
+
+
+def nested_value(payload, keys):
+    if not isinstance(payload, dict):
+        return None
+    for key in keys:
+        if key in payload:
+            return payload.get(key)
+    for value in payload.values():
+        if isinstance(value, dict):
+            found = nested_value(value, keys)
+            if found is not None:
+                return found
+    return None
+
+
+def reelfarm_publish_method(automation):
+    post_as_draft = nested_value(
+        automation,
+        {
+            "post_as_draft",
+            "postAsDraft",
+            "post_as_draft_enabled",
+            "postAsDraftEnabled",
+        },
+    )
+    return "manual" if bool_from_api(post_as_draft) else "api"
 
 
 def data_source_channel_code(source):
@@ -801,6 +867,7 @@ def project_products_to_relational(data=None, product_code_filter="", market_cod
                             "status": automation.get("status") or "",
                             "schedule": db_json(automation.get("schedule", [])),
                             "settings_json": db_json(automation),
+                            "publish_method": automation.get("publish_method") or reelfarm_publish_method(automation),
                             "created_at": automation.get("created_at") or "",
                             "synced_at": synced_at,
                         },
@@ -973,6 +1040,7 @@ def stored_reelfarm_country(product_code, market_code):
                 a.name AS automation_name,
                 a.status AS automation_status,
                 a.schedule AS automation_schedule,
+                a.publish_method AS automation_publish_method,
                 a.created_at AS automation_created_at,
                 acc.reelfarm_account_id,
                 acc.username AS account_username,
@@ -1029,6 +1097,7 @@ def stored_reelfarm_country(product_code, market_code):
                     "status": row["automation_status"],
                     "tiktok_account_id": account_id,
                     "schedule": parse_json_list(row["automation_schedule"]),
+                    "publish_method": row["automation_publish_method"] or "api",
                     "created_at": row["automation_created_at"],
                 },
                 "account": {
@@ -1428,6 +1497,16 @@ def compact_automation(automation):
         "status": automation.get("status"),
         "tiktok_account_id": automation.get("tiktok_account_id"),
         "schedule": automation.get("schedule", []),
+        "post_as_draft": nested_value(
+            automation,
+            {
+                "post_as_draft",
+                "postAsDraft",
+                "post_as_draft_enabled",
+                "postAsDraftEnabled",
+            },
+        ),
+        "publish_method": reelfarm_publish_method(automation),
         "created_at": automation.get("created_at"),
     }
 
@@ -3148,6 +3227,7 @@ def sync_museon_clone_country(product_id="", country_id="", product_code="", cou
                     "status": "active",
                     "schedule": "[]",
                     "settings_json": db_json({"source": "museon_clone", "campaign": campaign, "account": account}),
+                    "publish_method": "rpa",
                     "created_at": campaign.get("created_at") or "",
                     "synced_at": synced_at,
                 },
@@ -3286,6 +3366,7 @@ def query_museon_clone_accounts(query):
             "automation_count": 1,
             "automation_name": campaign.get("name") or campaign.get("title"),
             "automation_names": campaign.get("name") or campaign.get("title"),
+            "publish_method": "rpa",
             "material_count": grouped_row["posts"],
             "post_count": grouped_row["posts"],
             "total_views": grouped_row["views"],
@@ -3460,6 +3541,11 @@ def query_reelfarm_accounts(query):
                 COUNT(DISTINCT a.id) AS automation_count,
                 MAX(a.name) AS automation_name,
                 {automation_names_sql} AS automation_names,
+                CASE
+                    WHEN SUM(CASE WHEN a.publish_method = 'manual' THEN 1 ELSE 0 END) > 0 THEN 'manual'
+                    WHEN SUM(CASE WHEN a.publish_method = 'rpa' THEN 1 ELSE 0 END) > 0 THEN 'rpa'
+                    ELSE 'api'
+                END AS publish_method,
                 COUNT(DISTINCT CASE WHEN {metric_condition} THEN mat.id END) AS material_count,
                 COUNT(DISTINCT CASE WHEN {metric_condition} THEN post.id END) AS post_count,
                 COALESCE(SUM(CASE WHEN {metric_condition} THEN post.view_count ELSE 0 END), 0) AS total_views,

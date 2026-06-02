@@ -89,6 +89,22 @@ function getAutomationDisplay(row: AccountPoolRow, dataSource: 'reelfarm' | 'mus
   return dataSource === 'museon_clone' ? 'api' : 'rpa';
 }
 
+function getPublishMethod(row: AccountPoolRow, dataSource: 'reelfarm' | 'museon_clone') {
+  const storedMethod = String(row.publish_method || '').trim().toLowerCase();
+  if (['manual', 'api', 'rpa'].includes(storedMethod)) return storedMethod;
+
+  const sourceText = [
+    row.data_source,
+    row.automation_names,
+    row.automation_name,
+    row.campaign_name
+  ].filter(Boolean).join(' ').toLowerCase();
+  if (sourceText.includes('manual')) return 'manual';
+  if (sourceText.includes('api') || sourceText.includes('museon')) return 'api';
+  if (sourceText.includes('rpa') || sourceText.includes('reelfarm')) return 'rpa';
+  return dataSource === 'museon_clone' ? 'api' : 'rpa';
+}
+
 export function CountryList({
   product,
   kpis,
@@ -114,6 +130,7 @@ export function CountryList({
   const [search, setSearch] = useState('');
   const [countryFilter, setCountryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [publishMethodFilter, setPublishMethodFilter] = useState('all');
   const [tagFilters, setTagFilters] = useState<TagFilterRow[]>([]);
   const [dateFrom, setDateFrom] = useState(defaultDateRange.from);
   const [dateTo, setDateTo] = useState(defaultDateRange.to);
@@ -290,9 +307,11 @@ export function CountryList({
     const username = String(row.username || row.display_name || row.account_id || '').toLowerCase();
     const countryCode = getCountryReelFarmCode(row.country);
     const status = String(row.status || 'unknown').toLowerCase();
+    const publishMethod = getPublishMethod(row, dataSource);
     if (query && !username.includes(query)) return false;
     if (countryFilter !== 'all' && countryCode !== countryFilter) return false;
     if (statusFilter !== 'all' && status !== statusFilter) return false;
+    if (publishMethodFilter !== 'all' && publishMethod !== publishMethodFilter) return false;
     if (!matchesTagFilters(row)) return false;
     return true;
   });
@@ -370,6 +389,12 @@ export function CountryList({
           <option value="all">All Statuses</option>
           {statusOptions.map(status => <option value={status} key={status}>{status}</option>)}
         </select>
+        <select className="text-input" value={publishMethodFilter} onChange={event => setPublishMethodFilter(event.target.value)}>
+          <option value="all">All Publish Methods</option>
+          <option value="manual">manual</option>
+          <option value="api">api</option>
+          <option value="rpa">rpa</option>
+        </select>
         <CategoryTagFilter tagOptions={tagOptions} filters={tagFilters} onApply={setTagFilters} />
         <DateRangeFilter
           dateFrom={dateFrom}
@@ -420,6 +445,7 @@ export function CountryList({
                 </button>
               </th>
               <th>Automation</th>
+              <th>Publish Method</th>
               <th>Country</th>
               <th>Status</th>
               <th>Posts</th>
@@ -429,12 +455,13 @@ export function CountryList({
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={9} className="pool-empty">Loading accounts...</td></tr>
+              <tr><td colSpan={10} className="pool-empty">Loading accounts...</td></tr>
             ) : sortedRows.length ? sortedRows.map(row => {
               const avgViews = getAccountAvgViews(row);
               const rowKey = accountRowKey(row);
               const isExpanded = Boolean(expandedAccounts[rowKey]);
               const automationDisplay = getAutomationDisplay(row, dataSource);
+              const publishMethod = getPublishMethod(row, dataSource);
               return (
                 <Fragment key={rowKey}>
                   <tr key={rowKey}>
@@ -459,6 +486,7 @@ export function CountryList({
                     <td>
                       <span className="pool-automation-list" title={automationDisplay}>{automationDisplay}</span>
                     </td>
+                    <td><span className={`pool-method-pill ${publishMethod}`}>{publishMethod}</span></td>
                     <td>{countryFlag(row.country)} {row.country.name}</td>
                     <td><span className="pool-pill">{row.status || 'N/A'}</span></td>
                     <td>{formatNumber(row.post_count || 0)}</td>
@@ -483,7 +511,7 @@ export function CountryList({
                   </tr>
                   {isExpanded ? (
                     <tr className="account-posts-row" key={`${rowKey}:posts`}>
-                      <td colSpan={9}>
+                      <td colSpan={10}>
                         <AccountPostPanel
                           row={row}
                           state={postCache[rowKey]}
@@ -495,7 +523,7 @@ export function CountryList({
                 </Fragment>
               );
             }) : (
-              <tr><td colSpan={9} className="pool-empty">No accounts match the current filters.</td></tr>
+              <tr><td colSpan={10} className="pool-empty">No accounts match the current filters.</td></tr>
             )}
           </tbody>
         </table>
