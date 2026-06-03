@@ -20,6 +20,7 @@ type TagFilterRow = { id: string; category: string; tags: string[] };
 type ViewSortDirection = 'none' | 'desc' | 'asc';
 
 const ACCOUNT_POST_PAGE_SIZE = 4;
+const ISSUE_CATEGORY = 'Issue';
 const DATE_PRESETS = [
   { key: 'today', label: 'Today' },
   { key: 'yesterday', label: 'Yesterday' },
@@ -110,6 +111,18 @@ function getPublishMethod(row: AccountPoolRow, dataSource: 'reelfarm' | 'museon_
   return dataSource === 'museon_clone' ? 'api' : 'rpa';
 }
 
+function isIssueTag(tag: string) {
+  return getTagCategory(tag).toLowerCase() === ISSUE_CATEGORY.toLowerCase();
+}
+
+function nonIssueTags(tags: string[] = []) {
+  return tags.filter(tag => !isIssueTag(tag));
+}
+
+function issueTags(tags: string[] = []) {
+  return tags.filter(isIssueTag);
+}
+
 export function CountryList({
   product,
   kpis,
@@ -143,6 +156,7 @@ export function CountryList({
   const [expandedAccounts, setExpandedAccounts] = useState<Record<string, boolean>>({});
   const [postCache, setPostCache] = useState<Record<string, AccountPostState>>({});
   const [editingTagAccountId, setEditingTagAccountId] = useState('');
+  const [editingIssueAccountId, setEditingIssueAccountId] = useState('');
   const [productTagOptions, setProductTagOptions] = useState<string[]>([]);
 
   function addDateFilters(params: URLSearchParams) {
@@ -273,6 +287,7 @@ export function CountryList({
     ])).filter(Boolean).sort((a, b) => a.localeCompare(b));
   }, [productTagOptions, rows]);
   const editingTagRow = editingTagAccountId ? rows.find(row => row.account_id === editingTagAccountId) : null;
+  const editingIssueRow = editingIssueAccountId ? rows.find(row => row.account_id === editingIssueAccountId) : null;
 
   async function addAccountTag(row: AccountPoolRow, tag: string) {
     const accountId = String(row.account_id || '').trim();
@@ -455,12 +470,13 @@ export function CountryList({
               <th>Status</th>
               <th>Posts</th>
               <th>Tags</th>
+              <th>Issues</th>
               <th>Synced</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={10} className="pool-empty">Loading accounts...</td></tr>
+              <tr><td colSpan={11} className="pool-empty">Loading accounts...</td></tr>
             ) : sortedRows.length ? sortedRows.map(row => {
               const avgViews = getAccountAvgViews(row);
               const rowKey = accountRowKey(row);
@@ -497,7 +513,7 @@ export function CountryList({
                     <td>{formatNumber(row.post_count || 0)}</td>
                     <td>
                       <div className="pool-tags">
-                        {(row.tags || []).map(tag => (
+                        {nonIssueTags(row.tags).map(tag => (
                           <button
                             className="pool-tag-chip"
                             style={accountTagStyle(tag)}
@@ -512,11 +528,28 @@ export function CountryList({
                         <button className="pool-tag-add" type="button" onClick={() => setEditingTagAccountId(row.account_id)} title="添加 Tag">+</button>
                       </div>
                     </td>
+                    <td>
+                      <div className="pool-tags issue-tags">
+                        {issueTags(row.tags).map(tag => (
+                          <button
+                            className="pool-tag-chip issue-chip"
+                            style={accountTagStyle(tag)}
+                            type="button"
+                            key={tag}
+                            onClick={() => removeAccountTag(row, tag)}
+                            title="点击删除这个 Issue"
+                          >
+                            {getTagName(tag)} <span>×</span>
+                          </button>
+                        ))}
+                        <button className="pool-tag-add" type="button" onClick={() => setEditingIssueAccountId(row.account_id)} title="添加 Issue">+</button>
+                      </div>
+                    </td>
                     <td>{row.last_synced_at ? formatUtcReadable(row.last_synced_at) : '—'}</td>
                   </tr>
                   {isExpanded ? (
                     <tr className="account-posts-row" key={`${rowKey}:posts`}>
-                      <td colSpan={10}>
+                      <td colSpan={11}>
                         <AccountPostPanel
                           row={row}
                           state={postCache[rowKey]}
@@ -528,7 +561,7 @@ export function CountryList({
                 </Fragment>
               );
             }) : (
-              <tr><td colSpan={10} className="pool-empty">No accounts match the current filters.</td></tr>
+              <tr><td colSpan={11} className="pool-empty">No accounts match the current filters.</td></tr>
             )}
           </tbody>
         </table>
@@ -538,6 +571,20 @@ export function CountryList({
           row={editingTagRow}
           availableTags={tagOptions}
           onClose={() => setEditingTagAccountId('')}
+          onAddTag={addAccountTag}
+          onRemoveTag={removeAccountTag}
+        />
+      ) : null}
+      {editingIssueRow ? (
+        <AccountTagEditorModal
+          row={editingIssueRow}
+          availableTags={tagOptions}
+          fixedCategory={ISSUE_CATEGORY}
+          title="Edit Issues"
+          emptyLabel="No issues yet"
+          sectionTitle="Add Issue"
+          saveLabel="Save Issues"
+          onClose={() => setEditingIssueAccountId('')}
           onAddTag={addAccountTag}
           onRemoveTag={removeAccountTag}
         />
@@ -685,24 +732,36 @@ function CategoryTagFilter({
 function AccountTagEditorModal({
   row,
   availableTags,
+  fixedCategory,
+  title = 'Edit Creator Tags',
+  emptyLabel = 'No tags yet',
+  sectionTitle = 'Add Tag',
+  saveLabel = 'Save Tags',
   onClose,
   onAddTag,
   onRemoveTag
 }: {
   row: AccountPoolRow;
   availableTags: string[];
+  fixedCategory?: string;
+  title?: string;
+  emptyLabel?: string;
+  sectionTitle?: string;
+  saveLabel?: string;
   onClose: () => void;
   onAddTag: (row: AccountPoolRow, tag: string) => void;
   onRemoveTag: (row: AccountPoolRow, tag: string) => void;
 }) {
   const [mounted, setMounted] = useState(false);
-  const [categoryInput, setCategoryInput] = useState('');
+  const [categoryInput, setCategoryInput] = useState(fixedCategory || '');
   const [tagInput, setTagInput] = useState('');
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
   const [tagMenuOpen, setTagMenuOpen] = useState(false);
   const categoryMenuRef = useRef<HTMLDivElement>(null);
   const tagMenuRef = useRef<HTMLDivElement>(null);
-  const tags = row.tags || [];
+  const tags = fixedCategory
+    ? (row.tags || []).filter(tag => getTagCategory(tag).toLowerCase() === fixedCategory.toLowerCase())
+    : nonIssueTags(row.tags);
   const categories = Array.from(new Set(availableTags.map(getTagCategory).filter(Boolean))).sort((a, b) => a.localeCompare(b));
   const normalizedCategory = categoryInput.trim().toLowerCase();
   const tagOptions = availableTags.filter(tag => !normalizedCategory || getTagCategory(tag).toLowerCase() === normalizedCategory);
@@ -742,58 +801,60 @@ function AccountTagEditorModal({
     <div className="tag-editor-backdrop" onClick={onClose}>
       <div className="tag-editor-modal" onClick={event => event.stopPropagation()}>
         <button className="tag-editor-close" type="button" onClick={onClose}>×</button>
-        <h3>Edit Creator Tags</h3>
+        <h3>{title}</h3>
         <div className="tag-editor-current">
           {tags.length ? tags.map(tag => (
             <button className="creator-tag-chip" style={accountTagStyle(tag)} type="button" key={tag} onClick={() => onRemoveTag(row, tag)}>
-              {formatTagLabel(tag)} ×
+              {fixedCategory ? getTagName(tag) : formatTagLabel(tag)} ×
             </button>
-          )) : <span className="creator-tag-empty">No tags yet</span>}
+          )) : <span className="creator-tag-empty">{emptyLabel}</span>}
         </div>
-        <div className="tag-editor-section-title">Add Tag</div>
+        <div className="tag-editor-section-title">{sectionTitle}</div>
         <div className="tag-editor-row">
-          <div className="tag-editor-combobox" ref={categoryMenuRef}>
-            <div className="tag-editor-field">
-              <span>⌕</span>
-              <input
-                value={categoryInput}
-                onFocus={() => setCategoryMenuOpen(true)}
-                onChange={event => {
-                  setCategoryInput(event.target.value);
-                  setTagInput('');
-                  setCategoryMenuOpen(true);
-                }}
-                placeholder="Select or type category"
-                autoComplete="off"
-              />
-              <button
-                className="tag-editor-menu-toggle"
-                type="button"
-                aria-label="选择 Category"
-                onClick={() => setCategoryMenuOpen(previous => !previous)}
-              >
-                ⌄
-              </button>
-            </div>
-            {categoryMenuOpen ? (
-              <div className="tag-editor-list">
-                {categorySuggestions.length ? categorySuggestions.map(category => (
-                  <button
-                    type="button"
-                    key={category}
-                    onClick={() => {
-                      setCategoryInput(category);
-                      setTagInput('');
-                      setCategoryMenuOpen(false);
-                      setTagMenuOpen(true);
-                    }}
-                  >
-                    {category}
-                  </button>
-                )) : <span className="tag-editor-list-empty">No existing category. Type to create new.</span>}
+          {!fixedCategory ? (
+            <div className="tag-editor-combobox" ref={categoryMenuRef}>
+              <div className="tag-editor-field">
+                <span>⌕</span>
+                <input
+                  value={categoryInput}
+                  onFocus={() => setCategoryMenuOpen(true)}
+                  onChange={event => {
+                    setCategoryInput(event.target.value);
+                    setTagInput('');
+                    setCategoryMenuOpen(true);
+                  }}
+                  placeholder="Select or type category"
+                  autoComplete="off"
+                />
+                <button
+                  className="tag-editor-menu-toggle"
+                  type="button"
+                  aria-label="选择 Category"
+                  onClick={() => setCategoryMenuOpen(previous => !previous)}
+                >
+                  ⌄
+                </button>
               </div>
-            ) : null}
-          </div>
+              {categoryMenuOpen ? (
+                <div className="tag-editor-list">
+                  {categorySuggestions.length ? categorySuggestions.map(category => (
+                    <button
+                      type="button"
+                      key={category}
+                      onClick={() => {
+                        setCategoryInput(category);
+                        setTagInput('');
+                        setCategoryMenuOpen(false);
+                        setTagMenuOpen(true);
+                      }}
+                    >
+                      {category}
+                    </button>
+                  )) : <span className="tag-editor-list-empty">No existing category. Type to create new.</span>}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <div className="tag-editor-combobox" ref={tagMenuRef}>
             <div className="tag-editor-field">
               <span>⌕</span>
@@ -854,7 +915,7 @@ function AccountTagEditorModal({
         </div>
         <div className="tag-editor-actions">
           <button className="tag-editor-cancel" type="button" onClick={onClose}>Cancel</button>
-          <button className="tag-editor-save" type="button" onClick={onClose}>Save Tags</button>
+          <button className="tag-editor-save" type="button" onClick={onClose}>{saveLabel}</button>
         </div>
       </div>
     </div>,

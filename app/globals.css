@@ -1561,7 +1561,7 @@
 
         .account-pool-table {
             width: 100%;
-            min-width: 1280px;
+            min-width: 1440px;
             border-collapse: collapse;
             table-layout: fixed;
         }
@@ -1655,11 +1655,16 @@
 
         .account-pool-table th:nth-child(9),
         .account-pool-table td:nth-child(9) {
-            width: 180px;
+            width: 170px;
         }
 
         .account-pool-table th:nth-child(10),
         .account-pool-table td:nth-child(10) {
+            width: 170px;
+        }
+
+        .account-pool-table th:nth-child(11),
+        .account-pool-table td:nth-child(11) {
             width: 145px;
         }
 
