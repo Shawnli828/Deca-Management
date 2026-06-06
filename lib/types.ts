@@ -69,6 +69,7 @@ export type ProductRollupCountry = {
   last_synced_at?: string;
   campaign_id?: string;
   campaign_name?: string;
+  issues?: string[];
 };
 
 export type ProductRollup = {

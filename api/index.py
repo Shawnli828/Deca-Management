@@ -11,7 +11,9 @@ from server import (
     REELFARM_BASE_URL,
     SESSION_COOKIE,
     SESSION_TTL_SECONDS,
+    account_issues_payload,
     account_tags_payload,
+    add_account_issue,
     add_account_tag,
     ai_materials_payload,
     cookie_header,
@@ -21,6 +23,7 @@ from server import (
     database_snapshot,
     data_query_payload,
     default_data,
+    delete_account_issue,
     delete_account_tag,
     connect_db,
     external_api_key_authorized,
@@ -294,6 +297,31 @@ def post_account_tags_delete(request: Request, payload: dict[str, Any] = Body(de
     require_dashboard_auth(request)
     try:
         return delete_account_tag(payload.get("account_id"), payload.get("tag"))
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/account-issues")
+def get_account_issues(request: Request, account_ids: str = ""):
+    require_dashboard_auth(request)
+    ids = [item.strip() for item in account_ids.split(",") if item.strip()]
+    return account_issues_payload(ids)
+
+
+@app.post("/api/account-issues")
+def post_account_issues(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
+    require_dashboard_auth(request)
+    try:
+        return add_account_issue(payload.get("account_id"), payload.get("issue"))
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/account-issues/delete")
+def post_account_issues_delete(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
+    require_dashboard_auth(request)
+    try:
+        return delete_account_issue(payload.get("account_id"), payload.get("issue"))
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 

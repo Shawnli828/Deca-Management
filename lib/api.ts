@@ -126,6 +126,20 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ account_id: accountId, tag })
     }),
+  accountIssues: (accountIds: string[]) =>
+    apiFetch<{ ok: boolean; issues: Record<string, string[]> }>(`/api/account-issues?account_ids=${encodeURIComponent(accountIds.join(','))}`),
+  addAccountIssue: (accountId: string, issue: string) =>
+    apiFetch<{ ok: boolean; account_id: string; issue: string }>('/api/account-issues', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account_id: accountId, issue })
+    }),
+  deleteAccountIssue: (accountId: string, issue: string) =>
+    apiFetch<{ ok: boolean; account_id: string; issue: string }>('/api/account-issues/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account_id: accountId, issue })
+    }),
   productTags: (productCode: string) =>
     apiFetch<{ ok: boolean; product_code: string; tags: string[] }>(`/api/product-tags?product_code=${encodeURIComponent(productCode)}`),
   createProductTag: (productCode: string, tag: string) =>

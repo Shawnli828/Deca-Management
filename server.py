@@ -35,6 +35,10 @@ REELFARM_API_KEY = "reel_farm_api_key"
 ROASTER_STATE_KEY = "roaster_state"
 PUBLISH_CHECK_STATE_KEY = "publish_check_state"
 EXTERNAL_API_KEYS_KEY = "external_api_keys"
+ZERO_PLAY_ISSUE = "0播警告"
+ZERO_PLAY_VIEW_THRESHOLD = 100
+ZERO_PLAY_POST_LIMIT = 2
+BUSINESS_TIMEZONE = timezone(timedelta(hours=8))
 REELFARM_BASE_URL = "https://reel.farm/api/v1"
 MUSEON_BASE_URL = os.environ.get("MUSEON_BASE_URL", "https://api.museon.ai/external/api/v1").strip().rstrip("/")
 MUSEON_API_KEY = os.environ.get("MUSEON_API_KEY", "").strip()
@@ -440,6 +444,17 @@ def init_relational_schema(conn):
         )
         """,
         """
+        CREATE TABLE IF NOT EXISTS account_issues (
+            id TEXT PRIMARY KEY,
+            account_id TEXT NOT NULL,
+            issue TEXT NOT NULL,
+            source TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(account_id, issue)
+        )
+        """,
+        """
         CREATE TABLE IF NOT EXISTS product_tags (
             id TEXT PRIMARY KEY,
             product_code TEXT NOT NULL,
@@ -452,6 +467,8 @@ def init_relational_schema(conn):
         "CREATE INDEX IF NOT EXISTS idx_post_daily_snapshots_post_id ON post_daily_snapshots(post_id)",
         "CREATE INDEX IF NOT EXISTS idx_account_tags_account_id ON account_tags(account_id)",
         "CREATE INDEX IF NOT EXISTS idx_account_tags_tag ON account_tags(tag)",
+        "CREATE INDEX IF NOT EXISTS idx_account_issues_account_id ON account_issues(account_id)",
+        "CREATE INDEX IF NOT EXISTS idx_account_issues_issue ON account_issues(issue)",
         "CREATE INDEX IF NOT EXISTS idx_product_tags_product_code ON product_tags(product_code)",
         "CREATE INDEX IF NOT EXISTS idx_posts_published_at ON posts(published_at)",
         "CREATE INDEX IF NOT EXISTS idx_posts_material_id ON posts(material_id)",
@@ -783,6 +800,7 @@ def project_products_to_relational(data=None, product_code_filter="", market_cod
 
     with connect_db() as conn:
         init_relational_schema(conn)
+        zero_play_candidates = {}
         upsert_row(
             conn,
             "channels",
@@ -893,6 +911,7 @@ def project_products_to_relational(data=None, product_code_filter="", market_cod
                     )
                     account_id = stable_id("account", product_market_channel_id, reelfarm_account_id)
                     automation_id = stable_id("automation", automation_reelfarm_id)
+                    zero_play_candidates.setdefault(account_id, [])
 
                     upsert_row(
                         conn,
@@ -994,6 +1013,13 @@ def project_products_to_relational(data=None, product_code_filter="", market_cod
                         reelfarm_post_id = str(post.get("post_id") or stable_id("post_source", material_id))
                         post_id = stable_id("post", reelfarm_post_id)
                         snapshot_date = utc_snapshot_date()
+                        collect_zero_play_issue_candidate(
+                            zero_play_candidates,
+                            account_id,
+                            post.get("published_at"),
+                            post.get("view_count"),
+                            business_date_string(synced_at),
+                        )
                         upsert_row(
                             conn,
                             "posts",
@@ -1032,6 +1058,7 @@ def project_products_to_relational(data=None, product_code_filter="", market_cod
                             ["post_id", "snapshot_date"],
                         )
 
+        apply_zero_play_issues(conn, zero_play_candidates, now)
         counts = relational_table_counts(conn)
         conn.commit()
 
@@ -1623,6 +1650,71 @@ def parse_iso_datetime(value):
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed
+
+
+def utc_date_string(value=None):
+    if isinstance(value, datetime):
+        return value.astimezone(timezone.utc).date().isoformat()
+    parsed = parse_iso_datetime(value)
+    if parsed:
+        return parsed.astimezone(timezone.utc).date().isoformat()
+    return datetime.now(timezone.utc).date().isoformat()
+
+
+def business_date_string(value=None):
+    if isinstance(value, datetime):
+        return value.astimezone(BUSINESS_TIMEZONE).date().isoformat()
+    parsed = parse_iso_datetime(value)
+    if parsed:
+        return parsed.astimezone(BUSINESS_TIMEZONE).date().isoformat()
+    return datetime.now(BUSINESS_TIMEZONE).date().isoformat()
+
+
+def collect_zero_play_issue_candidate(candidates, account_id, published_at, view_count, sync_date):
+    account_id = str(account_id or "").strip()
+    published = parse_iso_datetime(published_at)
+    if not account_id or not published:
+        return
+    if published.astimezone(BUSINESS_TIMEZONE).date().isoformat() != sync_date:
+        return
+    candidates.setdefault(account_id, []).append({
+        "published_at": published,
+        "view_count": int_or_none(view_count),
+    })
+
+
+def apply_zero_play_issues(conn, candidates, synced_at):
+    placeholder = db_placeholder()
+    now = synced_at or datetime.now(timezone.utc).isoformat()
+    for account_id, posts in (candidates or {}).items():
+        latest_posts = sorted(
+            posts,
+            key=lambda item: item.get("published_at") or datetime.min.replace(tzinfo=timezone.utc),
+            reverse=True,
+        )[:ZERO_PLAY_POST_LIMIT]
+        should_warn = any(
+            item.get("view_count") is not None and item.get("view_count") < ZERO_PLAY_VIEW_THRESHOLD
+            for item in latest_posts
+        )
+        if should_warn:
+            upsert_row(
+                conn,
+                "account_issues",
+                {
+                    "id": stable_id("account_issue", account_id, ZERO_PLAY_ISSUE.lower()),
+                    "account_id": account_id,
+                    "issue": ZERO_PLAY_ISSUE,
+                    "source": "auto",
+                    "created_at": now,
+                    "updated_at": now,
+                },
+                ["account_id", "issue"],
+            )
+        else:
+            conn.execute(
+                f"DELETE FROM account_issues WHERE account_id = {placeholder} AND issue = {placeholder} AND COALESCE(source, '') = {placeholder}",
+                (account_id, ZERO_PLAY_ISSUE, "auto"),
+            )
 
 
 def compact_post(post):
@@ -2248,7 +2340,7 @@ def query_countries(query):
             """,
             tuple(params),
         ).fetchall()
-    return [row_dict(row) for row in rows]
+    return attach_account_issues([row_dict(row) for row in rows])
 
 
 def query_product_kpis(query):
@@ -2600,6 +2692,74 @@ def account_tags_payload(account_ids):
         data = row_dict(row)
         tags.setdefault(data.get("account_id"), []).append(data.get("tag"))
     return {"ok": True, "tags": tags}
+
+
+def account_issues_payload(account_ids):
+    ids = [str(item or "").strip() for item in account_ids if str(item or "").strip()]
+    if not ids:
+        return {"ok": True, "issues": {}}
+    placeholder = db_placeholder()
+    placeholders = ",".join([placeholder] * len(ids))
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        rows = conn.execute(
+            f"SELECT account_id, issue FROM account_issues WHERE account_id IN ({placeholders}) ORDER BY issue",
+            tuple(ids),
+        ).fetchall()
+    issues = {}
+    for row in rows:
+        data = row_dict(row)
+        issues.setdefault(data.get("account_id"), []).append(data.get("issue"))
+    return {"ok": True, "issues": issues}
+
+
+def add_account_issue(account_id, issue):
+    account_id = str(account_id or "").strip()
+    issue = clean_tag(issue)
+    if not account_id or not issue:
+        raise ValueError("account_id and issue are required.")
+    now = datetime.now(timezone.utc).isoformat()
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        upsert_row(
+            conn,
+            "account_issues",
+            {
+                "id": stable_id("account_issue", account_id, issue.lower()),
+                "account_id": account_id,
+                "issue": issue,
+                "source": "manual",
+                "created_at": now,
+                "updated_at": now,
+            },
+            ["account_id", "issue"],
+        )
+        conn.commit()
+    return {"ok": True, "account_id": account_id, "issue": issue}
+
+
+def delete_account_issue(account_id, issue):
+    account_id = str(account_id or "").strip()
+    issue = clean_tag(issue)
+    if not account_id or not issue:
+        raise ValueError("account_id and issue are required.")
+    placeholder = db_placeholder()
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        conn.execute(
+            f"DELETE FROM account_issues WHERE account_id = {placeholder} AND issue = {placeholder}",
+            (account_id, issue),
+        )
+        conn.commit()
+    return {"ok": True, "account_id": account_id, "issue": issue}
+
+
+def attach_account_issues(rows):
+    ids = [str(row.get("account_id") or "").strip() for row in rows if str(row.get("account_id") or "").strip()]
+    issue_map = account_issues_payload(ids).get("issues", {}) if ids else {}
+    for row in rows:
+        row["issues"] = issue_map.get(row.get("account_id"), [])
+    return rows
 
 
 def product_tags_payload(product_code):
@@ -3200,6 +3360,7 @@ def sync_museon_clone_country(product_id="", country_id="", product_code="", cou
 
     with connect_db() as conn:
         init_relational_schema(conn)
+        zero_play_candidates = {}
         upsert_row(conn, "channels", {"id": channel_id, "name": "Clone Slide Show", "code": "MUSEON_CLONE"}, ["code"])
         upsert_row(
             conn,
@@ -3253,6 +3414,14 @@ def sync_museon_clone_country(product_id="", country_id="", product_code="", cou
             account_ids.add(account_id)
             material_count += 1
             post_count += 1
+            zero_play_candidates.setdefault(account_id, [])
+            collect_zero_play_issue_candidate(
+                zero_play_candidates,
+                account_id,
+                published_at,
+                metrics["view_count"],
+                business_date_string(synced_at),
+            )
 
             upsert_row(
                 conn,
@@ -3348,6 +3517,7 @@ def sync_museon_clone_country(product_id="", country_id="", product_code="", cou
                 },
                 ["post_id", "snapshot_date"],
             )
+        apply_zero_play_issues(conn, zero_play_candidates, synced_at)
         conn.commit()
 
     return {
@@ -3434,7 +3604,7 @@ def query_museon_clone_accounts(query):
             "campaign_id": campaign_id,
             "campaign_name": campaign.get("name") or campaign.get("title"),
         })
-    return sorted(rows, key=lambda row: (int(row.get("total_views") or 0), int(row.get("post_count") or 0)), reverse=True)
+    return attach_account_issues(sorted(rows, key=lambda row: (int(row.get("total_views") or 0), int(row.get("post_count") or 0)), reverse=True))
 
 
 def reelfarm_detailed_rows_for_username(product_code, country_code, username):
