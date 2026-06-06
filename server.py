@@ -3586,7 +3586,7 @@ def query_museon_clone_accounts(query):
             "username": account.get("username"),
             "display_name": account.get("display_name") or account.get("username"),
             "avatar_url": account.get("avatar_url"),
-            "status": account.get("status") or "active",
+            "status": campaign.get("status") or "active",
             "automation_count": 1,
             "automation_name": campaign.get("name") or campaign.get("title"),
             "automation_names": campaign.get("name") or campaign.get("title"),
@@ -3761,7 +3761,10 @@ def query_reelfarm_accounts(query):
                 acc.username,
                 acc.display_name,
                 acc.avatar_url,
-                acc.status,
+                CASE
+                    WHEN SUM(CASE WHEN LOWER(COALESCE(a.status, '')) = 'active' THEN 1 ELSE 0 END) > 0 THEN 'active'
+                    ELSE COALESCE(MAX(NULLIF(a.status, '')), '')
+                END AS status,
                 COUNT(DISTINCT a.id) AS automation_count,
                 MAX(a.name) AS automation_name,
                 {automation_names_sql} AS automation_names,
@@ -3782,7 +3785,7 @@ def query_reelfarm_accounts(query):
                 MAX(COALESCE(post.synced_at, mat.synced_at, a.synced_at)) AS last_synced_at
             {relational_base_from()}
             WHERE {where_sql} AND acc.id IS NOT NULL
-            GROUP BY acc.id, acc.reelfarm_account_id, acc.username, acc.display_name, acc.avatar_url, acc.status
+            GROUP BY acc.id, acc.reelfarm_account_id, acc.username, acc.display_name, acc.avatar_url
             ORDER BY total_views DESC, post_count DESC
             """,
             tuple(metric_params * metric_condition_count + params),
