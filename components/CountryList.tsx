@@ -147,7 +147,6 @@ export function CountryList({
   const [expandedAccounts, setExpandedAccounts] = useState<Record<string, boolean>>({});
   const [postCache, setPostCache] = useState<Record<string, AccountPostState>>({});
   const [editingTagAccountId, setEditingTagAccountId] = useState('');
-  const [editingIssueAccountId, setEditingIssueAccountId] = useState('');
   const [productTagOptions, setProductTagOptions] = useState<string[]>([]);
 
   function addDateFilters(params: URLSearchParams) {
@@ -287,11 +286,7 @@ export function CountryList({
       ...rows.flatMap(row => row.tags || [])
     ])).filter(Boolean).sort((a, b) => a.localeCompare(b));
   }, [productTagOptions, rows]);
-  const issueOptions = useMemo(() => {
-    return Array.from(new Set(rows.flatMap(row => row.issues || []))).filter(Boolean).sort((a, b) => a.localeCompare(b));
-  }, [rows]);
   const editingTagRow = editingTagAccountId ? rows.find(row => row.account_id === editingTagAccountId) : null;
-  const editingIssueRow = editingIssueAccountId ? rows.find(row => row.account_id === editingIssueAccountId) : null;
 
   async function addAccountTag(row: AccountPoolRow, tag: string) {
     const accountId = String(row.account_id || '').trim();
@@ -312,27 +307,6 @@ export function CountryList({
     await api.deleteAccountTag(accountId, tag);
     setRows(previous => previous.map(item => item.account_id === accountId
       ? { ...item, tags: (item.tags || []).filter(value => value !== tag) }
-      : item
-    ));
-  }
-
-  async function addAccountIssue(row: AccountPoolRow, issue: string) {
-    const accountId = String(row.account_id || '').trim();
-    const nextIssue = issue.trim();
-    if (!accountId || !nextIssue) return;
-    const payload = await api.addAccountIssue(accountId, nextIssue);
-    setRows(previous => previous.map(item => item.account_id === accountId
-      ? { ...item, issues: Array.from(new Set([...(item.issues || []), payload.issue])) }
-      : item
-    ));
-  }
-
-  async function removeAccountIssue(row: AccountPoolRow, issue: string) {
-    const accountId = String(row.account_id || '').trim();
-    if (!accountId || !issue) return;
-    await api.deleteAccountIssue(accountId, issue);
-    setRows(previous => previous.map(item => item.account_id === accountId
-      ? { ...item, issues: (item.issues || []).filter(value => value !== issue) }
       : item
     ));
   }
@@ -554,20 +528,10 @@ export function CountryList({
                       </div>
                     </td>
                     <td>
-                      <div className="pool-tags issue-tags">
-                        {(row.issues || []).map(issue => (
-                          <button
-                            className="pool-tag-chip issue-chip"
-                            style={accountTagStyle(`Issue: ${issue}`)}
-                            type="button"
-                            key={issue}
-                            onClick={() => removeAccountIssue(row, issue)}
-                            title="点击删除这个 Issue"
-                          >
-                            {issue} <span>×</span>
-                          </button>
-                        ))}
-                        <button className="pool-tag-add" type="button" onClick={() => setEditingIssueAccountId(row.account_id)} title="添加 Issue">+</button>
+                      <div className="pool-issues">
+                        {(row.issues || []).length ? (row.issues || []).map(issue => (
+                          <span className="pool-issue-badge" key={issue}>{issue}</span>
+                        )) : <span className="pool-issue-empty">—</span>}
                       </div>
                     </td>
                     <td>{row.last_synced_at ? formatUtcReadable(row.last_synced_at) : '—'}</td>
@@ -598,15 +562,6 @@ export function CountryList({
           onClose={() => setEditingTagAccountId('')}
           onAddTag={addAccountTag}
           onRemoveTag={removeAccountTag}
-        />
-      ) : null}
-      {editingIssueRow ? (
-        <AccountIssueEditorModal
-          row={editingIssueRow}
-          availableIssues={issueOptions}
-          onClose={() => setEditingIssueAccountId('')}
-          onAddIssue={addAccountIssue}
-          onRemoveIssue={removeAccountIssue}
         />
       ) : null}
     </section>
@@ -746,119 +701,6 @@ function CategoryTagFilter({
         </div>
       ) : null}
     </div>
-  );
-}
-
-function AccountIssueEditorModal({
-  row,
-  availableIssues,
-  onClose,
-  onAddIssue,
-  onRemoveIssue
-}: {
-  row: AccountPoolRow;
-  availableIssues: string[];
-  onClose: () => void;
-  onAddIssue: (row: AccountPoolRow, issue: string) => void;
-  onRemoveIssue: (row: AccountPoolRow, issue: string) => void;
-}) {
-  const [mounted, setMounted] = useState(false);
-  const [issueInput, setIssueInput] = useState('');
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const issues = row.issues || [];
-  const normalizedIssue = issueInput.trim().toLowerCase();
-  const issueSuggestions = availableIssues
-    .filter(issue => !normalizedIssue || issue.toLowerCase().includes(normalizedIssue))
-    .sort((a, b) => a.localeCompare(b));
-  const canAddIssue = Boolean(issueInput.trim());
-
-  function commitIssue() {
-    if (!canAddIssue) return;
-    onAddIssue(row, issueInput);
-    setIssueInput('');
-    setMenuOpen(false);
-  }
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    function handlePointerDown(event: PointerEvent) {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (!menuRef.current?.contains(target)) setMenuOpen(false);
-    }
-
-    document.addEventListener('pointerdown', handlePointerDown);
-    return () => document.removeEventListener('pointerdown', handlePointerDown);
-  }, []);
-
-  if (!mounted) return null;
-
-  return createPortal(
-    <div className="tag-editor-backdrop" onClick={onClose}>
-      <div className="tag-editor-modal" onClick={event => event.stopPropagation()}>
-        <button className="tag-editor-close" type="button" onClick={onClose}>×</button>
-        <h3>Edit Issues</h3>
-        <div className="tag-editor-current">
-          {issues.length ? issues.map(issue => (
-            <button className="creator-tag-chip" style={accountTagStyle(`Issue: ${issue}`)} type="button" key={issue} onClick={() => onRemoveIssue(row, issue)}>
-              {issue} ×
-            </button>
-          )) : <span className="creator-tag-empty">No issues yet</span>}
-        </div>
-        <div className="tag-editor-section-title">Add Issue</div>
-        <div className="tag-editor-row">
-          <div className="tag-editor-combobox" ref={menuRef}>
-            <div className="tag-editor-field">
-              <span>⌕</span>
-              <input
-                value={issueInput}
-                onFocus={() => setMenuOpen(true)}
-                onChange={event => {
-                  setIssueInput(event.target.value);
-                  setMenuOpen(true);
-                }}
-                placeholder="Select or type issue"
-                autoComplete="off"
-              />
-              <button
-                className="tag-editor-menu-toggle"
-                type="button"
-                aria-label="选择 Issue"
-                onClick={() => setMenuOpen(previous => !previous)}
-              >
-                ⌄
-              </button>
-            </div>
-            {menuOpen ? (
-              <div className="tag-editor-list">
-                {issueSuggestions.length ? issueSuggestions.map(issue => (
-                  <button
-                    type="button"
-                    key={issue}
-                    onClick={() => {
-                      setIssueInput(issue);
-                      setMenuOpen(false);
-                    }}
-                  >
-                    {issue}
-                  </button>
-                )) : <span className="tag-editor-list-empty">No existing issue. Type to create new.</span>}
-              </div>
-            ) : null}
-          </div>
-          <button className="tag-editor-add" type="button" disabled={!canAddIssue} onClick={commitIssue}>+ Add</button>
-        </div>
-        <div className="tag-editor-actions">
-          <button className="tag-editor-cancel" type="button" onClick={onClose}>Cancel</button>
-          <button className="tag-editor-save" type="button" onClick={onClose}>Save Issues</button>
-        </div>
-      </div>
-    </div>,
-    document.body
   );
 }
 
