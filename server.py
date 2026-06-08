@@ -36,7 +36,7 @@ ROASTER_STATE_KEY = "roaster_state"
 PUBLISH_CHECK_STATE_KEY = "publish_check_state"
 EXTERNAL_API_KEYS_KEY = "external_api_keys"
 ZERO_PLAY_ISSUE = "0播警告"
-ZERO_PLAY_VIEW_THRESHOLD = 100
+ZERO_PLAY_VIEW_THRESHOLD = 0
 ZERO_PLAY_POST_LIMIT = 2
 BUSINESS_TIMEZONE = timezone(timedelta(hours=8))
 REELFARM_BASE_URL = "https://reel.farm/api/v1"
@@ -1675,7 +1675,7 @@ def collect_zero_play_issue_candidate(candidates, account_id, published_at, view
     published = parse_iso_datetime(published_at)
     if not account_id or not published:
         return
-    if published.astimezone(BUSINESS_TIMEZONE).date().isoformat() != sync_date:
+    if published.astimezone(BUSINESS_TIMEZONE).date().isoformat() > sync_date:
         return
     candidates.setdefault(account_id, []).append({
         "published_at": published,
@@ -1692,8 +1692,8 @@ def apply_zero_play_issues(conn, candidates, synced_at):
             key=lambda item: item.get("published_at") or datetime.min.replace(tzinfo=timezone.utc),
             reverse=True,
         )[:ZERO_PLAY_POST_LIMIT]
-        should_warn = any(
-            item.get("view_count") is not None and item.get("view_count") < ZERO_PLAY_VIEW_THRESHOLD
+        should_warn = len(latest_posts) == ZERO_PLAY_POST_LIMIT and all(
+            item.get("view_count") == ZERO_PLAY_VIEW_THRESHOLD
             for item in latest_posts
         )
         if should_warn:
