@@ -8,9 +8,7 @@ import type {
   Product,
   ProductKpis,
   ProductRollup,
-  ReelFarmResult,
-  RoasterState,
-  TagDashboard
+  ReelFarmResult
 } from './types';
 
 export async function parseApiResponse<T>(response: Response, fallback = 'Request failed'): Promise<T> {
@@ -91,13 +89,6 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     }, 'Failed to sync Museon clone country'),
-  roaster: () => apiFetch<RoasterState>('/api/roaster', undefined, 'Failed to load roaster'),
-  saveRoaster: (state: RoasterState) =>
-    apiFetch<{ ok: boolean; state: RoasterState }>('/api/roaster', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ state })
-    }, 'Failed to save roaster'),
   publishCheck: () => apiFetch<{ ok: boolean; state: PublishCheckState }>('/api/publish-check', undefined, 'Failed to load publish check'),
   savePublishCheck: (state: PublishCheckState) =>
     apiFetch<{ ok: boolean; state: PublishCheckState }>('/api/publish-check', {
@@ -148,8 +139,6 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ product_code: productCode, tag })
     }),
-  tagDashboard: (productCode: string) =>
-    apiFetch<TagDashboard>(`/api/tags/dashboard?product_code=${encodeURIComponent(productCode)}`),
   database: () => apiFetch<DatabaseSnapshot>('/api/database', undefined, 'Failed to load database'),
   apiKeys: () => apiFetch<{ ok: boolean; keys: ExternalApiKey[] }>('/api/api-keys'),
   createApiKey: (name: string) =>

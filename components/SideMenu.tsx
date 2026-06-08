@@ -7,7 +7,7 @@ export function SideMenu({
   onToggle
 }: {
   tool: string;
-  setTool: (tool: 'dashboard' | 'slideshow' | 'cloneSlideshow' | 'roaster' | 'publishCheck' | 'tags' | 'apiKeys') => void;
+  setTool: (tool: 'dashboard' | 'slideshow' | 'cloneSlideshow' | 'publishCheck' | 'apiKeys') => void;
   collapsed: boolean;
   onToggle: () => void;
 }) {
@@ -15,9 +15,7 @@ export function SideMenu({
     { id: 'dashboard' as const, title: 'Dashboard', meta: 'Overview', icon: 'D' },
     { id: 'slideshow' as const, title: 'Slide Show', meta: 'Reel Farm', icon: 'S' },
     { id: 'cloneSlideshow' as const, title: 'Clone Slide Show', meta: 'Museon', icon: 'C' },
-    { id: 'roaster' as const, title: 'Roaster', meta: 'Team Board', icon: 'R' },
     { id: 'publishCheck' as const, title: '发布检查', meta: 'Daily Check', icon: 'P' },
-    { id: 'tags' as const, title: 'Tags', meta: 'Account Groups', icon: 'T' },
     { id: 'apiKeys' as const, title: 'API Key', meta: 'Access Tokens', icon: 'K' }
   ];
 

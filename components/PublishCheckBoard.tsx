@@ -1,6 +1,6 @@
 'use client';
 
-import type { Product, PublishCheckAccount, PublishCheckAssignment, PublishCheckState, RoasterState } from '@/lib/types';
+import type { Product, PublishCheckAccount, PublishCheckAssignment, PublishCheckState } from '@/lib/types';
 import { countryFlag } from '@/lib/utils';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 
@@ -17,7 +17,6 @@ function formatTime(value?: string) {
 
 export function PublishCheckBoard({
   products,
-  roaster,
   state,
   running,
   sendingReminder,
@@ -26,7 +25,6 @@ export function PublishCheckBoard({
   onSendReminder
 }: {
   products: Product[];
-  roaster: RoasterState;
   state: PublishCheckState;
   running: boolean;
   sendingReminder: boolean;
@@ -34,7 +32,18 @@ export function PublishCheckBoard({
   onRun: () => Promise<void>;
   onSendReminder: () => Promise<void>;
 }) {
-  const [personId, setPersonId] = useState(roaster.people[0]?.id || '');
+  const people = useMemo(() => {
+    const seen = new Set<string>();
+    return state.assignments
+      .filter(item => {
+        const key = item.person_id || item.person_name;
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map(item => ({ id: item.person_id || item.person_name, name: item.person_name || item.person_id }));
+  }, [state.assignments]);
+  const [personName, setPersonName] = useState(people[0]?.name || '');
   const [productId, setProductId] = useState(products[0]?.id || '');
   const selectedProduct = products.find(product => product.id === productId) || products[0];
   const [countryId, setCountryId] = useState(selectedProduct?.countries?.[0]?.id || '');
@@ -42,7 +51,7 @@ export function PublishCheckBoard({
   const [expandedResultCards, setExpandedResultCards] = useState<Record<string, boolean>>({});
   const result = state.last_result;
 
-  const peopleById = useMemo(() => new Map(roaster.people.map(person => [person.id, person])), [roaster.people]);
+  const peopleById = useMemo(() => new Map(people.map(person => [person.id, person])), [people]);
   const sortedAssignments = useMemo(() => {
     return [...state.assignments].sort((left, right) => {
       const leftProduct = products.find(product => product.id === left.product_id);
@@ -61,27 +70,28 @@ export function PublishCheckBoard({
   }, [assignmentSort, products, state.assignments]);
 
   useEffect(() => {
-    if (!personId && roaster.people[0]?.id) setPersonId(roaster.people[0].id);
+    if (!personName && people[0]?.name) setPersonName(people[0].name);
     if (!productId && products[0]?.id) {
       setProductId(products[0].id);
       setCountryId(products[0].countries?.[0]?.id || '');
     }
-  }, [personId, productId, products, roaster.people]);
+  }, [personName, productId, products, people]);
 
   function addAssignment(event: FormEvent) {
     event.preventDefault();
     const product = products.find(item => item.id === productId);
     const country = product?.countries?.find(item => item.id === countryId);
-    const person = peopleById.get(personId);
-    if (!product || !country || !person) return;
+    const cleanName = personName.trim();
+    if (!product || !country || !cleanName) return;
+    const personId = cleanName.toLowerCase().replace(/\s+/g, '-');
 
-    const exists = state.assignments.some(item => item.person_id === person.id && item.product_id === product.id && item.country_id === country.id);
+    const exists = state.assignments.some(item => item.person_id === personId && item.product_id === product.id && item.country_id === country.id);
     if (exists) return;
 
     const assignment: PublishCheckAssignment = {
       id: crypto.randomUUID(),
-      person_id: person.id,
-      person_name: person.name,
+      person_id: personId,
+      person_name: cleanName,
       product_id: product.id,
       country_id: country.id
     };
@@ -123,9 +133,16 @@ export function PublishCheckBoard({
           </div>
         </div>
         <form className="assignment-form" onSubmit={addAssignment}>
-          <select className="text-input" value={personId} onChange={event => setPersonId(event.target.value)}>
-            {roaster.people.map(person => <option value={person.id} key={person.id}>{person.name}</option>)}
-          </select>
+          <input
+            className="text-input"
+            value={personName}
+            list="publish-check-people"
+            onChange={event => setPersonName(event.target.value)}
+            placeholder="负责人"
+          />
+          <datalist id="publish-check-people">
+            {people.map(person => <option value={person.name} key={person.id} />)}
+          </datalist>
           <select className="text-input" value={productId} onChange={event => changeProduct(event.target.value)}>
             {products.map(product => <option value={product.id} key={product.id}>{product.name}</option>)}
           </select>

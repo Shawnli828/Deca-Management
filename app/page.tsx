@@ -11,30 +11,15 @@ import { DatabaseModal } from '@/components/DatabaseModal';
 import { ProductList } from '@/components/ProductList';
 import { ProductSettingsModal } from '@/components/ProductSettingsModal';
 import { PublishCheckBoard } from '@/components/PublishCheckBoard';
-import { RoasterBoard } from '@/components/RoasterBoard';
 import { SideMenu } from '@/components/SideMenu';
-import { TagBoard } from '@/components/TagBoard';
 import { accountSummaryToCard, api, mergePostRowsIntoCard } from '@/lib/api';
-import type { Country, DatabaseSnapshot, ExternalApiKey, Product, ProductKpis, ProductRollup, PublishCheckState, ReelFarmCard, ReelFarmResult, RoasterState, TagDashboard } from '@/lib/types';
+import type { Country, DatabaseSnapshot, ExternalApiKey, Product, ProductKpis, ProductRollup, PublishCheckState, ReelFarmCard, ReelFarmResult } from '@/lib/types';
 import { buildCountryAutomationPrefix, cardStateKey, codeFromName, getCountryReelFarmCode, getProductReelFarmCode } from '@/lib/utils';
-
-const defaultRoaster: RoasterState = {
-  people: [
-    { id: 'han', name: 'han' },
-    { id: 'li-zihan', name: '李梓瞻' },
-    { id: 'ding-lifeng', name: '丁立峰' },
-    { id: 'wang-hengjia', name: '王恒加' },
-    { id: 'jj', name: 'JJ' },
-    { id: 'doris', name: 'Doris' },
-    { id: 'mina', name: 'Mina' }
-  ],
-  assignments: {}
-};
 
 export default function DashboardPage() {
   const [authenticated, setAuthenticated] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
-  const [tool, setTool] = useState<'dashboard' | 'slideshow' | 'cloneSlideshow' | 'roaster' | 'publishCheck' | 'tags' | 'apiKeys'>('dashboard');
+  const [tool, setTool] = useState<'dashboard' | 'slideshow' | 'cloneSlideshow' | 'publishCheck' | 'apiKeys'>('dashboard');
   const [sideCollapsed, setSideCollapsed] = useState(false);
   const [page, setPage] = useState<'products' | 'product' | 'country'>('products');
   const [selectedProductId, setSelectedProductId] = useState('');
@@ -51,7 +36,6 @@ export default function DashboardPage() {
   const [syncProductId, setSyncProductId] = useState('');
   const [syncAllRunning, setSyncAllRunning] = useState(false);
   const [syncAllProgress, setSyncAllProgress] = useState('');
-  const [roaster, setRoaster] = useState<RoasterState>(defaultRoaster);
   const [publishCheck, setPublishCheck] = useState<PublishCheckState>({ assignments: [], last_result: null });
   const [publishCheckRunning, setPublishCheckRunning] = useState(false);
   const [publishReminderSending, setPublishReminderSending] = useState(false);
@@ -65,9 +49,6 @@ export default function DashboardPage() {
   const [cloneProducts, setCloneProducts] = useState<Product[]>([]);
   const [cloneProductKpis, setCloneProductKpis] = useState<Record<string, ProductKpis | null>>({});
   const [countryKpis, setCountryKpis] = useState<Record<string, ProductKpis | null>>({});
-  const [tagProductId, setTagProductId] = useState('');
-  const [tagDashboard, setTagDashboard] = useState<TagDashboard | null>(null);
-  const [tagDashboardLoading, setTagDashboardLoading] = useState(false);
   const [productTags, setProductTags] = useState<Record<string, string[]>>({});
 
   const selectedProduct = useMemo(() => products.find(product => product.id === selectedProductId) || products[0] || null, [products, selectedProductId]);
@@ -107,15 +88,9 @@ export default function DashboardPage() {
     setProducts(data);
     setSelectedProductId(data[0]?.id || '');
     setSelectedCountryId(data[0]?.countries?.[0]?.id || '');
-    setTagProductId(data[0]?.id || '');
     void Promise.all(data.map(product => loadProductKpis(product)));
     setStatus('已连接数据库');
     setStatusError(false);
-    try {
-      setRoaster(await api.roaster());
-    } catch {
-      setRoaster(defaultRoaster);
-    }
     try {
       const publishPayload = await api.publishCheck();
       setPublishCheck(publishPayload.state || { assignments: [], last_result: null });
@@ -266,34 +241,6 @@ export default function DashboardPage() {
     return String(account.id || account.account_id || '').trim();
   }
 
-  async function loadTagDashboard(productId = tagProductId) {
-    const product = products.find(item => item.id === productId);
-    if (!product) return;
-    setTagDashboardLoading(true);
-    try {
-      const payload = await api.tagDashboard(getProductReelFarmCode(product));
-      setTagDashboard(payload);
-    } catch (error: any) {
-      setStatus(error?.message || 'Tag 看板读取失败');
-      setStatusError(true);
-      setTagDashboard(null);
-    } finally {
-      setTagDashboardLoading(false);
-    }
-  }
-
-  function changeTagProduct(productId: string) {
-    setTagProductId(productId);
-    setTagDashboard(null);
-    if (productId) loadTagDashboard(productId);
-  }
-
-  useEffect(() => {
-    if (authenticated && tool === 'tags' && tagProductId) {
-      loadTagDashboard(tagProductId);
-    }
-  }, [authenticated, tool]);
-
   useEffect(() => {
     if (authenticated && tool === 'apiKeys') {
       api.apiKeys()
@@ -323,7 +270,6 @@ export default function DashboardPage() {
     }
     const payload = await api.addAccountTag(accountId, tag.trim());
     updateCardTags(accountId, previous => Array.from(new Set([...previous, payload.tag])));
-    if (tool === 'tags') await loadTagDashboard();
   }
 
   async function removeCardTag(card: ReelFarmCard, tag: string) {
@@ -331,7 +277,6 @@ export default function DashboardPage() {
     if (!accountId) return;
     await api.deleteAccountTag(accountId, tag);
     updateCardTags(accountId, previous => previous.filter(item => item !== tag));
-    if (tool === 'tags') await loadTagDashboard();
   }
 
   function updateCardTags(accountId: string, updater: (tags: string[]) => string[]) {
@@ -721,19 +666,6 @@ export default function DashboardPage() {
     }
   }
 
-  async function saveRoaster(next: RoasterState) {
-    setRoaster(next);
-    try {
-      const payload = await api.saveRoaster(next);
-      setRoaster(payload.state);
-      setStatus('Roaster 已保存');
-      setStatusError(false);
-    } catch {
-      setStatus('Roaster 保存失败');
-      setStatusError(true);
-    }
-  }
-
   async function savePublishCheck(next: PublishCheckState) {
     setPublishCheck(next);
     try {
@@ -905,16 +837,6 @@ export default function DashboardPage() {
               onCopy={copy}
             />
           </section>
-          <section className={`tool-page ${tool === 'roaster' ? 'active' : ''}`}>
-            <header className="topbar">
-              <div>
-                <h1>Roaster</h1>
-                <p className="subtitle">按 App 管理负责人和执行人，把人员拖进对应职责格子即可。</p>
-              </div>
-              <div className="top-actions"><span className="status-pill">团队排班</span></div>
-            </header>
-            <RoasterBoard products={products} state={roaster} onChange={saveRoaster} />
-          </section>
           <section className={`tool-page ${tool === 'publishCheck' ? 'active' : ''}`}>
             <header className="topbar">
               <div>
@@ -925,23 +847,12 @@ export default function DashboardPage() {
             </header>
             <PublishCheckBoard
               products={products}
-              roaster={roaster}
               state={publishCheck}
               running={publishCheckRunning}
               sendingReminder={publishReminderSending}
               onSave={savePublishCheck}
               onRun={runPublishCheckNow}
               onSendReminder={sendPublishReminderNow}
-            />
-          </section>
-          <section className={`tool-page ${tool === 'tags' ? 'active' : ''}`}>
-            <TagBoard
-              products={products}
-              selectedProductId={tagProductId}
-              dashboard={tagDashboard}
-              loading={tagDashboardLoading}
-              onProductChange={changeTagProduct}
-              onRefresh={() => loadTagDashboard(tagProductId)}
             />
           </section>
         </main>

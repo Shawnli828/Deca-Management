@@ -32,7 +32,6 @@ DATABASE_URL = (
 ).strip()
 STATE_KEY = "product_distribution"
 REELFARM_API_KEY = "reel_farm_api_key"
-ROASTER_STATE_KEY = "roaster_state"
 PUBLISH_CHECK_STATE_KEY = "publish_check_state"
 EXTERNAL_API_KEYS_KEY = "external_api_keys"
 ZERO_PLAY_ISSUE = "0播警告"
@@ -1353,87 +1352,6 @@ def enrich_data_with_relational_rollups(data):
             }))
 
     return enriched
-
-
-def default_roaster_state():
-    return {
-        "people": [
-            {"id": "han", "name": "han"},
-            {"id": "li-zihan", "name": "李梓瞻"},
-            {"id": "ding-lifeng", "name": "丁立峰"},
-            {"id": "wang-hengjia", "name": "王恒加"},
-            {"id": "jj", "name": "JJ"},
-            {"id": "doris", "name": "Doris"},
-            {"id": "mina", "name": "Mina"},
-        ],
-        "assignments": {},
-    }
-
-
-def normalize_roaster_state(value):
-    state = value if isinstance(value, dict) else {}
-    people = state.get("people") if isinstance(state.get("people"), list) else []
-    assignments = state.get("assignments") if isinstance(state.get("assignments"), dict) else {}
-
-    clean_people = []
-    seen = set()
-    for person in people:
-        if not isinstance(person, dict):
-            continue
-        person_id = str(person.get("id") or "").strip()
-        name = str(person.get("name") or "").strip()
-        if not person_id or not name or person_id in seen:
-            continue
-        seen.add(person_id)
-        clean_people.append({"id": person_id, "name": name})
-
-    clean_ids = {person["id"] for person in clean_people}
-    clean_assignments = {}
-    for product_id, role_map in assignments.items():
-        if not isinstance(role_map, dict):
-            continue
-
-        clean_role_map = {}
-        for role_key, person_ids in role_map.items():
-            if not isinstance(person_ids, list):
-                continue
-
-            clean_role_map[str(role_key)] = [
-                str(person_id)
-                for person_id in person_ids
-                if str(person_id) in clean_ids
-            ]
-
-        if clean_role_map:
-            clean_assignments[str(product_id)] = clean_role_map
-
-    return {
-        "people": clean_people or default_roaster_state()["people"],
-        "assignments": clean_assignments,
-    }
-
-
-def load_roaster_state():
-    value = load_app_value(ROASTER_STATE_KEY)
-    if not value:
-        state = default_roaster_state()
-        save_app_value(ROASTER_STATE_KEY, state)
-        return state
-
-    try:
-        state = json.loads(value)
-    except json.JSONDecodeError:
-        state = default_roaster_state()
-        save_app_value(ROASTER_STATE_KEY, state)
-        return state
-
-    return normalize_roaster_state(state)
-
-
-def save_roaster_state(state):
-    clean_state = normalize_roaster_state(state)
-    save_app_value(ROASTER_STATE_KEY, clean_state)
-    return clean_state
 
 
 def hash_api_key(value):
@@ -2841,177 +2759,6 @@ def delete_account_tag(account_id, tag):
         conn.execute(f"DELETE FROM account_tags WHERE account_id = {placeholder} AND tag = {placeholder}", (account_id, tag))
         conn.commit()
     return {"ok": True, "account_id": account_id, "tag": tag}
-
-
-def tag_dashboard_payload(product_code):
-    product_code = str(product_code or "").strip().upper()
-    if not product_code:
-        raise ValueError("product_code is required.")
-    placeholder = db_placeholder()
-    windows = previous_complete_windows()
-    with connect_db() as conn:
-        init_relational_schema(conn)
-        tag_rows = conn.execute(
-            f"""
-            SELECT
-                tag.tag,
-                COUNT(DISTINCT acc.id) AS account_count,
-                COUNT(DISTINCT CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.id END) AS yesterday_posts,
-                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.view_count ELSE 0 END), 0) AS yesterday_views,
-                COUNT(DISTINCT CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.id END) AS seven_day_posts,
-                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.view_count ELSE 0 END), 0) AS seven_day_views,
-                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.like_count ELSE 0 END), 0) AS seven_day_likes,
-                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.comment_count ELSE 0 END), 0) AS seven_day_comments,
-                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.share_count ELSE 0 END), 0) AS seven_day_shares,
-                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.bookmark_count ELSE 0 END), 0) AS seven_day_bookmarks
-            FROM account_tags tag
-            JOIN accounts acc ON acc.id = tag.account_id
-            JOIN product_market_channels pmc ON pmc.id = acc.product_market_channel_id
-            JOIN product_markets pm ON pm.id = pmc.product_market_id
-            JOIN products p ON p.id = pm.product_id
-            JOIN markets m ON m.id = pm.market_id
-            JOIN channels ch ON ch.id = pmc.channel_id
-            LEFT JOIN posts post ON post.account_id = acc.id
-            WHERE ch.code = {placeholder} AND p.code = {placeholder}
-            GROUP BY tag.tag
-            ORDER BY tag.tag
-            """,
-            (
-                windows["yesterday_start"], windows["yesterday_end"],
-                windows["yesterday_start"], windows["yesterday_end"],
-                windows["seven_start"], windows["seven_end"],
-                windows["seven_start"], windows["seven_end"],
-                windows["seven_start"], windows["seven_end"],
-                windows["seven_start"], windows["seven_end"],
-                windows["seven_start"], windows["seven_end"],
-                windows["seven_start"], windows["seven_end"],
-                "TIKTOK", product_code,
-            ),
-        ).fetchall()
-        account_rows = conn.execute(
-            f"""
-            SELECT
-                tag.tag,
-                p.id AS product_id,
-                p.name AS product_name,
-                p.code AS product_code,
-                m.id AS country_id,
-                m.name AS country_name,
-                m.code AS country_code,
-                acc.id AS account_id,
-                acc.reelfarm_account_id,
-                acc.username,
-                acc.display_name,
-                acc.avatar_url,
-                acc.status,
-                COUNT(DISTINCT post.id) AS post_count,
-                COALESCE(SUM(post.view_count), 0) AS total_views,
-                MAX(post.published_at) AS latest_post_at,
-                COUNT(DISTINCT CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.id END) AS yesterday_posts,
-                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.view_count ELSE 0 END), 0) AS yesterday_views,
-                COUNT(DISTINCT CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.id END) AS seven_day_posts,
-                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.view_count ELSE 0 END), 0) AS seven_day_views,
-                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.like_count ELSE 0 END), 0) AS seven_day_likes,
-                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.comment_count ELSE 0 END), 0) AS seven_day_comments,
-                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.share_count ELSE 0 END), 0) AS seven_day_shares,
-                COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.bookmark_count ELSE 0 END), 0) AS seven_day_bookmarks
-            FROM account_tags tag
-            JOIN accounts acc ON acc.id = tag.account_id
-            JOIN product_market_channels pmc ON pmc.id = acc.product_market_channel_id
-            JOIN product_markets pm ON pm.id = pmc.product_market_id
-            JOIN products p ON p.id = pm.product_id
-            JOIN markets m ON m.id = pm.market_id
-            JOIN channels ch ON ch.id = pmc.channel_id
-            LEFT JOIN posts post ON post.account_id = acc.id
-            WHERE ch.code = {placeholder} AND p.code = {placeholder}
-            GROUP BY tag.tag, p.id, p.name, p.code, m.id, m.name, m.code, acc.id, acc.reelfarm_account_id, acc.username, acc.display_name, acc.avatar_url, acc.status
-            ORDER BY tag.tag, m.name, total_views DESC
-            """,
-            (
-                windows["yesterday_start"], windows["yesterday_end"],
-                windows["yesterday_start"], windows["yesterday_end"],
-                windows["seven_start"], windows["seven_end"],
-                windows["seven_start"], windows["seven_end"],
-                windows["seven_start"], windows["seven_end"],
-                windows["seven_start"], windows["seven_end"],
-                windows["seven_start"], windows["seven_end"],
-                windows["seven_start"], windows["seven_end"],
-                "TIKTOK", product_code,
-            ),
-        ).fetchall()
-
-    tags = []
-    by_tag = {}
-    for row in tag_rows:
-        data = row_dict(row)
-        seven_views = int(data.get("seven_day_views") or 0)
-        seven_posts = int(data.get("seven_day_posts") or 0)
-        yesterday_views = int(data.get("yesterday_views") or 0)
-        yesterday_posts = int(data.get("yesterday_posts") or 0)
-        interactions = sum(int(data.get(key) or 0) for key in ("seven_day_likes", "seven_day_comments", "seven_day_shares", "seven_day_bookmarks"))
-        item = {
-            "tag": data.get("tag"),
-            "account_count": int(data.get("account_count") or 0),
-            "yesterday_avg_views": round(yesterday_views / yesterday_posts) if yesterday_posts else 0,
-            "seven_day_avg_views": round(seven_views / seven_posts) if seven_posts else 0,
-            "seven_day_er": (interactions / seven_views * 100) if seven_views else 0,
-            "countries": {},
-        }
-        tags.append(item)
-        by_tag[item["tag"]] = item
-    for row in account_rows:
-        data = row_dict(row)
-        tag = data.get("tag")
-        item = by_tag.get(tag)
-        if not item:
-            continue
-        country_key = data.get("country_code") or data.get("country_id") or "UNKNOWN"
-        country = item["countries"].setdefault(country_key, {
-            "country_id": data.get("country_id"),
-            "country_name": data.get("country_name"),
-            "country_code": data.get("country_code"),
-            "account_count": 0,
-            "_yesterday_posts": 0,
-            "_yesterday_views": 0,
-            "_seven_day_posts": 0,
-            "_seven_day_views": 0,
-            "_seven_day_likes": 0,
-            "_seven_day_comments": 0,
-            "_seven_day_shares": 0,
-            "_seven_day_bookmarks": 0,
-            "accounts": [],
-        })
-        country["account_count"] += 1
-        country["_yesterday_posts"] += int(data.get("yesterday_posts") or 0)
-        country["_yesterday_views"] += int(data.get("yesterday_views") or 0)
-        country["_seven_day_posts"] += int(data.get("seven_day_posts") or 0)
-        country["_seven_day_views"] += int(data.get("seven_day_views") or 0)
-        country["_seven_day_likes"] += int(data.get("seven_day_likes") or 0)
-        country["_seven_day_comments"] += int(data.get("seven_day_comments") or 0)
-        country["_seven_day_shares"] += int(data.get("seven_day_shares") or 0)
-        country["_seven_day_bookmarks"] += int(data.get("seven_day_bookmarks") or 0)
-        country["accounts"].append({
-            "account_id": data.get("account_id"),
-            "username": data.get("username"),
-            "display_name": data.get("display_name"),
-            "avatar_url": data.get("avatar_url"),
-            "status": data.get("status"),
-            "post_count": int(data.get("post_count") or 0),
-            "total_views": int(data.get("total_views") or 0),
-            "latest_post_at": data.get("latest_post_at"),
-        })
-    for item in tags:
-        for country in item["countries"].values():
-            seven_views = country.pop("_seven_day_views", 0)
-            seven_posts = country.pop("_seven_day_posts", 0)
-            yesterday_views = country.pop("_yesterday_views", 0)
-            yesterday_posts = country.pop("_yesterday_posts", 0)
-            interactions = sum(country.pop(key, 0) for key in ("_seven_day_likes", "_seven_day_comments", "_seven_day_shares", "_seven_day_bookmarks"))
-            country["yesterday_avg_views"] = round(yesterday_views / yesterday_posts) if yesterday_posts else 0
-            country["seven_day_avg_views"] = round(seven_views / seven_posts) if seven_posts else 0
-            country["seven_day_er"] = (interactions / seven_views * 100) if seven_views else 0
-        item["countries"] = list(item["countries"].values())
-    return {"ok": True, "product_code": product_code, "windows": windows, "tags": tags}
 
 
 _MUSEON_CAMPAIGN_CACHE = {"loaded_at": 0, "campaigns": []}
@@ -4571,10 +4318,6 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
                 self.send_json(400, {"ok": False, "error": str(error)})
             return
 
-        if path == "/api/roaster":
-            self.send_json(200, load_roaster_state())
-            return
-
         if path == "/api/reelfarm/config":
             self.send_json(
                 200,
@@ -4697,21 +4440,6 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             data = default_data()
             save_data(data)
             self.send_json(200, {"ok": True, "data": data})
-            return
-
-        if path == "/api/roaster":
-            try:
-                payload = self.read_json_body()
-            except json.JSONDecodeError:
-                self.send_json(400, {"error": "Invalid JSON"})
-                return
-
-            state = payload.get("state") if isinstance(payload, dict) else None
-            if not isinstance(state, dict):
-                self.send_json(400, {"error": "Expected { state: {...} }"})
-                return
-
-            self.send_json(200, {"ok": True, "state": save_roaster_state(state)})
             return
 
         if path == "/api/reelfarm/config":

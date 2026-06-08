@@ -30,7 +30,6 @@ from server import (
     init_relational_schema,
     load_data,
     load_publish_check_state,
-    load_roaster_state,
     make_auth_token,
     password_hash,
     product_tags_payload,
@@ -41,13 +40,11 @@ from server import (
     save_app_value,
     save_data,
     save_publish_check_state,
-    save_roaster_state,
     send_publish_check_reminder,
     sync_all_reelfarm_records,
     sync_museon_clone_country,
     sync_reelfarm_country,
     sync_reelfarm_prefix,
-    tag_dashboard_payload,
     run_publish_check,
     stored_reelfarm_country,
     delete_app_value,
@@ -61,7 +58,7 @@ import hmac
 
 app = FastAPI(
     title="Deca Growth API",
-    description="API for Deca Growth dashboard data, ReelFarm synced materials, roaster data, and dashboard-managed API keys.",
+    description="API for Deca Growth dashboard data, ReelFarm synced materials, publish checks, and dashboard-managed API keys.",
     version="1.0.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
@@ -227,22 +224,6 @@ def reset_data(request: Request):
     return {"ok": True, "data": data}
 
 
-@app.get("/api/roaster")
-def get_roaster(request: Request):
-    require_dashboard_auth(request)
-    return load_roaster_state()
-
-
-@app.post("/api/roaster")
-def post_roaster(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
-    require_dashboard_auth(request)
-    state = payload.get("state")
-    if not isinstance(state, dict):
-        raise HTTPException(status_code=400, detail="Expected { state: {...} }")
-
-    return {"ok": True, "state": save_roaster_state(state)}
-
-
 @app.get("/api/publish-check")
 def get_publish_check(request: Request):
     require_dashboard_auth(request)
@@ -340,15 +321,6 @@ def post_product_tags(request: Request, payload: dict[str, Any] = Body(default_f
     require_dashboard_auth(request)
     try:
         return create_product_tag(payload.get("product_code"), payload.get("tag"))
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-
-
-@app.get("/api/tags/dashboard")
-def get_tags_dashboard(request: Request, product_code: str = ""):
-    require_dashboard_auth(request)
-    try:
-        return tag_dashboard_payload(product_code)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
