@@ -1675,7 +1675,7 @@ def collect_zero_play_issue_candidate(candidates, account_id, published_at, view
     published = parse_iso_datetime(published_at)
     if not account_id or not published:
         return
-    if published.astimezone(BUSINESS_TIMEZONE).date().isoformat() > sync_date:
+    if published.astimezone(BUSINESS_TIMEZONE).date().isoformat() >= sync_date:
         return
     candidates.setdefault(account_id, []).append({
         "published_at": published,
@@ -2154,8 +2154,9 @@ def query_days_window(query):
     days = min(days, 366)
     beijing = timezone(timedelta(hours=8))
     current = datetime.now(timezone.utc).astimezone(beijing)
-    start_local = datetime(current.year, current.month, current.day, tzinfo=beijing) - timedelta(days=days - 1)
-    end_local = datetime(current.year, current.month, current.day, tzinfo=beijing) + timedelta(days=1)
+    today_start_local = datetime(current.year, current.month, current.day, tzinfo=beijing)
+    start_local = today_start_local - timedelta(days=days)
+    end_local = today_start_local
     return start_local.astimezone(timezone.utc).isoformat(), end_local.astimezone(timezone.utc).isoformat()
 
 

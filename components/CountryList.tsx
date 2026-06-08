@@ -56,14 +56,14 @@ function rangeForPreset(preset: DatePresetKey) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   if (preset === 'today') return { from: dateInputValue(today), to: dateInputValue(today) };
+  const yesterday = addDays(today, -1);
   if (preset === 'yesterday') {
-    const yesterday = addDays(today, -1);
     return { from: dateInputValue(yesterday), to: dateInputValue(yesterday) };
   }
-  if (preset === '30d') return { from: dateInputValue(addDays(today, -29)), to: dateInputValue(today) };
-  if (preset === '3m') return { from: dateInputValue(addMonths(today, -3)), to: dateInputValue(today) };
-  if (preset === '6m') return { from: dateInputValue(addMonths(today, -6)), to: dateInputValue(today) };
-  return { from: dateInputValue(addDays(today, -6)), to: dateInputValue(today) };
+  if (preset === '30d') return { from: dateInputValue(addDays(today, -30)), to: dateInputValue(yesterday) };
+  if (preset === '3m') return { from: dateInputValue(addMonths(today, -3)), to: dateInputValue(yesterday) };
+  if (preset === '6m') return { from: dateInputValue(addMonths(today, -6)), to: dateInputValue(yesterday) };
+  return { from: dateInputValue(addDays(today, -7)), to: dateInputValue(yesterday) };
 }
 
 function displayDateRange(from: string, to: string) {
