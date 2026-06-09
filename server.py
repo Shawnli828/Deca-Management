@@ -3343,6 +3343,22 @@ def clean_tag(value):
     return tag[:40]
 
 
+def existing_tag_value(conn, table, scope_column, scope_value, tag):
+    placeholder = db_placeholder()
+    row = conn.execute(
+        f"""
+        SELECT tag
+        FROM {table}
+        WHERE {scope_column} = {placeholder}
+          AND LOWER(tag) = LOWER({placeholder})
+        LIMIT 1
+        """,
+        (scope_value, tag),
+    ).fetchone()
+    data = row_dict(row)
+    return data.get("tag") or tag
+
+
 def account_tags_payload(account_ids):
     ids = [str(item or "").strip() for item in account_ids if str(item or "").strip()]
     if not ids:
@@ -3469,11 +3485,12 @@ def create_product_tag(product_code, tag):
     now = datetime.now(timezone.utc).isoformat()
     with connect_db() as conn:
         init_relational_schema(conn)
+        tag = existing_tag_value(conn, "product_tags", "product_code", product_code, tag)
         upsert_row(
             conn,
             "product_tags",
             {"id": stable_id("product_tag", product_code, tag.lower()), "product_code": product_code, "tag": tag, "created_at": now},
-            ["product_code", "tag"],
+            ["id"],
         )
         conn.commit()
     return product_tags_payload(product_code)
@@ -3487,11 +3504,12 @@ def add_account_tag(account_id, tag):
     now = datetime.now(timezone.utc).isoformat()
     with connect_db() as conn:
         init_relational_schema(conn)
+        tag = existing_tag_value(conn, "account_tags", "account_id", account_id, tag)
         upsert_row(
             conn,
             "account_tags",
             {"id": stable_id("account_tag", account_id, tag.lower()), "account_id": account_id, "tag": tag, "created_at": now},
-            ["account_id", "tag"],
+            ["id"],
         )
         conn.commit()
     return {"ok": True, "account_id": account_id, "tag": tag}
