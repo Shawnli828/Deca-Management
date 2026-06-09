@@ -13,12 +13,12 @@
   ],
   "crons": [
     {
-      "path": "/api/reelfarm/sync-all",
-      "schedule": "0 16 * * *"
+      "path": "/api/sync/daily-all",
+      "schedule": "59 15 * * *"
     },
     {
       "path": "/api/publish-check/run",
-      "schedule": "0 15 * * *"
+      "schedule": "59 15 * * *"
     }
   ],
   "routes": [

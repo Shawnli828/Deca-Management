@@ -1885,6 +1885,123 @@ def sync_all_reelfarm_records():
     }
 
 
+def sync_all_museon_clone_records():
+    data = load_data()
+    successes = 0
+    skipped = 0
+    errors = []
+    records = []
+
+    for product in data:
+        if not isinstance(product, dict):
+            continue
+        product_code = str(product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
+        for country in product.get("countries", []) or []:
+            if not isinstance(country, dict):
+                continue
+            country_code = str(
+                country.get("reelFarmCode")
+                or COUNTRY_CODES.get(country.get("name"), "")
+                or code_from_name(country.get("name"))
+            ).upper()
+            try:
+                result = sync_museon_clone_country(
+                    str(product.get("id") or ""),
+                    str(country.get("id") or ""),
+                    product_code,
+                    country_code,
+                )
+                records.append({
+                    "product_code": product_code,
+                    "country_code": country_code,
+                    "creator_count": result.get("creator_count", 0),
+                    "material_count": result.get("material_count", 0),
+                    "post_count": result.get("post_count", 0),
+                    "skipped": bool(result.get("skipped")),
+                    "duration_total_seconds": result.get("duration_total_seconds"),
+                })
+                if result.get("skipped"):
+                    skipped += 1
+                else:
+                    successes += 1
+            except RuntimeError as error:
+                errors.append({"product_code": product_code, "country_code": country_code, "error": str(error)})
+
+    return {
+        "ok": True,
+        "synced_count": successes,
+        "skipped_count": skipped,
+        "error_count": len(errors),
+        "errors": errors[:20],
+        "records": records[:50],
+    }
+
+
+def sync_all_growth_snapshots(days=30):
+    data = load_data()
+    product_codes = []
+    seen = set()
+    for product in data:
+        if not isinstance(product, dict):
+            continue
+        product_code = str(product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
+        if product_code and product_code not in seen:
+            seen.add(product_code)
+            product_codes.append(product_code)
+
+    successes = 0
+    errors = []
+    records = []
+    for product_code in product_codes:
+        try:
+            product_records = sync_product_growth_snapshots(product_code, days)
+            successes += 1
+            records.append({"product_code": product_code, "count": len(product_records)})
+        except (RuntimeError, ValueError) as error:
+            errors.append({"product_code": product_code, "error": str(error)})
+
+    return {
+        "ok": True,
+        "synced_count": successes,
+        "error_count": len(errors),
+        "errors": errors[:20],
+        "records": records,
+    }
+
+
+def sync_daily_all_records(days=30):
+    started = time.perf_counter()
+    synced_at = datetime.now(timezone.utc).isoformat()
+    stages = {}
+
+    for stage_name, runner in (
+        ("reelfarm", sync_all_reelfarm_records),
+        ("museon_clone", sync_all_museon_clone_records),
+        ("growth_mixpanel", lambda: sync_all_growth_snapshots(days)),
+    ):
+        stage_started = time.perf_counter()
+        try:
+            payload = runner()
+            payload["duration_total_seconds"] = round(time.perf_counter() - stage_started, 3)
+            stages[stage_name] = payload
+        except RuntimeError as error:
+            stages[stage_name] = {
+                "ok": False,
+                "error": str(error),
+                "duration_total_seconds": round(time.perf_counter() - stage_started, 3),
+            }
+
+    ok = all(stage.get("ok") for stage in stages.values())
+    return {
+        "ok": ok,
+        "synced_at": synced_at,
+        "timezone": "Asia/Shanghai",
+        "schedule": "23:59 BJT",
+        "duration_total_seconds": round(time.perf_counter() - started, 3),
+        "stages": stages,
+    }
+
+
 def sync_reelfarm_country(prefix, product_id="", country_id="", product_code="", country_code=""):
     clean_prefix = (prefix or "").strip()
     if not clean_prefix:

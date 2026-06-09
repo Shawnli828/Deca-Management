@@ -44,6 +44,7 @@ from server import (
     save_data,
     save_publish_check_state,
     send_publish_check_reminder,
+    sync_daily_all_records,
     sync_product_growth_snapshots,
     sync_all_reelfarm_records,
     sync_museon_clone_country,
@@ -435,6 +436,17 @@ def post_growth_sync_product(request: Request, payload: dict[str, Any] = Body(de
         return {"ok": True, "count": len(records), "records": records}
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@app.api_route("/api/sync/daily-all", methods=["GET", "POST"])
+def sync_daily_all(request: Request, days: int = 30):
+    if not cron_authorized(request.headers):
+        require_dashboard_auth(request)
+
+    try:
+        return sync_daily_all_records(days)
     except RuntimeError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
 
