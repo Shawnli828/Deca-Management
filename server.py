@@ -3747,6 +3747,52 @@ def museon_content_download_images(content_id):
     return normalize_image_entries(values)
 
 
+def museon_content_id_from_material_source(value):
+    text = str(value or "")
+    if not text.startswith("museon:"):
+        return ""
+    parts = text.split(":")
+    return parts[-1] if len(parts) >= 3 else ""
+
+
+def hydrate_museon_images_for_rows(conn, row_data_list):
+    placeholder = db_placeholder()
+    hydrated = []
+    changed = False
+    for data in row_data_list:
+        item = dict(data)
+        existing_images = parse_json_list(item.get("images_json"))
+        if existing_images:
+            hydrated.append(item)
+            continue
+
+        content_id = museon_content_id_from_material_source(item.get("reelfarm_video_id"))
+        images = museon_content_download_images(content_id)
+        if images:
+            images_json = db_json(images)
+            slide_count = int_or_none(item.get("slide_count")) or len(images)
+            item["images_json"] = images_json
+            item["slide_count"] = slide_count
+            conn.execute(
+                f"""
+                UPDATE materials
+                SET images_json = {placeholder},
+                    slide_count = CASE
+                        WHEN slide_count IS NULL OR slide_count = 0 THEN {placeholder}
+                        ELSE slide_count
+                    END
+                WHERE id = {placeholder}
+                """,
+                (images_json, slide_count, item.get("material_id")),
+            )
+            changed = True
+        hydrated.append(item)
+
+    if changed:
+        conn.commit()
+    return hydrated
+
+
 def local_product_country_record(product_id="", country_id="", product_code="", country_code=""):
     product_code = str(product_code or "").strip().upper()
     country_code = str(country_code or "").strip().upper()
@@ -3818,7 +3864,6 @@ def sync_museon_clone_country(product_id="", country_id="", product_code="", cou
     account_ids = set()
     material_count = 0
     post_count = 0
-    download_image_cache = {}
 
     with connect_db() as conn:
         init_relational_schema(conn)
@@ -3868,10 +3913,6 @@ def sync_museon_clone_country(product_id="", country_id="", product_code="", cou
             metrics = museon_post_metrics(post)
             published_at = museon_post_published_at(post)
             images = museon_post_images(post)
-            if not images and material_source_id:
-                if material_source_id not in download_image_cache:
-                    download_image_cache[material_source_id] = museon_content_download_images(material_source_id)
-                images = download_image_cache.get(material_source_id) or []
 
             account_ids.add(account_id)
             material_count += 1
@@ -4637,7 +4678,13 @@ def query_posts(query, top_metric=""):
             """,
             tuple(params + [limit, offset]),
         ).fetchall()
-    return [detailed_row(row) for row in rows], pagination_payload(limit, offset, rows, row_dict(total_row).get("total", 0))
+        row_data = [row_dict(row) for row in rows]
+        if (
+            query_value(query, "resource").lower() == "account_posts"
+            and data_source_channel_code(query_value(query, "source")) == "MUSEON_CLONE"
+        ):
+            row_data = hydrate_museon_images_for_rows(conn, row_data)
+    return [detailed_row(row) for row in row_data], pagination_payload(limit, offset, row_data, row_dict(total_row).get("total", 0))
 
 
 def query_materials(query):
