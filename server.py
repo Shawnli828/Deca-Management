@@ -1938,16 +1938,7 @@ def sync_all_museon_clone_records():
 
 
 def sync_all_growth_snapshots(days=30):
-    data = load_data()
-    product_codes = []
-    seen = set()
-    for product in data:
-        if not isinstance(product, dict):
-            continue
-        product_code = str(product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
-        if product_code and product_code not in seen:
-            seen.add(product_code)
-            product_codes.append(product_code)
+    product_codes = configured_product_codes()
 
     successes = 0
     errors = []
@@ -1967,6 +1958,30 @@ def sync_all_growth_snapshots(days=30):
         "errors": errors[:20],
         "records": records,
     }
+
+
+def configured_product_codes():
+    product_codes = []
+    seen = set()
+    for product in load_data():
+        if not isinstance(product, dict):
+            continue
+        product_code = str(product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
+        if product_code and product_code not in seen:
+            seen.add(product_code)
+            product_codes.append(product_code)
+    return product_codes
+
+
+def configured_product_name_map():
+    names = {}
+    for product in load_data():
+        if not isinstance(product, dict):
+            continue
+        product_code = str(product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
+        if product_code:
+            names[product_code] = str(product.get("name") or product_code)
+    return names
 
 
 def sync_daily_all_records(days=30):
@@ -4756,6 +4771,145 @@ def send_feishu_message(message):
     return {"ok": True, "response": payload}
 
 
+def default_daily_report_date():
+    tz = report_timezone()
+    current_local = datetime.now(timezone.utc).astimezone(tz)
+    today_start = datetime(current_local.year, current_local.month, current_local.day, tzinfo=tz)
+    return (today_start - timedelta(days=1)).date().isoformat()
+
+
+def daily_feishu_report_payload(report_date=""):
+    report_date = str(report_date or "").strip() or default_daily_report_date()
+    try:
+        datetime.strptime(report_date, "%Y-%m-%d")
+    except ValueError as error:
+        raise ValueError("date must use YYYY-MM-DD.") from error
+
+    names = configured_product_name_map()
+    products = []
+    totals = {
+        "reelfarm_views": 0,
+        "clone_views": 0,
+        "total_views": 0,
+        "downloads": 0,
+        "total_materials": 0,
+        "total_posts": 0,
+    }
+    errors = []
+    window = business_material_day_window(report_date)
+
+    for product_code in configured_product_codes():
+        try:
+            payload = business_material_report_payload({
+                "product_code": [product_code],
+                "date_from": [report_date],
+                "date_to": [report_date],
+            })
+            row = (payload.get("rows") or [{}])[0]
+            downloads = row.get("downloads")
+            item = {
+                "product_code": product_code,
+                "product_name": names.get(product_code, product_code),
+                "report_date": report_date,
+                "reelfarm_views": int(row.get("reelfarm_views") or 0),
+                "clone_views": int(row.get("clone_views") or 0),
+                "total_views": int(row.get("total_views") or 0),
+                "downloads": int(downloads or 0) if downloads is not None else None,
+                "download_rate": row.get("download_rate"),
+                "total_materials": int(row.get("total_materials") or 0),
+                "total_posts": int(row.get("total_posts") or 0),
+                "mixpanel": payload.get("mixpanel") or {},
+            }
+            products.append(item)
+            for key in ("reelfarm_views", "clone_views", "total_views", "total_materials", "total_posts"):
+                totals[key] += int(item.get(key) or 0)
+            if item["downloads"] is not None:
+                totals["downloads"] += int(item["downloads"] or 0)
+        except (RuntimeError, ValueError) as error:
+            errors.append({"product_code": product_code, "error": str(error)})
+
+    totals["download_rate"] = (totals["downloads"] / totals["total_views"] * 100) if totals["total_views"] else None
+    return {
+        "ok": True,
+        "report_date": report_date,
+        "report_timezone": REPORT_TIMEZONE_NAME,
+        "business_window_local": {
+            "start": window["start_local"].isoformat(),
+            "end": window["end_local"].isoformat(),
+        },
+        "utc_window": {
+            "start": window["utc_start"].isoformat(),
+            "end": window["utc_end"].isoformat(),
+        },
+        "products": products,
+        "totals": totals,
+        "errors": errors,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def format_percent(value):
+    if value is None:
+        return "—"
+    return f"{float(value):.2f}%"
+
+
+def daily_feishu_report_text(report):
+    totals = report.get("totals") or {}
+    window = report.get("business_window_local") or {}
+    lines = [
+        "Deca Growth 每日业务数据",
+        f"业务日：{report.get('report_date')}",
+        f"统计窗口：{window.get('start', '')} → {window.get('end', '')} BJT",
+        "",
+        "总览",
+        f"- 总播放：{int(totals.get('total_views') or 0):,}",
+        f"- ReelFarm：{int(totals.get('reelfarm_views') or 0):,}",
+        f"- Clone：{int(totals.get('clone_views') or 0):,}",
+        f"- Onboarding Unique：{int(totals.get('downloads') or 0):,}",
+        f"- 下载/播放：{format_percent(totals.get('download_rate'))}",
+        "",
+    ]
+
+    for item in report.get("products") or []:
+        downloads = item.get("downloads")
+        lines.extend([
+            f"{item.get('product_name')} ({item.get('product_code')})",
+            f"- 播放：{int(item.get('total_views') or 0):,} = RF {int(item.get('reelfarm_views') or 0):,} + Clone {int(item.get('clone_views') or 0):,}",
+            f"- 新素材/Posts：{int(item.get('total_materials') or 0):,} / {int(item.get('total_posts') or 0):,}",
+            f"- Onboarding Unique：{int(downloads):,}" if downloads is not None else "- Onboarding Unique：未配置/未返回",
+            f"- 下载/播放：{format_percent(item.get('download_rate'))}",
+            "",
+        ])
+
+    errors = report.get("errors") or []
+    if errors:
+        lines.append("注意")
+        for error in errors[:6]:
+            lines.append(f"- {error.get('product_code')}: {error.get('error')}")
+        if len(errors) > 6:
+            lines.append(f"- 还有 {len(errors) - 6} 个错误未展示")
+
+    return "\n".join(lines).strip()
+
+
+def send_daily_feishu_report(report_date=""):
+    report = daily_feishu_report_payload(report_date)
+    message = daily_feishu_report_text(report)
+    sent = send_feishu_message(message)
+    if not sent.get("ok"):
+        return sent
+    return {
+        "ok": True,
+        "sent_at": datetime.now(timezone.utc).isoformat(),
+        "report_date": report.get("report_date"),
+        "totals": report.get("totals"),
+        "product_count": len(report.get("products") or []),
+        "error_count": len(report.get("errors") or []),
+        "message_preview": message[:800],
+    }
+
+
 def send_publish_check_reminder():
     state = load_publish_check_state()
     result = state.get("last_result") if isinstance(state, dict) else None
@@ -5225,7 +5379,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             return False
         if path in {"/api/health", "/api/auth/login", "/api/auth/logout", "/api/auth/status"}:
             return False
-        if path == "/api/reelfarm/sync-all" and cron_authorized(self.headers):
+        if path in {"/api/reelfarm/sync-all", "/api/sync/daily-all", "/api/reports/daily-feishu"} and cron_authorized(self.headers):
             return False
         if path == "/api/ai/materials" and self.ai_authorized():
             return False
@@ -5307,6 +5461,16 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
                 self.send_json(400, {"ok": False, "error": str(error)})
             except RuntimeError as error:
                 self.send_json(502, {"ok": False, "error": str(error)})
+            return
+
+        if path == "/api/reports/daily-feishu":
+            query = parse_qs(urlparse(self.path).query)
+            try:
+                result = send_daily_feishu_report(query.get("date", [""])[0])
+                status = 200 if result.get("ok") else 400
+                self.send_json(status, result)
+            except ValueError as error:
+                self.send_json(400, {"ok": False, "error": str(error)})
             return
 
         if path == "/api/reelfarm/config":
@@ -5572,6 +5736,26 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
                 self.send_json(400, {"error": str(error)})
             except RuntimeError as error:
                 self.send_json(502, {"error": str(error)})
+            return
+
+        if path == "/api/sync/daily-all":
+            if not cron_authorized(self.headers):
+                self.send_json(401, {"error": "Unauthorized"})
+                return
+            try:
+                self.send_json(200, sync_daily_all_records())
+            except RuntimeError as error:
+                self.send_json(502, {"error": str(error)})
+            return
+
+        if path == "/api/reports/daily-feishu":
+            query = parse_qs(urlparse(self.path).query)
+            try:
+                result = send_daily_feishu_report(query.get("date", [""])[0])
+                status = 200 if result.get("ok") else 400
+                self.send_json(status, result)
+            except ValueError as error:
+                self.send_json(400, {"ok": False, "error": str(error)})
             return
 
         if path == "/api/reelfarm/sync-all":

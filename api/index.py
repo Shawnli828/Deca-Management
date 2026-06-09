@@ -43,6 +43,7 @@ from server import (
     save_app_value,
     save_data,
     save_publish_check_state,
+    send_daily_feishu_report,
     send_publish_check_reminder,
     sync_daily_all_records,
     sync_product_growth_snapshots,
@@ -259,6 +260,19 @@ def post_publish_check_send_reminder(request: Request):
     result = send_publish_check_reminder()
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result.get("error") or "Failed to send Feishu reminder.")
+    return result
+
+
+@app.api_route("/api/reports/daily-feishu", methods=["GET", "POST"])
+def post_reports_daily_feishu(request: Request, date: str = ""):
+    if not cron_authorized(request.headers):
+        require_dashboard_auth(request)
+    try:
+        result = send_daily_feishu_report(date)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("error") or "Failed to send Feishu daily report.")
     return result
 
 
