@@ -10,47 +10,47 @@ function metricValue(value: unknown) {
   return formatNumber(value);
 }
 
-function linePath(rows: ProductGrowthSnapshot[], key: keyof ProductGrowthSnapshot, width: number, height: number) {
-  const values = rows.map(row => Number(row[key]) || 0);
-  const max = Math.max(...values, 1);
-  if (!rows.length) return '';
-  return rows.map((row, index) => {
-    const x = rows.length === 1 ? width / 2 : (index / (rows.length - 1)) * width;
-    const y = height - ((Number(row[key]) || 0) / max) * height;
-    return `${index === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`;
-  }).join(' ');
-}
-
-function GrowthLineChart({ rows }: { rows: ProductGrowthSnapshot[] }) {
-  const chartRows = rows.slice(-30);
-  const width = 720;
-  const height = 220;
-  const viewsPath = linePath(chartRows, 'total_views', width, height);
-  const onboardingPath = linePath(chartRows, 'onboarding_unique', width, height);
-
+function GrowthDailyTable({ rows }: { rows: ProductGrowthSnapshot[] }) {
   return (
-    <div className="growth-chart-card">
-      <div className="growth-chart-head">
+    <section className="growth-daily-card">
+      <div className="growth-daily-head">
         <div>
-          <h3>Daily Trend</h3>
-          <p>按北京时间日期记录播放量和 Onboarding Unique。</p>
-        </div>
-        <div className="growth-chart-legend">
-          <span><i className="views" /> Views</span>
-          <span><i className="onboarding" /> Onboarding Unique</span>
+          <h2>每日记录</h2>
+          <p>按北京时间归档，每一行是一天的播放和 Onboarding Unique。</p>
         </div>
       </div>
-      <svg className="growth-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Daily views and downloads trend">
-        <path className="growth-grid" d={`M0 ${height * 0.25} H${width} M0 ${height * 0.5} H${width} M0 ${height * 0.75} H${width}`} />
-        {viewsPath ? <path className="growth-line views" d={viewsPath} /> : null}
-        {onboardingPath ? <path className="growth-line onboarding" d={onboardingPath} /> : null}
-      </svg>
-      <div className="growth-chart-days">
-        {chartRows.filter((_, index) => index === 0 || index === chartRows.length - 1 || index % 7 === 0).map(row => (
-          <span key={row.report_date}>{row.report_date}</span>
-        ))}
+
+      <div className="growth-daily-table-wrap">
+        <table className="growth-daily-table">
+          <thead>
+            <tr>
+              <th>日期</th>
+              <th>总播放</th>
+              <th>ReelFarm</th>
+              <th>Clone</th>
+              <th>Onboarding Unique</th>
+              <th>同步时间</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length ? rows.slice().reverse().map(row => (
+              <tr key={row.id || row.report_date}>
+                <td>{row.report_date || '—'}</td>
+                <td>{metricValue(row.total_views)}</td>
+                <td>{metricValue(row.reelfarm_views)}</td>
+                <td>{metricValue(row.clone_views)}</td>
+                <td>{metricValue(row.onboarding_unique)}</td>
+                <td>{row.synced_at ? row.synced_at.slice(0, 19).replace('T', ' ') : '—'}</td>
+              </tr>
+            )) : (
+              <tr>
+                <td colSpan={6}>暂无每日记录，先同步一次当前产品。</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -107,8 +107,7 @@ export function GrowthDashboard({ products }: { products: Product[] }) {
   const latest = payload?.latest || {};
   const cards = [
     { label: '昨日总播放量', value: latest.total_views, hint: `RF ${metricValue(latest.reelfarm_views)} · Clone ${metricValue(latest.clone_views)}` },
-    { label: '昨日 Onboarding Unique', value: latest.onboarding_unique, hint: 'Mixpanel unique users · 按北京时间归档' },
-    { label: '30 日总播放', value: payload?.totals?.total_views, hint: `${payload?.date_from || '—'} → ${payload?.date_to || '—'}` }
+    { label: '昨日 Onboarding Unique', value: latest.onboarding_unique, hint: 'Mixpanel unique users · 按北京时间归档' }
   ];
 
   return (
@@ -142,7 +141,7 @@ export function GrowthDashboard({ products }: { products: Product[] }) {
         ))}
       </div>
 
-      <GrowthLineChart rows={payload?.series || []} />
+      <GrowthDailyTable rows={payload?.series || []} />
 
       <section className="growth-source-card">
         <h2>Time Strategy</h2>
