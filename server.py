@@ -2671,6 +2671,18 @@ def product_mixpanel_project_id(product_code):
     return product_mixpanel_config(product_code)["project_id"]
 
 
+def product_mixpanel_event_name(product_code, event_kind):
+    code = str(product_code or "").strip().upper()
+    kind = str(event_kind or "").strip().upper()
+    default_value = MIXPANEL_ONBOARDING_EVENT if kind == "ONBOARDING" else MIXPANEL_DOWNLOAD_EVENT
+    return (
+        os.environ.get(f"MIXPANEL_{kind}_EVENT_{code}", "").strip()
+        or os.environ.get(f"{code}_MIXPANEL_{kind}_EVENT", "").strip()
+        or os.environ.get(f"MIXPANEL_EVENT_{kind}_{code}", "").strip()
+        or default_value
+    )
+
+
 def mixpanel_query_base_url(region=None):
     region = (region or MIXPANEL_REGION).strip().lower()
     if region == "eu":
@@ -2809,7 +2821,6 @@ def mixpanel_event_daily_counts(config, event_name, utc_start, utc_end, value_ty
         "event": json.dumps([event_name], ensure_ascii=False),
         "from_date": source_date_from,
         "to_date": source_date_to,
-        "where": f'properties["time"] >= {start_epoch} and properties["time"] < {end_epoch}',
     })
     credentials = f"{username}:{secret}".encode("utf-8")
     request = Request(
@@ -2839,7 +2850,7 @@ def mixpanel_event_daily_counts(config, event_name, utc_start, utc_end, value_ty
         properties = event.get("properties") if isinstance(event, dict) else {}
         if not isinstance(properties, dict):
             properties = {}
-        raw_time = properties.get("time")
+        raw_time = properties.get("time", event.get("time") if isinstance(event, dict) else None)
         try:
             timestamp = float(raw_time)
         except (TypeError, ValueError):
@@ -2852,7 +2863,7 @@ def mixpanel_event_daily_counts(config, event_name, utc_start, utc_end, value_ty
         if not report_date:
             continue
         totals[report_date] = totals.get(report_date, 0) + 1
-        distinct_id = properties.get("distinct_id")
+        distinct_id = properties.get("distinct_id") or (event.get("distinct_id") if isinstance(event, dict) else None)
         if distinct_id:
             unique_ids.setdefault(report_date, set()).add(str(distinct_id))
     if value_type == "unique":
@@ -2877,8 +2888,8 @@ def sync_product_growth_snapshot(product_code, report_date=""):
     rf = product_channel_views_for_window(product_code, "TIKTOK", window["utc_start"], window["utc_end"])
     clone = product_channel_views_for_window(product_code, "MUSEON_CLONE", window["utc_start"], window["utc_end"])
     mixpanel_config = product_mixpanel_config(product_code)
-    download_count = mixpanel_event_total(mixpanel_config, MIXPANEL_DOWNLOAD_EVENT, window["utc_start"], window["utc_end"], "general")
-    onboarding_unique = mixpanel_event_total(mixpanel_config, MIXPANEL_ONBOARDING_EVENT, window["utc_start"], window["utc_end"], "unique")
+    onboarding_event = product_mixpanel_event_name(product_code, "ONBOARDING")
+    onboarding_unique = mixpanel_event_total(mixpanel_config, onboarding_event, window["utc_start"], window["utc_end"], "unique")
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": stable_id("product_daily_growth_snapshot", product_code, window["report_date"]),
@@ -2893,7 +2904,7 @@ def sync_product_growth_snapshot(product_code, report_date=""):
         "reelfarm_views": rf["views"],
         "clone_views": clone["views"],
         "total_views": rf["views"] + clone["views"],
-        "download_count": download_count,
+        "download_count": None,
         "onboarding_unique": onboarding_unique,
         "synced_at": now,
     }
@@ -2922,8 +2933,8 @@ def sync_product_growth_snapshots(product_code, days=30):
     rf_daily = product_channel_daily_views(product_code, "TIKTOK", overall_utc_start, overall_utc_end)
     clone_daily = product_channel_daily_views(product_code, "MUSEON_CLONE", overall_utc_start, overall_utc_end)
     mixpanel_config = product_mixpanel_config(product_code)
-    download_daily = mixpanel_event_daily_counts(mixpanel_config, MIXPANEL_DOWNLOAD_EVENT, overall_utc_start, overall_utc_end, "general")
-    onboarding_daily = mixpanel_event_daily_counts(mixpanel_config, MIXPANEL_ONBOARDING_EVENT, overall_utc_start, overall_utc_end, "unique")
+    onboarding_event = product_mixpanel_event_name(product_code, "ONBOARDING")
+    onboarding_daily = mixpanel_event_daily_counts(mixpanel_config, onboarding_event, overall_utc_start, overall_utc_end, "unique")
     now = datetime.now(timezone.utc).isoformat()
     records = []
     with connect_db() as conn:
@@ -2946,7 +2957,7 @@ def sync_product_growth_snapshots(product_code, days=30):
                 "reelfarm_views": reelfarm_views,
                 "clone_views": clone_views,
                 "total_views": reelfarm_views + clone_views,
-                "download_count": download_daily.get(report_date),
+                "download_count": None,
                 "onboarding_unique": onboarding_daily.get(report_date),
                 "synced_at": now,
             }

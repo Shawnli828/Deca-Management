@@ -5965,7 +5965,7 @@
             background: #3157d5;
         }
 
-        .growth-chart-legend .downloads {
+        .growth-chart-legend .onboarding {
             background: #0f766e;
         }
 
@@ -5992,7 +5992,7 @@
             stroke: #3157d5;
         }
 
-        .growth-line.downloads {
+        .growth-line.onboarding {
             stroke: #0f766e;
         }
 

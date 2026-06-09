@@ -26,24 +26,24 @@ function GrowthLineChart({ rows }: { rows: ProductGrowthSnapshot[] }) {
   const width = 720;
   const height = 220;
   const viewsPath = linePath(chartRows, 'total_views', width, height);
-  const downloadsPath = linePath(chartRows, 'download_count', width, height);
+  const onboardingPath = linePath(chartRows, 'onboarding_unique', width, height);
 
   return (
     <div className="growth-chart-card">
       <div className="growth-chart-head">
         <div>
           <h3>Daily Trend</h3>
-          <p>按北京时间日期记录播放量和下载数据。</p>
+          <p>按北京时间日期记录播放量和 Onboarding Unique。</p>
         </div>
         <div className="growth-chart-legend">
           <span><i className="views" /> Views</span>
-          <span><i className="downloads" /> Downloads</span>
+          <span><i className="onboarding" /> Onboarding Unique</span>
         </div>
       </div>
       <svg className="growth-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Daily views and downloads trend">
         <path className="growth-grid" d={`M0 ${height * 0.25} H${width} M0 ${height * 0.5} H${width} M0 ${height * 0.75} H${width}`} />
         {viewsPath ? <path className="growth-line views" d={viewsPath} /> : null}
-        {downloadsPath ? <path className="growth-line downloads" d={downloadsPath} /> : null}
+        {onboardingPath ? <path className="growth-line onboarding" d={onboardingPath} /> : null}
       </svg>
       <div className="growth-chart-days">
         {chartRows.filter((_, index) => index === 0 || index === chartRows.length - 1 || index % 7 === 0).map(row => (
@@ -107,8 +107,7 @@ export function GrowthDashboard({ products }: { products: Product[] }) {
   const latest = payload?.latest || {};
   const cards = [
     { label: '昨日总播放量', value: latest.total_views, hint: `RF ${metricValue(latest.reelfarm_views)} · Clone ${metricValue(latest.clone_views)}` },
-    { label: '昨日下载量', value: latest.download_count, hint: 'Mixpanel PDT 拉取，按北京时间归档' },
-    { label: '昨日 Onboarding Unique', value: latest.onboarding_unique, hint: 'Mixpanel unique users' },
+    { label: '昨日 Onboarding Unique', value: latest.onboarding_unique, hint: 'Mixpanel unique users · 按北京时间归档' },
     { label: '30 日总播放', value: payload?.totals?.total_views, hint: `${payload?.date_from || '—'} → ${payload?.date_to || '—'}` }
   ];
 
