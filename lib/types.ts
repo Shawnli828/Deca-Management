@@ -113,6 +113,7 @@ export type BusinessMaterialReportRow = {
   total_posts?: number;
   total_views?: number;
   downloads?: number | null;
+  download_rate?: number | null;
   views_per_download?: number | null;
 };
 

@@ -10,6 +10,13 @@ function metric(value: unknown) {
   return formatNumber(value);
 }
 
+function percent(value: unknown) {
+  if (value === null || value === undefined) return '—';
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '—';
+  return `${number.toFixed(2)}%`;
+}
+
 function dateOnly(value?: string) {
   return String(value || '').slice(0, 10) || '—';
 }
@@ -72,11 +79,14 @@ export function BusinessMaterialReport({ products }: { products: Product[] }) {
 
   const rows = payload?.rows || [];
   const totals = payload?.totals || {};
+  const totalDownloadRate = Number(totals.total_views || 0)
+    ? (Number(totals.downloads || 0) / Number(totals.total_views || 1)) * 100
+    : null;
   const summaryCards = [
-    { label: '总播放', value: totals.total_views, meta: `RF ${metric(totals.reelfarm_views)} · Clone ${metric(totals.clone_views)}` },
-    { label: '下载', value: totals.downloads, meta: 'Mixpanel Onboarding Unique' },
-    { label: '新素材', value: totals.total_materials, meta: `RF ${metric(totals.reelfarm_materials)} · Clone ${metric(totals.clone_materials)}` },
-    { label: '播放 / 下载', value: totals.downloads ? Math.round(Number(totals.total_views || 0) / Number(totals.downloads || 1)) : null, meta: '当前 range 的比例观察' }
+    { label: '总播放', value: metric(totals.total_views), meta: `RF ${metric(totals.reelfarm_views)} · Clone ${metric(totals.clone_views)}` },
+    { label: '下载', value: metric(totals.downloads), meta: 'Mixpanel Onboarding Unique' },
+    { label: '新素材', value: metric(totals.total_materials), meta: `RF ${metric(totals.reelfarm_materials)} · Clone ${metric(totals.clone_materials)}` },
+    { label: '下载 / 播放', value: percent(totalDownloadRate), meta: '下载 / 播放 * 100%' }
   ];
 
   return (
@@ -122,7 +132,7 @@ export function BusinessMaterialReport({ products }: { products: Product[] }) {
         {summaryCards.map(card => (
           <article key={card.label}>
             <span>{card.label}</span>
-            <strong>{metric(card.value)}</strong>
+            <strong>{card.value}</strong>
             <small>{card.meta}</small>
           </article>
         ))}
@@ -148,7 +158,7 @@ export function BusinessMaterialReport({ products }: { products: Product[] }) {
                 <th>总素材</th>
                 <th>总播放</th>
                 <th>下载</th>
-                <th>播放/下载</th>
+                <th>下载/播放</th>
               </tr>
             </thead>
             <tbody>
@@ -163,7 +173,7 @@ export function BusinessMaterialReport({ products }: { products: Product[] }) {
                   <td>{metric(row.total_materials)}</td>
                   <td><strong>{metric(row.total_views)}</strong></td>
                   <td><strong>{metric(row.downloads)}</strong></td>
-                  <td>{row.views_per_download ? metric(Math.round(row.views_per_download)) : '—'}</td>
+                  <td>{percent(row.download_rate)}</td>
                 </tr>
               )) : (
                 <tr>

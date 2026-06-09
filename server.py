@@ -3254,6 +3254,7 @@ def business_material_report_payload(query):
         source_date_from, source_date_to = source_dates_for_utc_window(window["utc_start"], window["utc_end"], source_tz)
         downloads = download_daily.get(report_date)
         total_views = int(stats.get("total_views") or 0)
+        download_rate = (int(downloads) / total_views * 100) if downloads and total_views else None
         rows.append({
             "report_date": report_date,
             "report_timezone": window["report_timezone"],
@@ -3277,6 +3278,7 @@ def business_material_report_payload(query):
             "total_posts": int(stats.get("total_posts") or 0),
             "total_views": total_views,
             "downloads": downloads,
+            "download_rate": download_rate,
             "views_per_download": (total_views / int(downloads)) if downloads else None,
         })
     return {
