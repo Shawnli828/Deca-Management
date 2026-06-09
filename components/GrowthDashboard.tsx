@@ -2,63 +2,48 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
-import type { Product, ProductGrowthPayload, ProductGrowthSnapshot } from '@/lib/types';
+import type { BusinessMaterialReportPayload, BusinessMaterialReportRow, Product } from '@/lib/types';
 import { formatNumber, getProductReelFarmCode } from '@/lib/utils';
 
-function metricValue(value: unknown) {
+function metric(value: unknown) {
   if (value === null || value === undefined) return '—';
   return formatNumber(value);
 }
 
-function GrowthDailyTable({ rows }: { rows: ProductGrowthSnapshot[] }) {
-  return (
-    <section className="growth-daily-card">
-      <div className="growth-daily-head">
-        <div>
-          <h2>每日记录</h2>
-          <p>按北京时间归档，每一行是一天的播放和 Onboarding Unique。</p>
-        </div>
-      </div>
+function percent(value: unknown) {
+  if (value === null || value === undefined) return '—';
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '—';
+  return `${number.toFixed(2)}%`;
+}
 
-      <div className="growth-daily-table-wrap">
-        <table className="growth-daily-table">
-          <thead>
-            <tr>
-              <th>日期</th>
-              <th>总播放</th>
-              <th>ReelFarm</th>
-              <th>Clone</th>
-              <th>Onboarding Unique</th>
-              <th>同步时间</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length ? rows.slice().reverse().map(row => (
-              <tr key={row.id || row.report_date}>
-                <td>{row.report_date || '—'}</td>
-                <td>{metricValue(row.total_views)}</td>
-                <td>{metricValue(row.reelfarm_views)}</td>
-                <td>{metricValue(row.clone_views)}</td>
-                <td>{metricValue(row.onboarding_unique)}</td>
-                <td>{row.synced_at ? row.synced_at.slice(0, 19).replace('T', ' ') : '—'}</td>
-              </tr>
-            )) : (
-              <tr>
-                <td colSpan={6}>暂无每日记录，先同步一次当前产品。</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
+function isoDate(offset = 0) {
+  const date = new Date();
+  date.setDate(date.getDate() + offset);
+  return date.toISOString().slice(0, 10);
+}
+
+function windowText(row: BusinessMaterialReportRow) {
+  const start = row.business_window_local?.start;
+  const end = row.business_window_local?.end;
+  if (!start || !end) return '—';
+  return `${start.slice(0, 16).replace('T', ' ')} → ${end.slice(0, 16).replace('T', ' ')}`;
+}
+
+function downloadRate(downloads: unknown, views: unknown) {
+  const downloadCount = Number(downloads || 0);
+  const viewCount = Number(views || 0);
+  if (!viewCount) return null;
+  return (downloadCount / viewCount) * 100;
 }
 
 export function GrowthDashboard({ products }: { products: Product[] }) {
   const [productId, setProductId] = useState('');
-  const [payload, setPayload] = useState<ProductGrowthPayload | null>(null);
+  const [days, setDays] = useState(7);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [payload, setPayload] = useState<BusinessMaterialReportPayload | null>(null);
   const [loading, setLoading] = useState(false);
-  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState('');
 
   const selectedProduct = useMemo(
@@ -66,32 +51,23 @@ export function GrowthDashboard({ products }: { products: Product[] }) {
     [products, productId]
   );
   const productCode = selectedProduct ? getProductReelFarmCode(selectedProduct) : '';
+  const customRange = Boolean(dateFrom || dateTo);
 
   async function loadGrowth() {
     if (!productCode) return;
     setLoading(true);
     setError('');
     try {
-      const next = await api.productGrowth(productCode, 30);
+      const next = await api.businessMaterialReport(productCode, {
+        days,
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined
+      });
       setPayload(next);
     } catch (loadError: any) {
-      setError(loadError?.message || '增长看板读取失败');
+      setError(loadError?.message || 'Growth 看板读取失败');
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function syncGrowth() {
-    if (!productCode) return;
-    setSyncing(true);
-    setError('');
-    try {
-      await api.syncProductGrowth(productCode, 30);
-      await loadGrowth();
-    } catch (syncError: any) {
-      setError(syncError?.message || '增长数据同步失败');
-    } finally {
-      setSyncing(false);
     }
   }
 
@@ -102,65 +78,123 @@ export function GrowthDashboard({ products }: { products: Product[] }) {
   useEffect(() => {
     loadGrowth();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [productCode]);
+  }, [productCode, days]);
 
-  const latest = payload?.latest || {};
-  const cards = [
-    { label: '昨日总播放量', value: latest.total_views, hint: `RF ${metricValue(latest.reelfarm_views)} · Clone ${metricValue(latest.clone_views)}` },
-    { label: '昨日 Onboarding Unique', value: latest.onboarding_unique, hint: 'Mixpanel unique users · 按北京时间归档' }
+  const rows = payload?.rows || [];
+  const totals = payload?.totals || {};
+  const totalRate = downloadRate(totals.downloads, totals.total_views);
+  const summaryCards = [
+    {
+      label: '新增播放',
+      value: metric(totals.total_views),
+      meta: `RF ${metric(totals.reelfarm_views)} · Clone ${metric(totals.clone_views)}`
+    },
+    {
+      label: 'Onboarding Unique',
+      value: metric(totals.downloads),
+      meta: 'Mixpanel unique onboarding'
+    },
+    {
+      label: '有增长 Posts',
+      value: metric(totals.total_posts),
+      meta: `RF ${metric(totals.reelfarm_materials)} · Clone ${metric(totals.clone_materials)}`
+    },
+    {
+      label: '下载 / 播放',
+      value: percent(totalRate),
+      meta: 'Onboarding Unique / 新增播放'
+    }
   ];
 
   return (
     <section className="growth-page">
-      <header className="growth-hero">
+      <header className="growth-report-head">
         <div>
-          <p className="dashboard-kicker">Product Growth</p>
-          <h1>Welcome to Deca Growth</h1>
-          <p>统一用北京时间看业务表现，数据源保留各自原始时区。</p>
+          <p className="dashboard-kicker">Growth</p>
+          <h1>业务日增长看板</h1>
+          <p>按北京时间 23:59 → 23:59 归档，播放量使用每日快照差值计算。</p>
         </div>
-        <div className="growth-actions">
+        <div className="growth-report-controls">
           <select value={selectedProduct?.id || ''} onChange={event => setProductId(event.target.value)}>
             {products.map(product => (
               <option value={product.id} key={product.id}>{product.name}</option>
             ))}
           </select>
-          <button type="button" onClick={syncGrowth} disabled={syncing || !productCode}>{syncing ? '同步中...' : '同步最近 30 天'}</button>
+          <div className="growth-report-preset" aria-label="业务日范围">
+            {[7, 14, 30].map(value => (
+              <button
+                className={!customRange && days === value ? 'active' : ''}
+                type="button"
+                onClick={() => {
+                  setDays(value);
+                  setDateFrom('');
+                  setDateTo('');
+                }}
+                key={value}
+              >
+                {value} 天
+              </button>
+            ))}
+          </div>
+          <input type="date" value={dateFrom} max={dateTo || isoDate()} onChange={event => setDateFrom(event.target.value)} />
+          <input type="date" value={dateTo} min={dateFrom || undefined} max={isoDate()} onChange={event => setDateTo(event.target.value)} />
+          <button type="button" onClick={loadGrowth} disabled={loading || !productCode}>{loading ? '读取中...' : '应用'}</button>
         </div>
       </header>
 
       {error ? <div className="growth-error">{error}</div> : null}
-      {loading ? <div className="growth-loading">正在读取增长快照...</div> : null}
+      {loading ? <div className="growth-loading">正在读取业务日增量...</div> : null}
 
       <div className="growth-metric-grid">
-        {cards.map(card => (
+        {summaryCards.map(card => (
           <article className="growth-metric-card" key={card.label}>
             <span>{card.label}</span>
-            <strong>{metricValue(card.value)}</strong>
-            <small>{card.hint}</small>
+            <strong>{card.value}</strong>
+            <small>{card.meta}</small>
           </article>
         ))}
       </div>
 
-      <GrowthDailyTable rows={payload?.series || []} />
-
-      <section className="growth-source-card">
-        <h2>Time Strategy</h2>
-        <div className="growth-source-grid">
+      <section className="growth-daily-card">
+        <div className="growth-daily-head">
           <div>
-            <span>看板口径</span>
-            <strong>{payload?.report_timezone || 'Asia/Shanghai'}</strong>
-            <p>团队统一按北京时间看每日数据。</p>
+            <h2>{selectedProduct?.name || productCode} · 每日增长记录</h2>
+            <p>{payload?.date_from || '—'} 至 {payload?.date_to || '—'} · {payload?.report_timezone || 'Asia/Shanghai'}</p>
           </div>
-          <div>
-            <span>Mixpanel 源口径</span>
-            <strong>{payload?.source_timezone || 'America/Los_Angeles'}</strong>
-            <p>同步时按 PDT 项目日期拉取，再归档为北京时间 report date。</p>
-          </div>
-          <div>
-            <span>播放源</span>
-            <strong>ReelFarm + Museon Clone</strong>
-            <p>两边都从本地关系型数据库读取，不在看板打开时实时调用第三方。</p>
-          </div>
+        </div>
+        <div className="growth-daily-table-wrap">
+          <table className="growth-daily-table growth-increment-table">
+            <thead>
+              <tr>
+                <th>业务日</th>
+                <th>北京时间窗口</th>
+                <th>RF 新增播放</th>
+                <th>Clone 新增播放</th>
+                <th>总新增播放</th>
+                <th>Onboarding Unique</th>
+                <th>下载/播放</th>
+                <th>有增长 Posts</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length ? rows.slice().reverse().map(row => (
+                <tr key={row.report_date}>
+                  <td><strong>{row.report_date}</strong></td>
+                  <td>{windowText(row)}</td>
+                  <td>{metric(row.reelfarm_views)}</td>
+                  <td>{metric(row.clone_views)}</td>
+                  <td><strong>{metric(row.total_views)}</strong></td>
+                  <td><strong>{metric(row.downloads)}</strong></td>
+                  <td>{percent(row.download_rate)}</td>
+                  <td>{metric(row.total_posts)}</td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan={8}>这个 range 暂时没有增长记录。</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </section>
     </section>

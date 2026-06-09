@@ -2928,9 +2928,13 @@ def business_material_report_windows(date_from="", date_to="", days=7):
     return windows
 
 
-def source_dates_for_utc_window(utc_start, utc_end, source_tz):
+def source_dates_for_utc_window(utc_start, utc_end, source_tz, clamp_to_today=False):
     start_source = utc_start.astimezone(source_tz).date()
     end_source = (utc_end - timedelta(microseconds=1)).astimezone(source_tz).date()
+    if clamp_to_today:
+        today_source = datetime.now(timezone.utc).astimezone(source_tz).date()
+        if end_source > today_source:
+            end_source = today_source
     return start_source.isoformat(), end_source.isoformat()
 
 
@@ -3094,6 +3098,90 @@ def product_business_material_daily_stats(product_code, utc_start, utc_end):
     return normalized
 
 
+def latest_snapshot_views_by_source(product_code, snapshot_date):
+    product_code = str(product_code or "").upper()
+    snapshot_date = str(snapshot_date or "")[:10]
+    if not product_code or not snapshot_date:
+        return {}
+    placeholder = db_placeholder()
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        rows = conn.execute(
+            f"""
+            SELECT
+                ch.code AS channel_code,
+                post.id AS post_id,
+                COALESCE((
+                    SELECT snap.view_count
+                    FROM post_daily_snapshots snap
+                    WHERE snap.post_id = post.id
+                      AND snap.snapshot_date <= {placeholder}
+                    ORDER BY snap.snapshot_date DESC
+                    LIMIT 1
+                ), 0) AS view_count
+            {relational_base_from()}
+            WHERE p.code = {placeholder}
+              AND ch.code IN ('TIKTOK', 'MUSEON_CLONE')
+              AND post.id IS NOT NULL
+            GROUP BY ch.code, post.id
+            """,
+            (snapshot_date, product_code),
+        ).fetchall()
+    snapshots = {}
+    for row in rows:
+        item = row_dict(row)
+        source = "clone" if item.get("channel_code") == "MUSEON_CLONE" else "reelfarm"
+        post_id = str(item.get("post_id") or "")
+        if post_id:
+            snapshots.setdefault(source, {})[post_id] = int(item.get("view_count") or 0)
+    return snapshots
+
+
+def product_business_growth_daily_stats(product_code, windows):
+    if not windows:
+        return {}
+    needed_dates = set()
+    for window in windows:
+        report_date = str(window["report_date"])
+        previous_date = (datetime.strptime(report_date, "%Y-%m-%d").date() - timedelta(days=1)).isoformat()
+        needed_dates.add(report_date)
+        needed_dates.add(previous_date)
+    snapshot_cache = {
+        snapshot_date: latest_snapshot_views_by_source(product_code, snapshot_date)
+        for snapshot_date in sorted(needed_dates)
+    }
+    daily = {}
+    for window in windows:
+        report_date = str(window["report_date"])
+        previous_date = (datetime.strptime(report_date, "%Y-%m-%d").date() - timedelta(days=1)).isoformat()
+        current = snapshot_cache.get(report_date, {})
+        previous = snapshot_cache.get(previous_date, {})
+        entry = {
+            "reelfarm_posts": 0,
+            "clone_posts": 0,
+            "reelfarm_views": 0,
+            "clone_views": 0,
+        }
+        for source, view_key, post_key in (
+            ("reelfarm", "reelfarm_views", "reelfarm_posts"),
+            ("clone", "clone_views", "clone_posts"),
+        ):
+            current_posts = current.get(source, {})
+            previous_posts = previous.get(source, {})
+            for post_id, current_views in current_posts.items():
+                previous_views = int(previous_posts.get(post_id) or 0)
+                delta = int(current_views or 0) - previous_views
+                if delta < 0:
+                    delta = 0
+                if delta > 0:
+                    entry[post_key] += 1
+                    entry[view_key] += delta
+        entry["total_posts"] = entry["reelfarm_posts"] + entry["clone_posts"]
+        entry["total_views"] = entry["reelfarm_views"] + entry["clone_views"]
+        daily[report_date] = entry
+    return daily
+
+
 def mixpanel_event_daily_counts(config, event_name, utc_start, utc_end, value_type="general"):
     project_id = (config or {}).get("project_id", "")
     username = (config or {}).get("username", "")
@@ -3103,7 +3191,9 @@ def mixpanel_event_daily_counts(config, event_name, utc_start, utc_end, value_ty
         return {}
     start_epoch = int(utc_start.timestamp())
     end_epoch = int(utc_end.timestamp())
-    source_date_from, source_date_to = source_dates_for_utc_window(utc_start, utc_end, mixpanel_timezone())
+    source_date_from, source_date_to = source_dates_for_utc_window(utc_start, utc_end, mixpanel_timezone(), clamp_to_today=True)
+    if not source_date_from or source_date_from > source_date_to:
+        return {}
     params = urlencode({
         "project_id": project_id,
         "event": json.dumps([event_name], ensure_ascii=False),
@@ -3168,7 +3258,9 @@ def mixpanel_event_business_material_counts(config, event_name, utc_start, utc_e
         return {}
     start_epoch = int(utc_start.timestamp())
     end_epoch = int(utc_end.timestamp())
-    source_date_from, source_date_to = source_dates_for_utc_window(utc_start, utc_end, mixpanel_timezone())
+    source_date_from, source_date_to = source_dates_for_utc_window(utc_start, utc_end, mixpanel_timezone(), clamp_to_today=True)
+    if not source_date_from or source_date_from > source_date_to:
+        return {}
     params = urlencode({
         "project_id": project_id,
         "event": json.dumps([event_name], ensure_ascii=False),
@@ -3391,7 +3483,7 @@ def business_material_report_payload(query):
         }
     overall_utc_start = windows[0]["utc_start"]
     overall_utc_end = windows[-1]["utc_end"]
-    material_daily = product_business_material_daily_stats(product_code, overall_utc_start, overall_utc_end)
+    material_daily = product_business_growth_daily_stats(product_code, windows)
     mixpanel_config = product_mixpanel_config(product_code)
     onboarding_event = product_mixpanel_event_name(product_code, "ONBOARDING")
     download_daily = mixpanel_event_business_material_counts(
@@ -3406,7 +3498,7 @@ def business_material_report_payload(query):
     for window in windows:
         report_date = window["report_date"]
         stats = material_daily.get(report_date, {})
-        source_date_from, source_date_to = source_dates_for_utc_window(window["utc_start"], window["utc_end"], source_tz)
+        source_date_from, source_date_to = source_dates_for_utc_window(window["utc_start"], window["utc_end"], source_tz, clamp_to_today=True)
         downloads = download_daily.get(report_date)
         total_views = int(stats.get("total_views") or 0)
         download_rate = (int(downloads) / total_views * 100) if downloads and total_views else None
@@ -3423,13 +3515,13 @@ def business_material_report_payload(query):
             },
             "source_date_from": source_date_from,
             "source_date_to": source_date_to,
-            "reelfarm_materials": int(stats.get("reelfarm_materials") or 0),
+            "reelfarm_materials": int(stats.get("reelfarm_materials") or stats.get("reelfarm_posts") or 0),
             "reelfarm_posts": int(stats.get("reelfarm_posts") or 0),
             "reelfarm_views": int(stats.get("reelfarm_views") or 0),
-            "clone_materials": int(stats.get("clone_materials") or 0),
+            "clone_materials": int(stats.get("clone_materials") or stats.get("clone_posts") or 0),
             "clone_posts": int(stats.get("clone_posts") or 0),
             "clone_views": int(stats.get("clone_views") or 0),
-            "total_materials": int(stats.get("total_materials") or 0),
+            "total_materials": int(stats.get("total_materials") or stats.get("total_posts") or 0),
             "total_posts": int(stats.get("total_posts") or 0),
             "total_views": total_views,
             "downloads": downloads,

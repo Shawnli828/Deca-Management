@@ -7,13 +7,12 @@ export function SideMenu({
   onToggle
 }: {
   tool: string;
-  setTool: (tool: 'growth' | 'businessReport' | 'dashboard' | 'slideshow' | 'cloneSlideshow' | 'publishCheck' | 'apiKeys') => void;
+  setTool: (tool: 'growth' | 'dashboard' | 'slideshow' | 'cloneSlideshow' | 'publishCheck' | 'apiKeys') => void;
   collapsed: boolean;
   onToggle: () => void;
 }) {
   const items = [
     { id: 'growth' as const, title: 'Growth', meta: 'Daily Metrics', icon: 'G' },
-    { id: 'businessReport' as const, title: '业务日表', meta: 'Material Report', icon: 'B' },
     { id: 'dashboard' as const, title: 'Dashboard', meta: 'Overview', icon: 'D' },
     { id: 'slideshow' as const, title: 'Slide Show', meta: 'Reel Farm', icon: 'S' },
     { id: 'cloneSlideshow' as const, title: 'Clone Slide Show', meta: 'Museon', icon: 'C' },
