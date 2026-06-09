@@ -29,7 +29,14 @@ export async function parseApiResponse<T>(response: Response, fallback = 'Reques
 }
 
 async function apiFetch<T>(url: string, init?: RequestInit, fallback?: string) {
-  return parseApiResponse<T>(await fetch(url, { cache: 'no-store', ...init }), fallback);
+  try {
+    return await parseApiResponse<T>(await fetch(url, { cache: 'no-store', ...init }), fallback);
+  } catch (error: any) {
+    if (error?.message === 'Failed to fetch') {
+      throw new Error(`${fallback || 'Request failed'}: API 连接失败，请检查部署或网络。`);
+    }
+    throw error;
+  }
 }
 
 export const api = {

@@ -2743,13 +2743,64 @@ def product_channel_views_for_window(product_code, channel_code, utc_start, utc_
     }
 
 
-def mixpanel_event_total(config, event_name, utc_start, utc_end, value_type="general"):
+def growth_report_windows(days):
+    tz = report_timezone()
+    current_local = datetime.now(timezone.utc).astimezone(tz)
+    today_start = datetime(current_local.year, current_local.month, current_local.day, tzinfo=tz)
+    windows = []
+    for offset in range(days, 0, -1):
+        report_date = (today_start - timedelta(days=offset)).date().isoformat()
+        windows.append(report_day_window(report_date, tz))
+    return windows
+
+
+def report_date_for_utc_datetime(value, tz=None):
+    tz = tz or report_timezone()
+    if not isinstance(value, datetime):
+        return ""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(tz).date().isoformat()
+
+
+def product_channel_daily_views(product_code, channel_code, utc_start, utc_end):
+    placeholder = db_placeholder()
+    daily = {}
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        rows = conn.execute(
+            f"""
+            SELECT
+                post.id AS post_id,
+                post.published_at AS published_at,
+                COALESCE(post.view_count, 0) AS view_count
+            {relational_base_from()}
+            WHERE ch.code = {placeholder}
+              AND p.code = {placeholder}
+              AND post.published_at >= {placeholder}
+              AND post.published_at < {placeholder}
+              AND post.id IS NOT NULL
+            GROUP BY post.id, post.published_at, post.view_count
+            """,
+            (channel_code, str(product_code or "").upper(), utc_start.isoformat(), utc_end.isoformat()),
+        ).fetchall()
+    for row in rows:
+        item = row_dict(row)
+        published_at = parse_iso_datetime(item.get("published_at"))
+        report_date = report_date_for_utc_datetime(published_at)
+        if not report_date:
+            continue
+        daily[report_date] = daily.get(report_date, 0) + int(item.get("view_count") or 0)
+    return daily
+
+
+def mixpanel_event_daily_counts(config, event_name, utc_start, utc_end, value_type="general"):
     project_id = (config or {}).get("project_id", "")
     username = (config or {}).get("username", "")
     secret = (config or {}).get("secret", "")
     region = (config or {}).get("region", MIXPANEL_REGION)
     if not project_id or not username or not secret or not event_name:
-        return None
+        return {}
     start_epoch = int(utc_start.timestamp())
     end_epoch = int(utc_end.timestamp())
     source_date_from, source_date_to = source_dates_for_utc_window(utc_start, utc_end, mixpanel_timezone())
@@ -2769,15 +2820,15 @@ def mixpanel_event_total(config, event_name, utc_start, utc_end, value_type="gen
         },
     )
     try:
-        with urlopen(request, timeout=30, context=make_ssl_context()) as response:
+        with urlopen(request, timeout=60, context=make_ssl_context()) as response:
             payload = response.read().decode("utf-8")
     except HTTPError as error:
         detail = error.read().decode("utf-8", errors="ignore")[:240]
         raise RuntimeError(f"Mixpanel query failed: {error.code} {detail}") from error
     except (URLError, TimeoutError) as error:
         raise RuntimeError(f"Mixpanel query failed: {error}") from error
-    unique_ids = set()
-    total = 0
+    totals = {}
+    unique_ids = {}
     for line in payload.splitlines():
         if not line.strip():
             continue
@@ -2785,12 +2836,35 @@ def mixpanel_event_total(config, event_name, utc_start, utc_end, value_type="gen
             event = json.loads(line)
         except json.JSONDecodeError:
             continue
-        total += 1
         properties = event.get("properties") if isinstance(event, dict) else {}
-        distinct_id = properties.get("distinct_id") if isinstance(properties, dict) else None
+        if not isinstance(properties, dict):
+            properties = {}
+        raw_time = properties.get("time")
+        try:
+            timestamp = float(raw_time)
+        except (TypeError, ValueError):
+            continue
+        if timestamp > 10_000_000_000:
+            timestamp = timestamp / 1000
+        if timestamp < start_epoch or timestamp >= end_epoch:
+            continue
+        report_date = report_date_for_utc_datetime(datetime.fromtimestamp(timestamp, timezone.utc))
+        if not report_date:
+            continue
+        totals[report_date] = totals.get(report_date, 0) + 1
+        distinct_id = properties.get("distinct_id")
         if distinct_id:
-            unique_ids.add(str(distinct_id))
-    return len(unique_ids) if value_type == "unique" else total
+            unique_ids.setdefault(report_date, set()).add(str(distinct_id))
+    if value_type == "unique":
+        return {report_date: len(ids) for report_date, ids in unique_ids.items()}
+    return totals
+
+
+def mixpanel_event_total(config, event_name, utc_start, utc_end, value_type="general"):
+    daily = mixpanel_event_daily_counts(config, event_name, utc_start, utc_end, value_type)
+    if not daily and not (config or {}).get("project_id"):
+        return None
+    return sum(int(value or 0) for value in daily.values())
 
 
 def sync_product_growth_snapshot(product_code, report_date=""):
@@ -2831,18 +2905,54 @@ def sync_product_growth_snapshot(product_code, report_date=""):
 
 
 def sync_product_growth_snapshots(product_code, days=30):
+    product_code = str(product_code or "").strip().upper()
+    if not product_code:
+        raise ValueError("product_code is required.")
     try:
         days = int(days)
     except (TypeError, ValueError):
         days = 30
     days = max(1, min(90, days))
-    tz = report_timezone()
-    current_local = datetime.now(timezone.utc).astimezone(tz)
-    today_start = datetime(current_local.year, current_local.month, current_local.day, tzinfo=tz)
+    windows = growth_report_windows(days)
+    if not windows:
+        return []
+    overall_utc_start = windows[0]["utc_start"]
+    overall_utc_end = windows[-1]["utc_end"]
+    source_tz = mixpanel_timezone()
+    rf_daily = product_channel_daily_views(product_code, "TIKTOK", overall_utc_start, overall_utc_end)
+    clone_daily = product_channel_daily_views(product_code, "MUSEON_CLONE", overall_utc_start, overall_utc_end)
+    mixpanel_config = product_mixpanel_config(product_code)
+    download_daily = mixpanel_event_daily_counts(mixpanel_config, MIXPANEL_DOWNLOAD_EVENT, overall_utc_start, overall_utc_end, "general")
+    onboarding_daily = mixpanel_event_daily_counts(mixpanel_config, MIXPANEL_ONBOARDING_EVENT, overall_utc_start, overall_utc_end, "unique")
+    now = datetime.now(timezone.utc).isoformat()
     records = []
-    for offset in range(days, 0, -1):
-        report_date = (today_start - timedelta(days=offset)).date().isoformat()
-        records.append(sync_product_growth_snapshot(product_code, report_date))
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        for window in windows:
+            report_date = window["report_date"]
+            source_date_from, source_date_to = source_dates_for_utc_window(window["utc_start"], window["utc_end"], source_tz)
+            reelfarm_views = int(rf_daily.get(report_date) or 0)
+            clone_views = int(clone_daily.get(report_date) or 0)
+            record = {
+                "id": stable_id("product_daily_growth_snapshot", product_code, report_date),
+                "product_code": product_code,
+                "report_date": report_date,
+                "report_timezone": window["report_timezone"],
+                "source_timezone": getattr(source_tz, "key", MIXPANEL_TIMEZONE_NAME),
+                "utc_start": window["utc_start"].isoformat(),
+                "utc_end": window["utc_end"].isoformat(),
+                "source_date_from": source_date_from,
+                "source_date_to": source_date_to,
+                "reelfarm_views": reelfarm_views,
+                "clone_views": clone_views,
+                "total_views": reelfarm_views + clone_views,
+                "download_count": download_daily.get(report_date),
+                "onboarding_unique": onboarding_daily.get(report_date),
+                "synced_at": now,
+            }
+            upsert_row(conn, "product_daily_growth_snapshots", record, ["product_code", "report_date"])
+            records.append(record)
+        conn.commit()
     return records
 
 
