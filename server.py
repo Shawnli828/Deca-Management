@@ -4256,8 +4256,6 @@ def query_reelfarm_accounts(query):
 
 
 def query_accounts(query):
-    if query_value(query, "source").strip().lower() in {"museon_clone", "clone", "museon"}:
-        return query_museon_clone_accounts(query)
     return query_reelfarm_accounts(query)
 
 
@@ -4757,10 +4755,7 @@ def data_query_payload(query):
     elif resource == "accounts":
         response["data"] = query_accounts(query)
     elif resource in {"posts", "account_posts"}:
-        if resource == "account_posts" and query_value(query, "source").strip().lower() in {"museon_clone", "clone", "museon"}:
-            rows, pagination = query_museon_clone_account_posts(query)
-        else:
-            rows, pagination = query_posts(query)
+        rows, pagination = query_posts(query)
         response["data"] = rows[: pagination["limit"]]
         response["pagination"] = pagination
     elif resource == "materials":

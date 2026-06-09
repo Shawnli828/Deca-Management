@@ -93,11 +93,17 @@ export const api = {
       undefined,
       'Failed to load business day report'
     ),
-  accounts: (productCode: string, countryCode: string, days: number) =>
+  accounts: (productCode: string, countryCode: string, days: number, source?: string) =>
     api.dataQuery<{ ok: boolean; data: AccountSummary[] }>(
-      new URLSearchParams({ resource: 'accounts', product_code: productCode, country_code: countryCode, days: String(days) })
+      new URLSearchParams({
+        resource: 'accounts',
+        product_code: productCode,
+        country_code: countryCode,
+        days: String(days),
+        ...(source ? { source } : {})
+      })
     ),
-  accountPosts: (productCode: string, countryCode: string, accountId: string, days: number, limit: number, offset: number) =>
+  accountPosts: (productCode: string, countryCode: string, accountId: string, days: number, limit: number, offset: number, source?: string) =>
     api.dataQuery<{ ok: boolean; data: DetailedPostRow[]; pagination: { limit: number; offset: number; has_more: boolean; total?: number } }>(
       new URLSearchParams({
         resource: 'account_posts',
@@ -106,7 +112,8 @@ export const api = {
         account_id: accountId,
         days: String(days),
         limit: String(limit),
-        offset: String(offset)
+        offset: String(offset),
+        ...(source ? { source } : {})
       })
     ),
   syncCountry: (payload: Record<string, unknown>) =>
