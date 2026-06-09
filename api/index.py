@@ -27,6 +27,7 @@ from server import (
     delete_account_tag,
     connect_db,
     external_api_key_authorized,
+    growth_dashboard_payload,
     init_relational_schema,
     load_data,
     load_publish_check_state,
@@ -41,6 +42,7 @@ from server import (
     save_data,
     save_publish_check_state,
     send_publish_check_reminder,
+    sync_product_growth_snapshots,
     sync_all_reelfarm_records,
     sync_museon_clone_country,
     sync_reelfarm_country,
@@ -389,6 +391,30 @@ def get_data_query(request: Request, authorization: str | None = Header(default=
         return data_query_payload(query_as_lists(request))
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/growth")
+def get_growth_dashboard(request: Request):
+    require_dashboard_auth(request)
+    try:
+        return growth_dashboard_payload(query_as_lists(request))
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/growth/sync-product")
+def post_growth_sync_product(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
+    require_dashboard_auth(request)
+    try:
+        records = sync_product_growth_snapshots(
+            str(payload.get("product_code", "")).strip(),
+            payload.get("days", 30),
+        )
+        return {"ok": True, "count": len(records), "records": records}
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
 
 
 @app.get("/api/reelfarm/matches")

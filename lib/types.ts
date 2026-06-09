@@ -59,6 +59,43 @@ export type ProductKpis = {
   };
 };
 
+export type ProductGrowthSnapshot = {
+  id?: string;
+  product_code?: string;
+  report_date?: string;
+  report_timezone?: string;
+  source_timezone?: string;
+  utc_start?: string;
+  utc_end?: string;
+  source_date_from?: string;
+  source_date_to?: string;
+  reelfarm_views?: number | null;
+  clone_views?: number | null;
+  total_views?: number | null;
+  download_count?: number | null;
+  onboarding_unique?: number | null;
+  synced_at?: string;
+};
+
+export type ProductGrowthPayload = {
+  ok: boolean;
+  product_code: string;
+  report_timezone: string;
+  source_timezone: string;
+  date_from: string;
+  date_to: string;
+  latest?: ProductGrowthSnapshot;
+  series: ProductGrowthSnapshot[];
+  totals: {
+    total_views?: number;
+    reelfarm_views?: number;
+    clone_views?: number;
+    download_count?: number;
+    onboarding_unique?: number;
+  };
+  generated_at?: string;
+};
+
 export type ProductRollupCountry = {
   country_id?: string;
   country_code?: string;

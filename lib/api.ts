@@ -6,6 +6,7 @@ import type {
   PublishCheckResult,
   PublishCheckState,
   Product,
+  ProductGrowthPayload,
   ProductKpis,
   ProductRollup,
   ReelFarmResult
@@ -61,6 +62,18 @@ export const api = {
     api.dataQuery<{ ok: boolean; data: ProductRollup[] }>(
       new URLSearchParams({ resource: 'product_rollups', ...(source ? { source } : {}) })
     ),
+  productGrowth: (productCode: string, days = 30) =>
+    apiFetch<ProductGrowthPayload>(
+      `/api/growth?${new URLSearchParams({ product_code: productCode, days: String(days) }).toString()}`,
+      undefined,
+      'Failed to load growth dashboard'
+    ),
+  syncProductGrowth: (productCode: string, days = 30) =>
+    apiFetch<{ ok: boolean; count: number; records: ProductGrowthPayload['series'] }>('/api/growth/sync-product', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_code: productCode, days })
+    }, 'Failed to sync growth snapshots'),
   accounts: (productCode: string, countryCode: string, days: number) =>
     api.dataQuery<{ ok: boolean; data: AccountSummary[] }>(
       new URLSearchParams({ resource: 'accounts', product_code: productCode, country_code: countryCode, days: String(days) })

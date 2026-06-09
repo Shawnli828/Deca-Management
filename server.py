@@ -20,6 +20,10 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote, unquote, urlencode, urlparse
 from urllib.request import Request, urlopen
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:  # pragma: no cover
+    ZoneInfo = None
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -43,6 +47,14 @@ MUSEON_BASE_URL = os.environ.get("MUSEON_BASE_URL", "https://api.museon.ai/exter
 MUSEON_API_KEY = os.environ.get("MUSEON_API_KEY", "").strip()
 MUSEON_WORKSPACE_ID = os.environ.get("MUSEON_WORKSPACE_ID", "b5e25f84-b3ed-484b-b467-901a4afcd9c6").strip()
 MUSEON_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/124 Safari/537.36"
+MIXPANEL_SERVICE_ACCOUNT_USERNAME = os.environ.get("MIXPANEL_SERVICE_ACCOUNT_USERNAME", "").strip()
+MIXPANEL_SERVICE_ACCOUNT_SECRET = os.environ.get("MIXPANEL_SERVICE_ACCOUNT_SECRET", "").strip()
+MIXPANEL_PROJECT_ID = os.environ.get("MIXPANEL_PROJECT_ID", "").strip()
+MIXPANEL_REGION = os.environ.get("MIXPANEL_REGION", "standard").strip().lower()
+MIXPANEL_DOWNLOAD_EVENT = os.environ.get("MIXPANEL_DOWNLOAD_EVENT", "Download").strip()
+MIXPANEL_ONBOARDING_EVENT = os.environ.get("MIXPANEL_ONBOARDING_EVENT", "Onboarding Step Viewed").strip()
+REPORT_TIMEZONE_NAME = os.environ.get("REPORT_TIMEZONE", "Asia/Shanghai").strip()
+MIXPANEL_TIMEZONE_NAME = os.environ.get("MIXPANEL_TIMEZONE", "America/Los_Angeles").strip()
 FEISHU_WEBHOOK_URL = os.environ.get("FEISHU_WEBHOOK_URL", "").strip()
 FEISHU_WEBHOOK_SECRET = os.environ.get("FEISHU_WEBHOOK_SECRET", "").strip()
 SEED_DATA_PATH = BASE_DIR / "seed_data.json"
@@ -462,6 +474,26 @@ def init_relational_schema(conn):
             UNIQUE(product_code, tag)
         )
         """,
+        """
+        CREATE TABLE IF NOT EXISTS product_daily_growth_snapshots (
+            id TEXT PRIMARY KEY,
+            product_code TEXT NOT NULL,
+            report_date TEXT NOT NULL,
+            report_timezone TEXT NOT NULL,
+            source_timezone TEXT NOT NULL,
+            utc_start TEXT NOT NULL,
+            utc_end TEXT NOT NULL,
+            source_date_from TEXT,
+            source_date_to TEXT,
+            reelfarm_views INTEGER,
+            clone_views INTEGER,
+            total_views INTEGER,
+            download_count INTEGER,
+            onboarding_unique INTEGER,
+            synced_at TEXT NOT NULL,
+            UNIQUE(product_code, report_date)
+        )
+        """,
         "CREATE INDEX IF NOT EXISTS idx_post_daily_snapshots_snapshot_date ON post_daily_snapshots(snapshot_date)",
         "CREATE INDEX IF NOT EXISTS idx_post_daily_snapshots_post_id ON post_daily_snapshots(post_id)",
         "CREATE INDEX IF NOT EXISTS idx_account_tags_account_id ON account_tags(account_id)",
@@ -473,6 +505,8 @@ def init_relational_schema(conn):
         "CREATE INDEX IF NOT EXISTS idx_posts_material_id ON posts(material_id)",
         "CREATE INDEX IF NOT EXISTS idx_materials_automation_id ON materials(automation_id)",
         "CREATE INDEX IF NOT EXISTS idx_automations_product_market_channel_id ON automations(product_market_channel_id)",
+        "CREATE INDEX IF NOT EXISTS idx_product_daily_growth_snapshots_product_date ON product_daily_growth_snapshots(product_code, report_date)",
+        "CREATE INDEX IF NOT EXISTS idx_product_daily_growth_snapshots_report_date ON product_daily_growth_snapshots(report_date)",
     ]
     for statement in statements:
         conn.execute(statement)
@@ -784,6 +818,7 @@ def relational_table_counts(conn):
         "materials",
         "posts",
         "post_daily_snapshots",
+        "product_daily_growth_snapshots",
     ):
         row = conn.execute(f"SELECT COUNT(*) AS count FROM {table}").fetchone()
         counts[table] = int(row["count"] if row else 0)
@@ -2589,6 +2624,278 @@ def previous_complete_windows(now_utc=None):
     }
 
 
+def named_timezone(name, fallback):
+    if ZoneInfo:
+        try:
+            return ZoneInfo(name)
+        except Exception:
+            pass
+    return fallback
+
+
+def report_timezone():
+    return named_timezone(REPORT_TIMEZONE_NAME, BUSINESS_TIMEZONE)
+
+
+def mixpanel_timezone():
+    return named_timezone(MIXPANEL_TIMEZONE_NAME, timezone(timedelta(hours=-7)))
+
+
+def product_mixpanel_config(product_code):
+    code = str(product_code or "").strip().upper()
+    return {
+        "project_id": (
+            os.environ.get(f"MIXPANEL_PROJECT_ID_{code}", "").strip()
+            or os.environ.get(f"{code}_MIXPANEL_PROJECT_ID", "").strip()
+            or MIXPANEL_PROJECT_ID
+        ),
+        "username": (
+            os.environ.get(f"MIXPANEL_SERVICE_ACCOUNT_USERNAME_{code}", "").strip()
+            or os.environ.get(f"{code}_MIXPANEL_SERVICE_ACCOUNT_USERNAME", "").strip()
+            or MIXPANEL_SERVICE_ACCOUNT_USERNAME
+        ),
+        "secret": (
+            os.environ.get(f"MIXPANEL_SERVICE_ACCOUNT_SECRET_{code}", "").strip()
+            or os.environ.get(f"{code}_MIXPANEL_SERVICE_ACCOUNT_SECRET", "").strip()
+            or MIXPANEL_SERVICE_ACCOUNT_SECRET
+        ),
+        "region": (
+            os.environ.get(f"MIXPANEL_REGION_{code}", "").strip().lower()
+            or os.environ.get(f"{code}_MIXPANEL_REGION", "").strip().lower()
+            or MIXPANEL_REGION
+        ),
+    }
+
+
+def product_mixpanel_project_id(product_code):
+    return product_mixpanel_config(product_code)["project_id"]
+
+
+def mixpanel_query_base_url(region=None):
+    region = (region or MIXPANEL_REGION).strip().lower()
+    if region == "eu":
+        return "https://eu.mixpanel.com/api/query"
+    if region in {"in", "india"}:
+        return "https://in.mixpanel.com/api/query"
+    return "https://mixpanel.com/api/query"
+
+
+def mixpanel_export_base_url(region=None):
+    region = (region or MIXPANEL_REGION).strip().lower()
+    if region == "eu":
+        return "https://data-eu.mixpanel.com/api/2.0/export"
+    if region in {"in", "india"}:
+        return "https://data-in.mixpanel.com/api/2.0/export"
+    return "https://data.mixpanel.com/api/2.0/export"
+
+
+def report_day_window(report_date="", tz=None):
+    tz = tz or report_timezone()
+    if report_date:
+        date_value = datetime.strptime(str(report_date), "%Y-%m-%d").date()
+    else:
+        current_local = datetime.now(timezone.utc).astimezone(tz)
+        date_value = (datetime(current_local.year, current_local.month, current_local.day, tzinfo=tz) - timedelta(days=1)).date()
+    start_local = datetime(date_value.year, date_value.month, date_value.day, tzinfo=tz)
+    end_local = start_local + timedelta(days=1)
+    return {
+        "report_date": date_value.isoformat(),
+        "report_timezone": getattr(tz, "key", REPORT_TIMEZONE_NAME),
+        "start_local": start_local,
+        "end_local": end_local,
+        "utc_start": start_local.astimezone(timezone.utc),
+        "utc_end": end_local.astimezone(timezone.utc),
+    }
+
+
+def source_dates_for_utc_window(utc_start, utc_end, source_tz):
+    start_source = utc_start.astimezone(source_tz).date()
+    end_source = (utc_end - timedelta(microseconds=1)).astimezone(source_tz).date()
+    return start_source.isoformat(), end_source.isoformat()
+
+
+def product_channel_views_for_window(product_code, channel_code, utc_start, utc_end):
+    placeholder = db_placeholder()
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        row = conn.execute(
+            f"""
+            SELECT
+                COUNT(DISTINCT post.id) AS posts,
+                COUNT(DISTINCT acc.id) AS creators,
+                COALESCE(SUM(post.view_count), 0) AS views,
+                COALESCE(SUM(post.like_count), 0) AS likes
+            {relational_base_from()}
+            WHERE ch.code = {placeholder}
+              AND p.code = {placeholder}
+              AND post.published_at >= {placeholder}
+              AND post.published_at < {placeholder}
+              AND post.id IS NOT NULL
+            """,
+            (channel_code, str(product_code or "").upper(), utc_start.isoformat(), utc_end.isoformat()),
+        ).fetchone()
+    data = row_dict(row)
+    return {
+        "posts": int(data.get("posts") or 0),
+        "creators": int(data.get("creators") or 0),
+        "views": int(data.get("views") or 0),
+        "likes": int(data.get("likes") or 0),
+    }
+
+
+def mixpanel_event_total(config, event_name, utc_start, utc_end, value_type="general"):
+    project_id = (config or {}).get("project_id", "")
+    username = (config or {}).get("username", "")
+    secret = (config or {}).get("secret", "")
+    region = (config or {}).get("region", MIXPANEL_REGION)
+    if not project_id or not username or not secret or not event_name:
+        return None
+    start_epoch = int(utc_start.timestamp())
+    end_epoch = int(utc_end.timestamp())
+    source_date_from, source_date_to = source_dates_for_utc_window(utc_start, utc_end, mixpanel_timezone())
+    params = urlencode({
+        "project_id": project_id,
+        "event": json.dumps([event_name], ensure_ascii=False),
+        "from_date": source_date_from,
+        "to_date": source_date_to,
+        "where": f'properties["time"] >= {start_epoch} and properties["time"] < {end_epoch}',
+    })
+    credentials = f"{username}:{secret}".encode("utf-8")
+    request = Request(
+        f"{mixpanel_export_base_url(region)}?{params}",
+        headers={
+            "Authorization": "Basic " + base64.b64encode(credentials).decode("ascii"),
+            "Accept": "text/plain",
+        },
+    )
+    try:
+        with urlopen(request, timeout=30, context=make_ssl_context()) as response:
+            payload = response.read().decode("utf-8")
+    except HTTPError as error:
+        detail = error.read().decode("utf-8", errors="ignore")[:240]
+        raise RuntimeError(f"Mixpanel query failed: {error.code} {detail}") from error
+    except (URLError, TimeoutError) as error:
+        raise RuntimeError(f"Mixpanel query failed: {error}") from error
+    unique_ids = set()
+    total = 0
+    for line in payload.splitlines():
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        total += 1
+        properties = event.get("properties") if isinstance(event, dict) else {}
+        distinct_id = properties.get("distinct_id") if isinstance(properties, dict) else None
+        if distinct_id:
+            unique_ids.add(str(distinct_id))
+    return len(unique_ids) if value_type == "unique" else total
+
+
+def sync_product_growth_snapshot(product_code, report_date=""):
+    product_code = str(product_code or "").strip().upper()
+    if not product_code:
+        raise ValueError("product_code is required.")
+    window = report_day_window(report_date)
+    source_tz = mixpanel_timezone()
+    source_date_from, source_date_to = source_dates_for_utc_window(window["utc_start"], window["utc_end"], source_tz)
+    rf = product_channel_views_for_window(product_code, "TIKTOK", window["utc_start"], window["utc_end"])
+    clone = product_channel_views_for_window(product_code, "MUSEON_CLONE", window["utc_start"], window["utc_end"])
+    mixpanel_config = product_mixpanel_config(product_code)
+    download_count = mixpanel_event_total(mixpanel_config, MIXPANEL_DOWNLOAD_EVENT, window["utc_start"], window["utc_end"], "general")
+    onboarding_unique = mixpanel_event_total(mixpanel_config, MIXPANEL_ONBOARDING_EVENT, window["utc_start"], window["utc_end"], "unique")
+    now = datetime.now(timezone.utc).isoformat()
+    record = {
+        "id": stable_id("product_daily_growth_snapshot", product_code, window["report_date"]),
+        "product_code": product_code,
+        "report_date": window["report_date"],
+        "report_timezone": window["report_timezone"],
+        "source_timezone": getattr(source_tz, "key", MIXPANEL_TIMEZONE_NAME),
+        "utc_start": window["utc_start"].isoformat(),
+        "utc_end": window["utc_end"].isoformat(),
+        "source_date_from": source_date_from,
+        "source_date_to": source_date_to,
+        "reelfarm_views": rf["views"],
+        "clone_views": clone["views"],
+        "total_views": rf["views"] + clone["views"],
+        "download_count": download_count,
+        "onboarding_unique": onboarding_unique,
+        "synced_at": now,
+    }
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        upsert_row(conn, "product_daily_growth_snapshots", record, ["product_code", "report_date"])
+        conn.commit()
+    return record
+
+
+def sync_product_growth_snapshots(product_code, days=30):
+    try:
+        days = int(days)
+    except (TypeError, ValueError):
+        days = 30
+    days = max(1, min(90, days))
+    tz = report_timezone()
+    current_local = datetime.now(timezone.utc).astimezone(tz)
+    today_start = datetime(current_local.year, current_local.month, current_local.day, tzinfo=tz)
+    records = []
+    for offset in range(days, 0, -1):
+        report_date = (today_start - timedelta(days=offset)).date().isoformat()
+        records.append(sync_product_growth_snapshot(product_code, report_date))
+    return records
+
+
+def growth_dashboard_payload(query):
+    product_code = query_value(query, "product_code").upper()
+    if not product_code:
+        raise ValueError("product_code is required.")
+    try:
+        days = int(query_value(query, "days", 30))
+    except ValueError:
+        days = 30
+    days = max(1, min(180, days))
+    tz = report_timezone()
+    current_local = datetime.now(timezone.utc).astimezone(tz)
+    today_start = datetime(current_local.year, current_local.month, current_local.day, tzinfo=tz)
+    date_to = (today_start - timedelta(days=1)).date().isoformat()
+    date_from = (today_start - timedelta(days=days)).date().isoformat()
+    placeholder = db_placeholder()
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        rows = conn.execute(
+            f"""
+            SELECT *
+            FROM product_daily_growth_snapshots
+            WHERE product_code = {placeholder}
+              AND report_date >= {placeholder}
+              AND report_date <= {placeholder}
+            ORDER BY report_date
+            """,
+            (product_code, date_from, date_to),
+        ).fetchall()
+    data = [row_dict(row) for row in rows]
+    latest = data[-1] if data else {}
+    return {
+        "ok": True,
+        "product_code": product_code,
+        "report_timezone": REPORT_TIMEZONE_NAME,
+        "source_timezone": MIXPANEL_TIMEZONE_NAME,
+        "date_from": date_from,
+        "date_to": date_to,
+        "latest": latest,
+        "series": data,
+        "totals": {
+            "total_views": sum(int(row.get("total_views") or 0) for row in data),
+            "reelfarm_views": sum(int(row.get("reelfarm_views") or 0) for row in data),
+            "clone_views": sum(int(row.get("clone_views") or 0) for row in data),
+            "download_count": sum(int(row.get("download_count") or 0) for row in data if row.get("download_count") is not None),
+            "onboarding_unique": sum(int(row.get("onboarding_unique") or 0) for row in data if row.get("onboarding_unique") is not None),
+        },
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 def clean_tag(value):
     tag = re.sub(r"\s+", " ", str(value or "")).strip()
     return tag[:40]
@@ -4318,6 +4625,14 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
                 self.send_json(400, {"ok": False, "error": str(error)})
             return
 
+        if path == "/api/growth":
+            query = parse_qs(urlparse(self.path).query)
+            try:
+                self.send_json(200, growth_dashboard_payload(query))
+            except ValueError as error:
+                self.send_json(400, {"ok": False, "error": str(error)})
+            return
+
         if path == "/api/reelfarm/config":
             self.send_json(
                 200,
@@ -4559,6 +4874,24 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
                         str(payload.get("country_code", "") if isinstance(payload, dict) else "").strip(),
                     ),
                 )
+            except ValueError as error:
+                self.send_json(400, {"error": str(error)})
+            except RuntimeError as error:
+                self.send_json(502, {"error": str(error)})
+            return
+
+        if path == "/api/growth/sync-product":
+            try:
+                payload = self.read_json_body() or {}
+            except json.JSONDecodeError:
+                self.send_json(400, {"error": "Invalid JSON"})
+                return
+            try:
+                records = sync_product_growth_snapshots(
+                    str(payload.get("product_code", "") if isinstance(payload, dict) else "").strip(),
+                    payload.get("days", 30) if isinstance(payload, dict) else 30,
+                )
+                self.send_json(200, {"ok": True, "count": len(records), "records": records})
             except ValueError as error:
                 self.send_json(400, {"error": str(error)})
             except RuntimeError as error:

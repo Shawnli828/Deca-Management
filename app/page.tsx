@@ -8,6 +8,7 @@ import { CountrySettingsModal } from '@/components/CountrySettingsModal';
 import { CountryWorkspace } from '@/components/CountryWorkspace';
 import { DashboardHome } from '@/components/DashboardHome';
 import { DatabaseModal } from '@/components/DatabaseModal';
+import { GrowthDashboard } from '@/components/GrowthDashboard';
 import { ProductList } from '@/components/ProductList';
 import { ProductSettingsModal } from '@/components/ProductSettingsModal';
 import { PublishCheckBoard } from '@/components/PublishCheckBoard';
@@ -19,7 +20,7 @@ import { buildCountryAutomationPrefix, cardStateKey, codeFromName, getCountryRee
 export default function DashboardPage() {
   const [authenticated, setAuthenticated] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
-  const [tool, setTool] = useState<'dashboard' | 'slideshow' | 'cloneSlideshow' | 'publishCheck' | 'apiKeys'>('dashboard');
+  const [tool, setTool] = useState<'growth' | 'dashboard' | 'slideshow' | 'cloneSlideshow' | 'publishCheck' | 'apiKeys'>('growth');
   const [sideCollapsed, setSideCollapsed] = useState(false);
   const [page, setPage] = useState<'products' | 'product' | 'country'>('products');
   const [selectedProductId, setSelectedProductId] = useState('');
@@ -752,6 +753,9 @@ export default function DashboardPage() {
       <div className={`app-layout ${sideCollapsed ? 'side-collapsed' : ''}`}>
         <SideMenu tool={tool} setTool={setTool} collapsed={sideCollapsed} onToggle={() => setSideCollapsed(value => !value)} />
         <main className="shell">
+          <section className={`tool-page ${tool === 'growth' ? 'active' : ''}`}>
+            <GrowthDashboard products={products} />
+          </section>
           <section className={`tool-page ${tool === 'dashboard' ? 'active' : ''}`}>
             <DashboardHome
               products={products}
