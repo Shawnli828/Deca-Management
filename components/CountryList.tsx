@@ -311,6 +311,28 @@ export function CountryList({
     ));
   }
 
+  async function deleteProductTagOption(tag: string) {
+    const productCode = getProductReelFarmCode(product);
+    const nextTag = tag.trim();
+    if (!productCode || !nextTag) return;
+    const confirmed = window.confirm(`删除 ${formatTagLabel(nextTag)} 吗？这个 Tag 会从当前产品所有账号上移除。`);
+    if (!confirmed) return;
+    const payload = await api.deleteProductTag(productCode, nextTag, true);
+    const deletedTag = (payload.deleted_tag || nextTag).toLowerCase();
+    setProductTagOptions(payload.tags || []);
+    setRows(previous => previous.map(item => ({
+      ...item,
+      tags: (item.tags || []).filter(value => value.toLowerCase() !== deletedTag)
+    })));
+    setTagFilters(previous => previous
+      .map(filter => ({
+        ...filter,
+        tags: filter.tags.filter(value => value.toLowerCase() !== deletedTag)
+      }))
+      .filter(filter => filter.tags.length)
+    );
+  }
+
   function matchesTagFilters(row: AccountPoolRow) {
     const activeFilters = tagFilters.filter(filter => filter.category && filter.tags.length);
     if (!activeFilters.length) return true;
@@ -354,7 +376,6 @@ export function CountryList({
   const statusOptions = Array.from(new Set(rows.map(row => String(row.status || 'unknown').toLowerCase()))).sort();
   const performanceMetrics = useMemo(() => {
     const accountCount = filteredRows.length;
-    const postedCount = filteredRows.filter(row => Number(row.post_count) > 0).length;
     const posts = filteredRows.reduce((sum, row) => sum + (Number(row.post_count) || 0), 0);
     const views = filteredRows.reduce((sum, row) => sum + (Number(row.total_views) || 0), 0);
     const likes = filteredRows.reduce((sum, row) => sum + (Number(row.total_likes) || 0), 0);
@@ -364,7 +385,7 @@ export function CountryList({
     const engagement = views ? ((likes + comments + shares) / views) * 100 : 0;
 
     return [
-      { label: 'POSTED', value: `${formatNumber(postedCount)}/${formatNumber(accountCount)}`, note: 'Accounts with posts / filtered accounts' },
+      { label: 'POSTED', value: `${formatNumber(posts)}/${formatNumber(accountCount)}`, note: 'Filtered posts / filtered accounts' },
       { label: 'POSTS', value: formatNumber(posts) },
       { label: 'VIEWS', value: formatNumber(views) },
       { label: 'AVG VIEWS', value: formatNumber(avgViews), note: 'Filtered total views / filtered posts' },
@@ -562,6 +583,7 @@ export function CountryList({
           onClose={() => setEditingTagAccountId('')}
           onAddTag={addAccountTag}
           onRemoveTag={removeAccountTag}
+          onDeleteProductTag={deleteProductTagOption}
         />
       ) : null}
     </section>
@@ -714,7 +736,8 @@ function AccountTagEditorModal({
   saveLabel = 'Save Tags',
   onClose,
   onAddTag,
-  onRemoveTag
+  onRemoveTag,
+  onDeleteProductTag
 }: {
   row: AccountPoolRow;
   availableTags: string[];
@@ -726,6 +749,7 @@ function AccountTagEditorModal({
   onClose: () => void;
   onAddTag: (row: AccountPoolRow, tag: string) => void;
   onRemoveTag: (row: AccountPoolRow, tag: string) => void;
+  onDeleteProductTag?: (tag: string) => void;
 }) {
   const [mounted, setMounted] = useState(false);
   const [categoryInput, setCategoryInput] = useState(fixedCategory || '');
@@ -864,18 +888,38 @@ function AccountTagEditorModal({
             </div>
             {tagMenuOpen ? (
               <div className="tag-editor-list">
-                {tagSuggestions.length ? tagSuggestions.map(tag => (
-                  <button
-                    type="button"
-                    key={tag}
-                    onClick={() => {
-                      setTagInput(tag);
-                      setTagMenuOpen(false);
-                    }}
-                  >
-                    {tag}
-                  </button>
-                )) : <span className="tag-editor-list-empty">No existing tag. Type to create new.</span>}
+                {tagSuggestions.length ? tagSuggestions.map(tag => {
+                  const fullTag = tagOptions.find(option => getTagName(option).toLowerCase() === tag.toLowerCase()) || composeTag(categoryInput, tag);
+                  return (
+                    <div className="tag-editor-option-row" key={tag}>
+                      <button
+                        className="tag-editor-option-select"
+                        type="button"
+                        onClick={() => {
+                          setTagInput(tag);
+                          setTagMenuOpen(false);
+                        }}
+                      >
+                        {tag}
+                      </button>
+                      {onDeleteProductTag ? (
+                        <button
+                          className="tag-editor-option-delete"
+                          type="button"
+                          aria-label={`删除 ${formatTagLabel(fullTag)}`}
+                          title="从当前产品删除这个 Tag"
+                          onClick={event => {
+                            event.stopPropagation();
+                            onDeleteProductTag(fullTag);
+                            if (tagInput.toLowerCase() === tag.toLowerCase()) setTagInput('');
+                          }}
+                        >
+                          ×
+                        </button>
+                      ) : null}
+                    </div>
+                  );
+                }) : <span className="tag-editor-list-empty">No existing tag. Type to create new.</span>}
               </div>
             ) : null}
           </div>

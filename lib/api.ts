@@ -178,6 +178,12 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ product_code: productCode, tag })
     }),
+  deleteProductTag: (productCode: string, tag: string, removeAssignments = true) =>
+    apiFetch<{ ok: boolean; product_code: string; tags: string[]; deleted_tag: string; removed_account_tags: number }>('/api/product-tags/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_code: productCode, tag, remove_assignments: removeAssignments })
+    }),
   database: () => apiFetch<DatabaseSnapshot>('/api/database', undefined, 'Failed to load database'),
   apiKeys: () => apiFetch<{ ok: boolean; keys: ExternalApiKey[] }>('/api/api-keys'),
   createApiKey: (name: string) =>

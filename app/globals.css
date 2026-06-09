@@ -5016,6 +5016,43 @@
             color: var(--accent-strong);
         }
 
+        .tag-editor-option-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 36px;
+            align-items: center;
+            gap: 4px;
+            border-radius: 10px;
+        }
+
+        .tag-editor-option-row:hover {
+            background: #eef2ff;
+        }
+
+        .tag-editor-list .tag-editor-option-select {
+            min-width: 0;
+        }
+
+        .tag-editor-list .tag-editor-option-row:hover .tag-editor-option-select {
+            background: transparent;
+            color: var(--accent-strong);
+        }
+
+        .tag-editor-list .tag-editor-option-delete {
+            display: grid;
+            width: 32px;
+            height: 32px;
+            place-items: center;
+            padding: 0;
+            border-radius: 999px;
+            color: #b42318;
+            text-align: center;
+        }
+
+        .tag-editor-list .tag-editor-option-delete:hover {
+            background: #fee4e2;
+            color: #912018;
+        }
+
         .tag-editor-list-empty {
             padding: 12px 14px;
             color: var(--muted);

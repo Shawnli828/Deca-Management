@@ -24,6 +24,7 @@ from server import (
     database_snapshot,
     data_query_payload,
     default_data,
+    delete_product_tag,
     delete_account_issue,
     delete_account_tag,
     connect_db,
@@ -324,6 +325,15 @@ def post_product_tags(request: Request, payload: dict[str, Any] = Body(default_f
     require_dashboard_auth(request)
     try:
         return create_product_tag(payload.get("product_code"), payload.get("tag"))
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/product-tags/delete")
+def post_product_tags_delete(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
+    require_dashboard_auth(request)
+    try:
+        return delete_product_tag(payload.get("product_code"), payload.get("tag"), payload.get("remove_assignments", True))
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 

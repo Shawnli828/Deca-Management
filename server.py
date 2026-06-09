@@ -3496,6 +3496,53 @@ def create_product_tag(product_code, tag):
     return product_tags_payload(product_code)
 
 
+def delete_product_tag(product_code, tag, remove_assignments=True):
+    product_code = str(product_code or "").strip().upper()
+    tag = clean_tag(tag)
+    if not product_code or not tag:
+        raise ValueError("product_code and tag are required.")
+
+    placeholder = db_placeholder()
+    removed_assignments = 0
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        canonical_tag = existing_tag_value(conn, "product_tags", "product_code", product_code, tag)
+        conn.execute(
+            f"DELETE FROM product_tags WHERE product_code = {placeholder} AND LOWER(tag) = LOWER({placeholder})",
+            (product_code, canonical_tag),
+        )
+        if remove_assignments:
+            account_rows = conn.execute(
+                f"""
+                SELECT acc.id
+                FROM accounts acc
+                JOIN product_market_channels pmc ON pmc.id = acc.product_market_channel_id
+                JOIN product_markets pm ON pm.id = pmc.product_market_id
+                JOIN products p ON p.id = pm.product_id
+                WHERE p.code = {placeholder}
+                """,
+                (product_code,),
+            ).fetchall()
+            account_ids = [row_dict(row).get("id") for row in account_rows if row_dict(row).get("id")]
+            if account_ids:
+                placeholders = ", ".join([placeholder] * len(account_ids))
+                cursor = conn.execute(
+                    f"""
+                    DELETE FROM account_tags
+                    WHERE LOWER(tag) = LOWER({placeholder})
+                      AND account_id IN ({placeholders})
+                    """,
+                    (canonical_tag, *account_ids),
+                )
+                removed_assignments = cursor.rowcount or 0
+        conn.commit()
+
+    payload = product_tags_payload(product_code)
+    payload["deleted_tag"] = canonical_tag
+    payload["removed_account_tags"] = removed_assignments
+    return payload
+
+
 def add_account_tag(account_id, tag):
     account_id = str(account_id or "").strip()
     tag = clean_tag(tag)
