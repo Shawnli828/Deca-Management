@@ -1,5 +1,6 @@
 import type {
   AccountSummary,
+  BusinessMaterialReportPayload,
   DatabaseSnapshot,
   DetailedPostRow,
   ExternalApiKey,
@@ -81,6 +82,17 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ product_code: productCode, days })
     }, 'Failed to sync growth snapshots'),
+  businessMaterialReport: (productCode: string, params: { days?: number; dateFrom?: string; dateTo?: string }) =>
+    apiFetch<BusinessMaterialReportPayload>(
+      `/api/business-material-report?${new URLSearchParams({
+        product_code: productCode,
+        ...(params.dateFrom ? { date_from: params.dateFrom } : {}),
+        ...(params.dateTo ? { date_to: params.dateTo } : {}),
+        ...(!params.dateFrom && !params.dateTo ? { days: String(params.days || 7) } : {})
+      }).toString()}`,
+      undefined,
+      'Failed to load business day report'
+    ),
   accounts: (productCode: string, countryCode: string, days: number) =>
     api.dataQuery<{ ok: boolean; data: AccountSummary[] }>(
       new URLSearchParams({ resource: 'accounts', product_code: productCode, country_code: countryCode, days: String(days) })

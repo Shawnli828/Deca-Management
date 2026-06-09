@@ -16,6 +16,7 @@ from server import (
     add_account_issue,
     add_account_tag,
     ai_materials_payload,
+    business_material_report_payload,
     cookie_header,
     create_product_tag,
     create_external_api_key,
@@ -400,6 +401,17 @@ def get_growth_dashboard(request: Request):
         return growth_dashboard_payload(query_as_lists(request))
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/business-material-report")
+def get_business_material_report(request: Request):
+    require_dashboard_auth(request)
+    try:
+        return business_material_report_payload(query_as_lists(request))
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
 
 
 @app.post("/api/growth/sync-product")

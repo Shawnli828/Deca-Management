@@ -2720,6 +2720,59 @@ def report_day_window(report_date="", tz=None):
     }
 
 
+def business_material_day_window(report_date="", tz=None):
+    tz = tz or report_timezone()
+    if report_date:
+        date_value = datetime.strptime(str(report_date), "%Y-%m-%d").date()
+    else:
+        date_value = datetime.now(timezone.utc).astimezone(tz).date()
+    day_start = datetime(date_value.year, date_value.month, date_value.day, tzinfo=tz)
+    start_local = day_start - timedelta(minutes=1)
+    end_local = day_start + timedelta(days=1) - timedelta(minutes=1)
+    return {
+        "report_date": date_value.isoformat(),
+        "report_timezone": getattr(tz, "key", REPORT_TIMEZONE_NAME),
+        "start_local": start_local,
+        "end_local": end_local,
+        "utc_start": start_local.astimezone(timezone.utc),
+        "utc_end": end_local.astimezone(timezone.utc),
+    }
+
+
+def business_material_report_windows(date_from="", date_to="", days=7):
+    tz = report_timezone()
+    today = datetime.now(timezone.utc).astimezone(tz).date()
+    try:
+        if date_to:
+            end_date = datetime.strptime(str(date_to), "%Y-%m-%d").date()
+        else:
+            end_date = today
+    except ValueError:
+        end_date = today
+    try:
+        if date_from:
+            start_date = datetime.strptime(str(date_from), "%Y-%m-%d").date()
+        else:
+            try:
+                day_count = int(days)
+            except (TypeError, ValueError):
+                day_count = 7
+            day_count = max(1, min(90, day_count))
+            start_date = end_date - timedelta(days=day_count - 1)
+    except ValueError:
+        start_date = end_date - timedelta(days=6)
+    if start_date > end_date:
+        start_date, end_date = end_date, start_date
+    if (end_date - start_date).days > 89:
+        start_date = end_date - timedelta(days=89)
+    windows = []
+    current = start_date
+    while current <= end_date:
+        windows.append(business_material_day_window(current.isoformat(), tz))
+        current += timedelta(days=1)
+    return windows
+
+
 def source_dates_for_utc_window(utc_start, utc_end, source_tz):
     start_source = utc_start.astimezone(source_tz).date()
     end_source = (utc_end - timedelta(microseconds=1)).astimezone(source_tz).date()
@@ -2775,6 +2828,19 @@ def report_date_for_utc_datetime(value, tz=None):
     return value.astimezone(tz).date().isoformat()
 
 
+def business_material_date_for_utc_datetime(value, tz=None):
+    tz = tz or report_timezone()
+    if not isinstance(value, datetime):
+        return ""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    local_value = value.astimezone(tz)
+    cutoff = local_value.replace(hour=23, minute=59, second=0, microsecond=0)
+    if local_value >= cutoff:
+        return (local_value.date() + timedelta(days=1)).isoformat()
+    return local_value.date().isoformat()
+
+
 def product_channel_daily_views(product_code, channel_code, utc_start, utc_end):
     placeholder = db_placeholder()
     daily = {}
@@ -2804,6 +2870,73 @@ def product_channel_daily_views(product_code, channel_code, utc_start, utc_end):
             continue
         daily[report_date] = daily.get(report_date, 0) + int(item.get("view_count") or 0)
     return daily
+
+
+def product_business_material_daily_stats(product_code, utc_start, utc_end):
+    placeholder = db_placeholder()
+    daily = {}
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        rows = conn.execute(
+            f"""
+            SELECT
+                ch.code AS channel_code,
+                post.id AS post_id,
+                mat.id AS material_id,
+                post.published_at AS published_at,
+                COALESCE(post.view_count, 0) AS view_count
+            {relational_base_from()}
+            WHERE p.code = {placeholder}
+              AND ch.code IN ('TIKTOK', 'MUSEON_CLONE')
+              AND post.published_at >= {placeholder}
+              AND post.published_at < {placeholder}
+              AND post.id IS NOT NULL
+            GROUP BY ch.code, post.id, mat.id, post.published_at, post.view_count
+            """,
+            (str(product_code or "").upper(), utc_start.isoformat(), utc_end.isoformat()),
+        ).fetchall()
+    for row in rows:
+        item = row_dict(row)
+        published_at = parse_iso_datetime(item.get("published_at"))
+        report_date = business_material_date_for_utc_datetime(published_at)
+        if not report_date:
+            continue
+        source_key = "clone" if item.get("channel_code") == "MUSEON_CLONE" else "reelfarm"
+        entry = daily.setdefault(report_date, {
+            "reelfarm_materials": set(),
+            "clone_materials": set(),
+            "reelfarm_posts": 0,
+            "clone_posts": 0,
+            "reelfarm_views": 0,
+            "clone_views": 0,
+        })
+        material_id = item.get("material_id") or item.get("post_id")
+        if source_key == "clone":
+            if material_id:
+                entry["clone_materials"].add(str(material_id))
+            entry["clone_posts"] += 1
+            entry["clone_views"] += int(item.get("view_count") or 0)
+        else:
+            if material_id:
+                entry["reelfarm_materials"].add(str(material_id))
+            entry["reelfarm_posts"] += 1
+            entry["reelfarm_views"] += int(item.get("view_count") or 0)
+    normalized = {}
+    for report_date, item in daily.items():
+        reelfarm_materials = len(item.get("reelfarm_materials") or set())
+        clone_materials = len(item.get("clone_materials") or set())
+        normalized[report_date] = {
+            "reelfarm_materials": reelfarm_materials,
+            "clone_materials": clone_materials,
+            "total_materials": reelfarm_materials + clone_materials,
+            "reelfarm_posts": int(item.get("reelfarm_posts") or 0),
+            "clone_posts": int(item.get("clone_posts") or 0),
+            "total_posts": int(item.get("reelfarm_posts") or 0) + int(item.get("clone_posts") or 0),
+            "reelfarm_views": int(item.get("reelfarm_views") or 0),
+            "clone_views": int(item.get("clone_views") or 0),
+            "total_views": int(item.get("reelfarm_views") or 0) + int(item.get("clone_views") or 0),
+        }
+    return normalized
 
 
 def mixpanel_event_daily_counts(config, event_name, utc_start, utc_end, value_type="general"):
@@ -2860,6 +2993,71 @@ def mixpanel_event_daily_counts(config, event_name, utc_start, utc_end, value_ty
         if timestamp < start_epoch or timestamp >= end_epoch:
             continue
         report_date = report_date_for_utc_datetime(datetime.fromtimestamp(timestamp, timezone.utc))
+        if not report_date:
+            continue
+        totals[report_date] = totals.get(report_date, 0) + 1
+        distinct_id = properties.get("distinct_id") or (event.get("distinct_id") if isinstance(event, dict) else None)
+        if distinct_id:
+            unique_ids.setdefault(report_date, set()).add(str(distinct_id))
+    if value_type == "unique":
+        return {report_date: len(ids) for report_date, ids in unique_ids.items()}
+    return totals
+
+
+def mixpanel_event_business_material_counts(config, event_name, utc_start, utc_end, value_type="general"):
+    project_id = (config or {}).get("project_id", "")
+    username = (config or {}).get("username", "")
+    secret = (config or {}).get("secret", "")
+    region = (config or {}).get("region", MIXPANEL_REGION)
+    if not project_id or not username or not secret or not event_name:
+        return {}
+    start_epoch = int(utc_start.timestamp())
+    end_epoch = int(utc_end.timestamp())
+    source_date_from, source_date_to = source_dates_for_utc_window(utc_start, utc_end, mixpanel_timezone())
+    params = urlencode({
+        "project_id": project_id,
+        "event": json.dumps([event_name], ensure_ascii=False),
+        "from_date": source_date_from,
+        "to_date": source_date_to,
+    })
+    credentials = f"{username}:{secret}".encode("utf-8")
+    request = Request(
+        f"{mixpanel_export_base_url(region)}?{params}",
+        headers={
+            "Authorization": "Basic " + base64.b64encode(credentials).decode("ascii"),
+            "Accept": "text/plain",
+        },
+    )
+    try:
+        with urlopen(request, timeout=60, context=make_ssl_context()) as response:
+            payload = response.read().decode("utf-8")
+    except HTTPError as error:
+        detail = error.read().decode("utf-8", errors="ignore")[:240]
+        raise RuntimeError(f"Mixpanel query failed: {error.code} {detail}") from error
+    except (URLError, TimeoutError) as error:
+        raise RuntimeError(f"Mixpanel query failed: {error}") from error
+    totals = {}
+    unique_ids = {}
+    for line in payload.splitlines():
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        properties = event.get("properties") if isinstance(event, dict) else {}
+        if not isinstance(properties, dict):
+            properties = {}
+        raw_time = properties.get("time", event.get("time") if isinstance(event, dict) else None)
+        try:
+            timestamp = float(raw_time)
+        except (TypeError, ValueError):
+            continue
+        if timestamp > 10_000_000_000:
+            timestamp = timestamp / 1000
+        if timestamp < start_epoch or timestamp >= end_epoch:
+            continue
+        report_date = business_material_date_for_utc_datetime(datetime.fromtimestamp(timestamp, timezone.utc))
         if not report_date:
             continue
         totals[report_date] = totals.get(report_date, 0) + 1
@@ -3012,6 +3210,92 @@ def growth_dashboard_payload(query):
             "clone_views": sum(int(row.get("clone_views") or 0) for row in data),
             "download_count": sum(int(row.get("download_count") or 0) for row in data if row.get("download_count") is not None),
             "onboarding_unique": sum(int(row.get("onboarding_unique") or 0) for row in data if row.get("onboarding_unique") is not None),
+        },
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def business_material_report_payload(query):
+    product_code = query_value(query, "product_code").upper()
+    if not product_code:
+        raise ValueError("product_code is required.")
+    date_from = query_value(query, "date_from")
+    date_to = query_value(query, "date_to")
+    days = query_value(query, "days", 7)
+    windows = business_material_report_windows(date_from, date_to, days)
+    if not windows:
+        return {
+            "ok": True,
+            "product_code": product_code,
+            "report_timezone": REPORT_TIMEZONE_NAME,
+            "date_from": "",
+            "date_to": "",
+            "rows": [],
+            "totals": {},
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+    overall_utc_start = windows[0]["utc_start"]
+    overall_utc_end = windows[-1]["utc_end"]
+    material_daily = product_business_material_daily_stats(product_code, overall_utc_start, overall_utc_end)
+    mixpanel_config = product_mixpanel_config(product_code)
+    onboarding_event = product_mixpanel_event_name(product_code, "ONBOARDING")
+    download_daily = mixpanel_event_business_material_counts(
+        mixpanel_config,
+        onboarding_event,
+        overall_utc_start,
+        overall_utc_end,
+        "unique",
+    )
+    rows = []
+    source_tz = mixpanel_timezone()
+    for window in windows:
+        report_date = window["report_date"]
+        stats = material_daily.get(report_date, {})
+        source_date_from, source_date_to = source_dates_for_utc_window(window["utc_start"], window["utc_end"], source_tz)
+        downloads = download_daily.get(report_date)
+        total_views = int(stats.get("total_views") or 0)
+        rows.append({
+            "report_date": report_date,
+            "report_timezone": window["report_timezone"],
+            "business_window_local": {
+                "start": window["start_local"].isoformat(),
+                "end": window["end_local"].isoformat(),
+            },
+            "utc_window": {
+                "start": window["utc_start"].isoformat(),
+                "end": window["utc_end"].isoformat(),
+            },
+            "source_date_from": source_date_from,
+            "source_date_to": source_date_to,
+            "reelfarm_materials": int(stats.get("reelfarm_materials") or 0),
+            "reelfarm_posts": int(stats.get("reelfarm_posts") or 0),
+            "reelfarm_views": int(stats.get("reelfarm_views") or 0),
+            "clone_materials": int(stats.get("clone_materials") or 0),
+            "clone_posts": int(stats.get("clone_posts") or 0),
+            "clone_views": int(stats.get("clone_views") or 0),
+            "total_materials": int(stats.get("total_materials") or 0),
+            "total_posts": int(stats.get("total_posts") or 0),
+            "total_views": total_views,
+            "downloads": downloads,
+            "views_per_download": (total_views / int(downloads)) if downloads else None,
+        })
+    return {
+        "ok": True,
+        "product_code": product_code,
+        "report_timezone": REPORT_TIMEZONE_NAME,
+        "source_timezone": MIXPANEL_TIMEZONE_NAME,
+        "date_from": rows[0]["report_date"],
+        "date_to": rows[-1]["report_date"],
+        "rows": rows,
+        "totals": {
+            "reelfarm_materials": sum(row["reelfarm_materials"] for row in rows),
+            "reelfarm_views": sum(row["reelfarm_views"] for row in rows),
+            "clone_materials": sum(row["clone_materials"] for row in rows),
+            "clone_views": sum(row["clone_views"] for row in rows),
+            "total_materials": sum(row["total_materials"] for row in rows),
+            "total_posts": sum(row["total_posts"] for row in rows),
+            "total_views": sum(row["total_views"] for row in rows),
+            "downloads": sum(int(row["downloads"] or 0) for row in rows if row["downloads"] is not None),
         },
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -4752,6 +5036,16 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
                 self.send_json(200, growth_dashboard_payload(query))
             except ValueError as error:
                 self.send_json(400, {"ok": False, "error": str(error)})
+            return
+
+        if path == "/api/business-material-report":
+            query = parse_qs(urlparse(self.path).query)
+            try:
+                self.send_json(200, business_material_report_payload(query))
+            except ValueError as error:
+                self.send_json(400, {"ok": False, "error": str(error)})
+            except RuntimeError as error:
+                self.send_json(502, {"ok": False, "error": str(error)})
             return
 
         if path == "/api/reelfarm/config":

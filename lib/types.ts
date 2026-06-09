@@ -96,6 +96,47 @@ export type ProductGrowthPayload = {
   generated_at?: string;
 };
 
+export type BusinessMaterialReportRow = {
+  report_date: string;
+  report_timezone?: string;
+  business_window_local?: { start?: string; end?: string };
+  utc_window?: { start?: string; end?: string };
+  source_date_from?: string;
+  source_date_to?: string;
+  reelfarm_materials?: number;
+  reelfarm_posts?: number;
+  reelfarm_views?: number;
+  clone_materials?: number;
+  clone_posts?: number;
+  clone_views?: number;
+  total_materials?: number;
+  total_posts?: number;
+  total_views?: number;
+  downloads?: number | null;
+  views_per_download?: number | null;
+};
+
+export type BusinessMaterialReportPayload = {
+  ok: boolean;
+  product_code: string;
+  report_timezone: string;
+  source_timezone: string;
+  date_from: string;
+  date_to: string;
+  rows: BusinessMaterialReportRow[];
+  totals: {
+    reelfarm_materials?: number;
+    reelfarm_views?: number;
+    clone_materials?: number;
+    clone_views?: number;
+    total_materials?: number;
+    total_posts?: number;
+    total_views?: number;
+    downloads?: number;
+  };
+  generated_at?: string;
+};
+
 export type ProductRollupCountry = {
   country_id?: string;
   country_code?: string;
