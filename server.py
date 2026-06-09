@@ -2643,27 +2643,37 @@ def mixpanel_timezone():
 
 def product_mixpanel_config(product_code):
     code = str(product_code or "").strip().upper()
+    project_id = (
+        os.environ.get(f"MIXPANEL_PROJECT_ID_{code}", "").strip()
+        or os.environ.get(f"{code}_MIXPANEL_PROJECT_ID", "").strip()
+    )
+    username = (
+        os.environ.get(f"MIXPANEL_SERVICE_ACCOUNT_USERNAME_{code}", "").strip()
+        or os.environ.get(f"{code}_MIXPANEL_SERVICE_ACCOUNT_USERNAME", "").strip()
+    )
+    secret = (
+        os.environ.get(f"MIXPANEL_SERVICE_ACCOUNT_SECRET_{code}", "").strip()
+        or os.environ.get(f"{code}_MIXPANEL_SERVICE_ACCOUNT_SECRET", "").strip()
+    )
+    region = (
+        os.environ.get(f"MIXPANEL_REGION_{code}", "").strip().lower()
+        or os.environ.get(f"{code}_MIXPANEL_REGION", "").strip().lower()
+    )
+    has_product_credentials = bool(project_id or username or secret)
+    if has_product_credentials:
+        return {
+            "project_id": project_id,
+            "username": username,
+            "secret": secret,
+            "region": region or MIXPANEL_REGION,
+            "scope": "product",
+        }
     return {
-        "project_id": (
-            os.environ.get(f"MIXPANEL_PROJECT_ID_{code}", "").strip()
-            or os.environ.get(f"{code}_MIXPANEL_PROJECT_ID", "").strip()
-            or MIXPANEL_PROJECT_ID
-        ),
-        "username": (
-            os.environ.get(f"MIXPANEL_SERVICE_ACCOUNT_USERNAME_{code}", "").strip()
-            or os.environ.get(f"{code}_MIXPANEL_SERVICE_ACCOUNT_USERNAME", "").strip()
-            or MIXPANEL_SERVICE_ACCOUNT_USERNAME
-        ),
-        "secret": (
-            os.environ.get(f"MIXPANEL_SERVICE_ACCOUNT_SECRET_{code}", "").strip()
-            or os.environ.get(f"{code}_MIXPANEL_SERVICE_ACCOUNT_SECRET", "").strip()
-            or MIXPANEL_SERVICE_ACCOUNT_SECRET
-        ),
-        "region": (
-            os.environ.get(f"MIXPANEL_REGION_{code}", "").strip().lower()
-            or os.environ.get(f"{code}_MIXPANEL_REGION", "").strip().lower()
-            or MIXPANEL_REGION
-        ),
+        "project_id": MIXPANEL_PROJECT_ID,
+        "username": MIXPANEL_SERVICE_ACCOUNT_USERNAME,
+        "secret": MIXPANEL_SERVICE_ACCOUNT_SECRET,
+        "region": region or MIXPANEL_REGION,
+        "scope": "global",
     }
 
 
@@ -2699,6 +2709,19 @@ def mixpanel_export_base_url(region=None):
     if region in {"in", "india"}:
         return "https://data-in.mixpanel.com/api/2.0/export"
     return "https://data.mixpanel.com/api/2.0/export"
+
+
+def mixpanel_distinct_id(event, properties):
+    if not isinstance(properties, dict):
+        properties = {}
+    if not isinstance(event, dict):
+        event = {}
+    for key in ("distinct_id", "$distinct_id", "user_id", "$user_id", "$device_id", "device_id"):
+        value = properties.get(key)
+        if value:
+            return str(value)
+    value = event.get("distinct_id")
+    return str(value) if value else ""
 
 
 def report_day_window(report_date="", tz=None):
@@ -2996,9 +3019,9 @@ def mixpanel_event_daily_counts(config, event_name, utc_start, utc_end, value_ty
         if not report_date:
             continue
         totals[report_date] = totals.get(report_date, 0) + 1
-        distinct_id = properties.get("distinct_id") or (event.get("distinct_id") if isinstance(event, dict) else None)
+        distinct_id = mixpanel_distinct_id(event, properties)
         if distinct_id:
-            unique_ids.setdefault(report_date, set()).add(str(distinct_id))
+            unique_ids.setdefault(report_date, set()).add(distinct_id)
     if value_type == "unique":
         return {report_date: len(ids) for report_date, ids in unique_ids.items()}
     return totals
@@ -3061,9 +3084,9 @@ def mixpanel_event_business_material_counts(config, event_name, utc_start, utc_e
         if not report_date:
             continue
         totals[report_date] = totals.get(report_date, 0) + 1
-        distinct_id = properties.get("distinct_id") or (event.get("distinct_id") if isinstance(event, dict) else None)
+        distinct_id = mixpanel_distinct_id(event, properties)
         if distinct_id:
-            unique_ids.setdefault(report_date, set()).add(str(distinct_id))
+            unique_ids.setdefault(report_date, set()).add(distinct_id)
     if value_type == "unique":
         return {report_date: len(ids) for report_date, ids in unique_ids.items()}
     return totals
@@ -3286,6 +3309,18 @@ def business_material_report_payload(query):
         "product_code": product_code,
         "report_timezone": REPORT_TIMEZONE_NAME,
         "source_timezone": MIXPANEL_TIMEZONE_NAME,
+        "mixpanel": {
+            "event": onboarding_event,
+            "region": mixpanel_config.get("region"),
+            "scope": mixpanel_config.get("scope"),
+            "has_project_id": bool(mixpanel_config.get("project_id")),
+            "has_username": bool(mixpanel_config.get("username")),
+            "has_secret": bool(mixpanel_config.get("secret")),
+            "missing": [
+                key for key in ("project_id", "username", "secret")
+                if not mixpanel_config.get(key)
+            ],
+        },
         "date_from": rows[0]["report_date"],
         "date_to": rows[-1]["report_date"],
         "rows": rows,
