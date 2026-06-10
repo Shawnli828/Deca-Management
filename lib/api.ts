@@ -82,10 +82,11 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ product_code: productCode, days })
     }, 'Failed to sync growth snapshots'),
-  businessMaterialReport: (productCode: string, params: { days?: number; dateFrom?: string; dateTo?: string }) =>
+  businessMaterialReport: (productCode: string, params: { days?: number; dateFrom?: string; dateTo?: string; mode?: string }) =>
     apiFetch<BusinessMaterialReportPayload>(
       `/api/business-material-report?${new URLSearchParams({
         product_code: productCode,
+        ...(params.mode ? { mode: params.mode } : {}),
         ...(params.dateFrom ? { date_from: params.dateFrom } : {}),
         ...(params.dateTo ? { date_to: params.dateTo } : {}),
         ...(!params.dateFrom && !params.dateTo ? { days: String(params.days || 7) } : {})

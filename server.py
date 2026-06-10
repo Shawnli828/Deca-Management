@@ -3466,6 +3466,7 @@ def business_material_report_payload(query):
     product_code = query_value(query, "product_code").upper()
     if not product_code:
         raise ValueError("product_code is required.")
+    mode = query_value(query, "mode", "growth_delta").strip().lower()
     date_from = query_value(query, "date_from")
     date_to = query_value(query, "date_to")
     days = query_value(query, "days", 7)
@@ -3483,7 +3484,12 @@ def business_material_report_payload(query):
         }
     overall_utc_start = windows[0]["utc_start"]
     overall_utc_end = windows[-1]["utc_end"]
-    material_daily = product_business_growth_daily_stats(product_code, windows)
+    if mode in {"published", "published_materials", "legacy"}:
+        material_daily = product_business_material_daily_stats(product_code, overall_utc_start, overall_utc_end)
+        material_mode = "published_materials"
+    else:
+        material_daily = product_business_growth_daily_stats(product_code, windows)
+        material_mode = "growth_delta"
     mixpanel_config = product_mixpanel_config(product_code)
     onboarding_event = product_mixpanel_event_name(product_code, "ONBOARDING")
     download_daily = mixpanel_event_business_material_counts(
@@ -3531,6 +3537,7 @@ def business_material_report_payload(query):
     return {
         "ok": True,
         "product_code": product_code,
+        "mode": material_mode,
         "report_timezone": REPORT_TIMEZONE_NAME,
         "source_timezone": MIXPANEL_TIMEZONE_NAME,
         "mixpanel": {

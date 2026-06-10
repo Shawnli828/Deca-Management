@@ -58,7 +58,8 @@ export function BusinessMaterialReport({ products }: { products: Product[] }) {
       const next = await api.businessMaterialReport(productCode, {
         days,
         dateFrom: dateFrom || undefined,
-        dateTo: dateTo || undefined
+        dateTo: dateTo || undefined,
+        mode: 'published_materials'
       });
       setPayload(next);
     } catch (loadError: any) {
