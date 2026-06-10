@@ -4903,6 +4903,7 @@ def daily_feishu_report_payload(report_date=""):
                 "product_code": [product_code],
                 "date_from": [report_date],
                 "date_to": [report_date],
+                "mode": ["published_materials"],
             })
             row = (payload.get("rows") or [{}])[0]
             downloads = row.get("downloads")
