@@ -2263,7 +2263,12 @@ def post_datetime_bound(value, end=False):
     if not clean:
         return ""
     if re.fullmatch(r"\d{4}-\d{2}-\d{2}", clean):
-        return f"{clean}T23:59:59.999999+00:00" if end else f"{clean}T00:00:00+00:00"
+        try:
+            window = business_material_day_window(clean)
+        except ValueError:
+            return f"{clean}T23:59:59.999999+00:00" if end else f"{clean}T00:00:00+00:00"
+        bound = window["utc_end"] - timedelta(microseconds=1) if end else window["utc_start"]
+        return bound.isoformat()
     return clean
 
 
