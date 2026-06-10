@@ -107,20 +107,20 @@ export function GrowthDashboard({ products }: { products: Product[] }) {
   ];
 
   return (
-    <section className="growth-page">
-      <header className="growth-report-head">
+    <section className="business-report-page">
+      <header className="business-report-head">
         <div>
-          <p className="dashboard-kicker">Growth</p>
-          <h1>业务日增长看板</h1>
+          <p className="dashboard-kicker">Growth 情况</p>
+          <h1>Growth 情况</h1>
           <p>按北京时间 23:59 → 23:59 归档，播放量使用每日快照差值计算。</p>
         </div>
-        <div className="growth-report-controls">
+        <div className="business-report-controls">
           <select value={selectedProduct?.id || ''} onChange={event => setProductId(event.target.value)}>
             {products.map(product => (
               <option value={product.id} key={product.id}>{product.name}</option>
             ))}
           </select>
-          <div className="growth-report-preset" aria-label="业务日范围">
+          <div className="business-report-preset" aria-label="业务日范围">
             {[7, 14, 30].map(value => (
               <button
                 className={!customRange && days === value ? 'active' : ''}
@@ -145,9 +145,9 @@ export function GrowthDashboard({ products }: { products: Product[] }) {
       {error ? <div className="growth-error">{error}</div> : null}
       {loading ? <div className="growth-loading">正在读取业务日增量...</div> : null}
 
-      <div className="growth-metric-grid">
+      <div className="business-report-summary">
         {summaryCards.map(card => (
-          <article className="growth-metric-card" key={card.label}>
+          <article key={card.label}>
             <span>{card.label}</span>
             <strong>{card.value}</strong>
             <small>{card.meta}</small>
@@ -155,15 +155,15 @@ export function GrowthDashboard({ products }: { products: Product[] }) {
         ))}
       </div>
 
-      <section className="growth-daily-card">
-        <div className="growth-daily-head">
+      <section className="business-report-table-card">
+        <div className="business-report-table-title">
           <div>
             <h2>{selectedProduct?.name || productCode} · 每日增长记录</h2>
             <p>{payload?.date_from || '—'} 至 {payload?.date_to || '—'} · {payload?.report_timezone || 'Asia/Shanghai'}</p>
           </div>
         </div>
-        <div className="growth-daily-table-wrap">
-          <table className="growth-daily-table growth-increment-table">
+        <div className="business-report-table-wrap">
+          <table className="business-report-table growth-increment-table">
             <thead>
               <tr>
                 <th>业务日</th>

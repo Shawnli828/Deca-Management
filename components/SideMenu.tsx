@@ -7,14 +7,13 @@ export function SideMenu({
   onToggle
 }: {
   tool: string;
-  setTool: (tool: 'growth' | 'businessReport' | 'dashboard' | 'slideshow' | 'cloneSlideshow' | 'publishCheck' | 'apiKeys') => void;
+  setTool: (tool: 'growth' | 'businessReport' | 'slideshow' | 'cloneSlideshow' | 'publishCheck' | 'apiKeys') => void;
   collapsed: boolean;
   onToggle: () => void;
 }) {
   const items = [
-    { id: 'growth' as const, title: 'Growth', meta: 'Daily Metrics', icon: 'G' },
-    { id: 'businessReport' as const, title: '业务日表', meta: 'Published Day', icon: 'B' },
-    { id: 'dashboard' as const, title: 'Dashboard', meta: 'Overview', icon: 'D' },
+    { id: 'growth' as const, title: 'Growth 情况', meta: 'Business Delta', icon: 'G' },
+    { id: 'businessReport' as const, title: 'Daily Metric', meta: 'Business Day', icon: 'D' },
     { id: 'slideshow' as const, title: 'Slide Show', meta: 'Reel Farm', icon: 'S' },
     { id: 'cloneSlideshow' as const, title: 'Clone Slide Show', meta: 'Museon', icon: 'C' },
     { id: 'publishCheck' as const, title: '发布检查', meta: 'Daily Check', icon: 'P' },

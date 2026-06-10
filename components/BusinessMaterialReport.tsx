@@ -94,8 +94,8 @@ export function BusinessMaterialReport({ products }: { products: Product[] }) {
     <section className="business-report-page">
       <header className="business-report-head">
         <div>
-          <p className="dashboard-kicker">Business Day Report</p>
-          <h1>业务日素材表现表</h1>
+          <p className="dashboard-kicker">Daily Metric</p>
+          <h1>Daily Metric</h1>
           <p>业务日按北京时间 23:59 到次日 23:59 统计，播放只看该业务日发布的新素材。</p>
         </div>
         <div className="business-report-controls">
