@@ -3056,16 +3056,18 @@ def product_business_material_daily_stats(product_code, utc_start, utc_end):
               AND (
                 (
                   ch.code = 'TIKTOK'
+                  AND LOWER(COALESCE(a.status, '')) = 'active'
+                  AND mat.id IS NOT NULL
                   AND mat.created_at >= {placeholder}
                   AND mat.created_at < {placeholder}
                 )
                 OR (
                   ch.code = 'MUSEON_CLONE'
+                  AND post.id IS NOT NULL
                   AND post.published_at >= {placeholder}
                   AND post.published_at < {placeholder}
                 )
               )
-              AND post.id IS NOT NULL
             GROUP BY ch.code, post.id, mat.id, mat.created_at, post.published_at, post.view_count
             """,
             (
@@ -3086,8 +3088,8 @@ def product_business_material_daily_stats(product_code, utc_start, utc_end):
         entry = daily.setdefault(report_date, {
             "reelfarm_materials": set(),
             "clone_materials": set(),
-            "reelfarm_posts": 0,
-            "clone_posts": 0,
+            "reelfarm_posted_materials": set(),
+            "clone_posts": set(),
             "reelfarm_views": 0,
             "clone_views": 0,
         })
@@ -3095,24 +3097,29 @@ def product_business_material_daily_stats(product_code, utc_start, utc_end):
         if source_key == "clone":
             if material_id:
                 entry["clone_materials"].add(str(material_id))
-            entry["clone_posts"] += 1
+            if item.get("post_id"):
+                entry["clone_posts"].add(str(item.get("post_id")))
             entry["clone_views"] += int(item.get("view_count") or 0)
         else:
             if material_id:
                 entry["reelfarm_materials"].add(str(material_id))
-            entry["reelfarm_posts"] += 1
-            entry["reelfarm_views"] += int(item.get("view_count") or 0)
+            if item.get("post_id"):
+                if material_id:
+                    entry["reelfarm_posted_materials"].add(str(material_id))
+                entry["reelfarm_views"] += int(item.get("view_count") or 0)
     normalized = {}
     for report_date, item in daily.items():
         reelfarm_materials = len(item.get("reelfarm_materials") or set())
         clone_materials = len(item.get("clone_materials") or set())
+        reelfarm_posts = len(item.get("reelfarm_posted_materials") or set())
+        clone_posts = len(item.get("clone_posts") or set())
         normalized[report_date] = {
             "reelfarm_materials": reelfarm_materials,
             "clone_materials": clone_materials,
             "total_materials": reelfarm_materials + clone_materials,
-            "reelfarm_posts": int(item.get("reelfarm_posts") or 0),
-            "clone_posts": int(item.get("clone_posts") or 0),
-            "total_posts": int(item.get("reelfarm_posts") or 0) + int(item.get("clone_posts") or 0),
+            "reelfarm_posts": reelfarm_posts,
+            "clone_posts": clone_posts,
+            "total_posts": reelfarm_posts + clone_posts,
             "reelfarm_views": int(item.get("reelfarm_views") or 0),
             "clone_views": int(item.get("clone_views") or 0),
             "total_views": int(item.get("reelfarm_views") or 0) + int(item.get("clone_views") or 0),
