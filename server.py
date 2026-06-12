@@ -3047,25 +3047,42 @@ def product_business_material_daily_stats(product_code, utc_start, utc_end):
                 ch.code AS channel_code,
                 post.id AS post_id,
                 mat.id AS material_id,
+                mat.created_at AS material_created_at,
                 post.published_at AS published_at,
                 COALESCE(post.view_count, 0) AS view_count
             {relational_base_from()}
             WHERE p.code = {placeholder}
               AND ch.code IN ('TIKTOK', 'MUSEON_CLONE')
-              AND post.published_at >= {placeholder}
-              AND post.published_at < {placeholder}
+              AND (
+                (
+                  ch.code = 'TIKTOK'
+                  AND mat.created_at >= {placeholder}
+                  AND mat.created_at < {placeholder}
+                )
+                OR (
+                  ch.code = 'MUSEON_CLONE'
+                  AND post.published_at >= {placeholder}
+                  AND post.published_at < {placeholder}
+                )
+              )
               AND post.id IS NOT NULL
-            GROUP BY ch.code, post.id, mat.id, post.published_at, post.view_count
+            GROUP BY ch.code, post.id, mat.id, mat.created_at, post.published_at, post.view_count
             """,
-            (str(product_code or "").upper(), utc_start.isoformat(), utc_end.isoformat()),
+            (
+                str(product_code or "").upper(),
+                utc_start.isoformat(),
+                utc_end.isoformat(),
+                utc_start.isoformat(),
+                utc_end.isoformat(),
+            ),
         ).fetchall()
     for row in rows:
         item = row_dict(row)
-        published_at = parse_iso_datetime(item.get("published_at"))
-        report_date = business_material_date_for_utc_datetime(published_at)
+        source_key = "clone" if item.get("channel_code") == "MUSEON_CLONE" else "reelfarm"
+        source_at = item.get("published_at") if source_key == "clone" else item.get("material_created_at")
+        report_date = business_material_date_for_utc_datetime(parse_iso_datetime(source_at))
         if not report_date:
             continue
-        source_key = "clone" if item.get("channel_code") == "MUSEON_CLONE" else "reelfarm"
         entry = daily.setdefault(report_date, {
             "reelfarm_materials": set(),
             "clone_materials": set(),
