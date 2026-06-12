@@ -3127,6 +3127,28 @@ def product_business_material_daily_stats(product_code, utc_start, utc_end):
     return normalized
 
 
+def product_active_reelfarm_automation_count(product_code):
+    placeholder = db_placeholder()
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        row = conn.execute(
+            f"""
+            SELECT COUNT(DISTINCT a.id) AS active_count
+            FROM products p
+            JOIN product_markets pm ON pm.product_id = p.id
+            JOIN product_market_channels pmc ON pmc.product_market_id = pm.id
+            JOIN channels ch ON ch.id = pmc.channel_id
+            JOIN automations a ON a.product_market_channel_id = pmc.id
+            WHERE p.code = {placeholder}
+              AND ch.code = 'TIKTOK'
+              AND LOWER(COALESCE(a.status, '')) = 'active'
+            """,
+            (str(product_code or "").upper(),),
+        ).fetchone()
+    item = row_dict(row) if row else {}
+    return int(item.get("active_count") or 0)
+
+
 def latest_snapshot_views_by_source(product_code, snapshot_date):
     product_code = str(product_code or "").upper()
     snapshot_date = str(snapshot_date or "")[:10]
@@ -3516,9 +3538,11 @@ def business_material_report_payload(query):
     if mode in {"published", "published_materials", "legacy"}:
         material_daily = product_business_material_daily_stats(product_code, overall_utc_start, overall_utc_end)
         material_mode = "published_materials"
+        reelfarm_expected_count = product_active_reelfarm_automation_count(product_code)
     else:
         material_daily = product_business_growth_daily_stats(product_code, windows)
         material_mode = "growth_delta"
+        reelfarm_expected_count = None
     mixpanel_config = product_mixpanel_config(product_code)
     onboarding_event = product_mixpanel_event_name(product_code, "ONBOARDING")
     download_daily = mixpanel_event_business_material_counts(
@@ -3537,6 +3561,12 @@ def business_material_report_payload(query):
         downloads = download_daily.get(report_date)
         total_views = int(stats.get("total_views") or 0)
         download_rate = (int(downloads) / total_views * 100) if downloads and total_views else None
+        reelfarm_materials = (
+            int(reelfarm_expected_count or 0)
+            if material_mode == "published_materials"
+            else int(stats.get("reelfarm_materials") or stats.get("reelfarm_posts") or 0)
+        )
+        clone_materials = int(stats.get("clone_materials") or stats.get("clone_posts") or 0)
         rows.append({
             "report_date": report_date,
             "report_timezone": window["report_timezone"],
@@ -3550,13 +3580,13 @@ def business_material_report_payload(query):
             },
             "source_date_from": source_date_from,
             "source_date_to": source_date_to,
-            "reelfarm_materials": int(stats.get("reelfarm_materials") or stats.get("reelfarm_posts") or 0),
+            "reelfarm_materials": reelfarm_materials,
             "reelfarm_posts": int(stats.get("reelfarm_posts") or 0),
             "reelfarm_views": int(stats.get("reelfarm_views") or 0),
-            "clone_materials": int(stats.get("clone_materials") or stats.get("clone_posts") or 0),
+            "clone_materials": clone_materials,
             "clone_posts": int(stats.get("clone_posts") or 0),
             "clone_views": int(stats.get("clone_views") or 0),
-            "total_materials": int(stats.get("total_materials") or stats.get("total_posts") or 0),
+            "total_materials": reelfarm_materials + clone_materials,
             "total_posts": int(stats.get("total_posts") or 0),
             "total_views": total_views,
             "downloads": downloads,
@@ -5005,7 +5035,7 @@ def daily_feishu_report_text(report):
         lines.extend([
             f"{item.get('product_name')} ({item.get('product_code')})",
             f"- 播放：{int(item.get('total_views') or 0):,} = RF {int(item.get('reelfarm_views') or 0):,} + Clone {int(item.get('clone_views') or 0):,}",
-            f"- 新素材/Posts：{int(item.get('total_materials') or 0):,} / {int(item.get('total_posts') or 0):,}",
+            f"- Posts/应发：{int(item.get('total_posts') or 0):,} / {int(item.get('total_materials') or 0):,}",
             f"- Onboarding Unique：{int(downloads):,}" if downloads is not None else "- Onboarding Unique：未配置/未返回",
             f"- 下载/播放：{format_percent(item.get('download_rate'))}",
             "",
