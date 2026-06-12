@@ -14,7 +14,7 @@
   "crons": [
     {
       "path": "/api/sync/daily-all",
-      "schedule": "59 15 * * *"
+      "schedule": "30 0 * * *"
     },
     {
       "path": "/api/publish-check/run",

@@ -2011,7 +2011,7 @@ def sync_daily_all_records(days=30):
         "ok": ok,
         "synced_at": synced_at,
         "timezone": "Asia/Shanghai",
-        "schedule": "23:59 BJT",
+        "schedule": "08:30 BJT",
         "duration_total_seconds": round(time.perf_counter() - started, 3),
         "stages": stages,
     }
@@ -3058,6 +3058,7 @@ def product_business_material_daily_stats(product_code, utc_start, utc_end):
                   ch.code = 'TIKTOK'
                   AND LOWER(COALESCE(a.status, '')) = 'active'
                   AND mat.id IS NOT NULL
+                  AND post.id IS NOT NULL
                   AND mat.created_at >= {placeholder}
                   AND mat.created_at < {placeholder}
                 )
@@ -3561,10 +3562,11 @@ def business_material_report_payload(query):
         downloads = download_daily.get(report_date)
         total_views = int(stats.get("total_views") or 0)
         download_rate = (int(downloads) / total_views * 100) if downloads and total_views else None
-        reelfarm_materials = (
+        reelfarm_materials = int(stats.get("reelfarm_materials") or stats.get("reelfarm_posts") or 0)
+        reelfarm_expected_materials = (
             int(reelfarm_expected_count or 0)
             if material_mode == "published_materials"
-            else int(stats.get("reelfarm_materials") or stats.get("reelfarm_posts") or 0)
+            else reelfarm_materials
         )
         clone_materials = int(stats.get("clone_materials") or stats.get("clone_posts") or 0)
         rows.append({
@@ -3581,12 +3583,15 @@ def business_material_report_payload(query):
             "source_date_from": source_date_from,
             "source_date_to": source_date_to,
             "reelfarm_materials": reelfarm_materials,
+            "reelfarm_expected_materials": reelfarm_expected_materials,
             "reelfarm_posts": int(stats.get("reelfarm_posts") or 0),
             "reelfarm_views": int(stats.get("reelfarm_views") or 0),
             "clone_materials": clone_materials,
+            "clone_expected_materials": clone_materials,
             "clone_posts": int(stats.get("clone_posts") or 0),
             "clone_views": int(stats.get("clone_views") or 0),
             "total_materials": reelfarm_materials + clone_materials,
+            "expected_total_materials": reelfarm_expected_materials + clone_materials,
             "total_posts": int(stats.get("total_posts") or 0),
             "total_views": total_views,
             "downloads": downloads,
@@ -3616,10 +3621,13 @@ def business_material_report_payload(query):
         "rows": rows,
         "totals": {
             "reelfarm_materials": sum(row["reelfarm_materials"] for row in rows),
+            "reelfarm_expected_materials": sum(row["reelfarm_expected_materials"] for row in rows),
             "reelfarm_views": sum(row["reelfarm_views"] for row in rows),
             "clone_materials": sum(row["clone_materials"] for row in rows),
+            "clone_expected_materials": sum(row["clone_expected_materials"] for row in rows),
             "clone_views": sum(row["clone_views"] for row in rows),
             "total_materials": sum(row["total_materials"] for row in rows),
+            "expected_total_materials": sum(row["expected_total_materials"] for row in rows),
             "total_posts": sum(row["total_posts"] for row in rows),
             "total_views": sum(row["total_views"] for row in rows),
             "downloads": sum(int(row["downloads"] or 0) for row in rows if row["downloads"] is not None),
@@ -4951,6 +4959,7 @@ def daily_feishu_report_payload(report_date=""):
         "total_views": 0,
         "downloads": 0,
         "total_materials": 0,
+        "expected_total_materials": 0,
         "total_posts": 0,
     }
     errors = []
@@ -4976,11 +4985,12 @@ def daily_feishu_report_payload(report_date=""):
                 "downloads": int(downloads or 0) if downloads is not None else None,
                 "download_rate": row.get("download_rate"),
                 "total_materials": int(row.get("total_materials") or 0),
+                "expected_total_materials": int(row.get("expected_total_materials") or row.get("total_materials") or 0),
                 "total_posts": int(row.get("total_posts") or 0),
                 "mixpanel": payload.get("mixpanel") or {},
             }
             products.append(item)
-            for key in ("reelfarm_views", "clone_views", "total_views", "total_materials", "total_posts"):
+            for key in ("reelfarm_views", "clone_views", "total_views", "total_materials", "expected_total_materials", "total_posts"):
                 totals[key] += int(item.get(key) or 0)
             if item["downloads"] is not None:
                 totals["downloads"] += int(item["downloads"] or 0)
@@ -5035,7 +5045,7 @@ def daily_feishu_report_text(report):
         lines.extend([
             f"{item.get('product_name')} ({item.get('product_code')})",
             f"- 播放：{int(item.get('total_views') or 0):,} = RF {int(item.get('reelfarm_views') or 0):,} + Clone {int(item.get('clone_views') or 0):,}",
-            f"- Posts/应发：{int(item.get('total_posts') or 0):,} / {int(item.get('total_materials') or 0):,}",
+            f"- Posts/应发：{int(item.get('total_posts') or 0):,} / {int(item.get('expected_total_materials') or item.get('total_materials') or 0):,}",
             f"- Onboarding Unique：{int(downloads):,}" if downloads is not None else "- Onboarding Unique：未配置/未返回",
             f"- 下载/播放：{format_percent(item.get('download_rate'))}",
             "",

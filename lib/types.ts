@@ -104,12 +104,15 @@ export type BusinessMaterialReportRow = {
   source_date_from?: string;
   source_date_to?: string;
   reelfarm_materials?: number;
+  reelfarm_expected_materials?: number;
   reelfarm_posts?: number;
   reelfarm_views?: number;
   clone_materials?: number;
+  clone_expected_materials?: number;
   clone_posts?: number;
   clone_views?: number;
   total_materials?: number;
+  expected_total_materials?: number;
   total_posts?: number;
   total_views?: number;
   downloads?: number | null;
