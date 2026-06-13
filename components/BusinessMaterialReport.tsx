@@ -21,11 +21,19 @@ function dateOnly(value?: string) {
   return String(value || '').slice(0, 10) || '—';
 }
 
-function windowText(row: BusinessMaterialReportRow) {
-  const start = row.business_window_local?.start;
-  const end = row.business_window_local?.end;
+function compactWindow(window?: { start?: string; end?: string }) {
+  const start = window?.start;
+  const end = window?.end;
   if (!start || !end) return '—';
-  return `${start.slice(0, 16).replace('T', ' ')} → ${end.slice(0, 16).replace('T', ' ')}`;
+  return `${start.slice(5, 16).replace('T', ' ')} → ${end.slice(5, 16).replace('T', ' ')}`;
+}
+
+function metricDetail(count?: unknown, views?: unknown) {
+  return `${metric(count)} posts · ${metric(views)} views`;
+}
+
+function coverage(row: BusinessMaterialReportRow) {
+  return `${metric(row.reelfarm_published_automations)} / ${metric(row.reelfarm_expected_automations)}`;
 }
 
 function isoDate(offset = 0) {
@@ -84,10 +92,26 @@ export function BusinessMaterialReport({ products }: { products: Product[] }) {
     ? (Number(totals.downloads || 0) / Number(totals.total_views || 1)) * 100
     : null;
   const summaryCards = [
-    { label: '总播放', value: metric(totals.total_views), meta: `RF ${metric(totals.reelfarm_views)} · Clone ${metric(totals.clone_views)}` },
-    { label: '下载', value: metric(totals.downloads), meta: 'Mixpanel Onboarding Unique' },
-    { label: '新素材', value: metric(totals.total_materials), meta: `RF ${metric(totals.reelfarm_materials)} · Clone ${metric(totals.clone_materials)}` },
-    { label: '下载 / 播放', value: percent(totalDownloadRate), meta: '下载 / 播放 * 100%' }
+    {
+      label: 'RF 发布覆盖',
+      value: `${metric(totals.reelfarm_published_automations)} / ${metric(totals.reelfarm_expected_automations)}`,
+      meta: '有发布记录的 RF automation / active automation'
+    },
+    {
+      label: 'ReelFarm 均播',
+      value: metric(totals.reelfarm_avg_views),
+      meta: metricDetail(totals.reelfarm_posts, totals.reelfarm_views)
+    },
+    {
+      label: 'Clone 均播',
+      value: metric(totals.clone_avg_views),
+      meta: metricDetail(totals.clone_posts, totals.clone_views)
+    },
+    {
+      label: 'Onboarding Unique',
+      value: metric(totals.downloads),
+      meta: `下载 / 播放 ${percent(totalDownloadRate)}`
+    }
   ];
 
   return (
@@ -96,7 +120,7 @@ export function BusinessMaterialReport({ products }: { products: Product[] }) {
         <div>
           <p className="dashboard-kicker">Daily Metric</p>
           <h1>Daily Metric</h1>
-          <p>业务日按北京时间 23:59 到次日 23:59 统计，播放只看该业务日发布的新素材。</p>
+          <p>内容按北京时间 23:59 到次日 23:59 归属；Onboarding 按前一天 08:00 到当天 08:00 统计。</p>
         </div>
         <div className="business-report-controls">
           <select value={selectedProduct?.id || ''} onChange={event => setProductId(event.target.value)}>
@@ -151,14 +175,13 @@ export function BusinessMaterialReport({ products }: { products: Product[] }) {
             <thead>
               <tr>
                 <th>业务日</th>
-                <th>北京时间窗口</th>
-                <th>RF 素材</th>
-                <th>RF 播放</th>
-                <th>Clone 素材</th>
-                <th>Clone 播放</th>
-                <th>总素材</th>
+                <th>内容窗口</th>
+                <th>Onboarding 窗口</th>
+                <th>RF 发布覆盖</th>
+                <th>ReelFarm 均播</th>
+                <th>Clone 均播</th>
                 <th>总播放</th>
-                <th>下载</th>
+                <th>Onboarding</th>
                 <th>下载/播放</th>
               </tr>
             </thead>
@@ -166,19 +189,35 @@ export function BusinessMaterialReport({ products }: { products: Product[] }) {
               {rows.length ? rows.slice().reverse().map(row => (
                 <tr key={row.report_date}>
                   <td><strong>{dateOnly(row.report_date)}</strong></td>
-                  <td>{windowText(row)}</td>
-                  <td>{metric(row.reelfarm_materials)}</td>
-                  <td>{metric(row.reelfarm_views)}</td>
-                  <td>{metric(row.clone_materials)}</td>
-                  <td>{metric(row.clone_views)}</td>
-                  <td>{metric(row.total_materials)}</td>
-                  <td><strong>{metric(row.total_views)}</strong></td>
-                  <td><strong>{metric(row.downloads)}</strong></td>
-                  <td>{percent(row.download_rate)}</td>
+                  <td>
+                    <span className="window-cell">{compactWindow(row.business_window_local)}</span>
+                  </td>
+                  <td>
+                    <span className="window-cell">{compactWindow(row.onboarding_window_local)}</span>
+                  </td>
+                  <td>
+                    <span className="coverage-pill">{coverage(row)}</span>
+                    <small className="metric-sub">发布账号 / 应发账号</small>
+                  </td>
+                  <td>
+                    <span className="metric-stack">
+                      <strong className="metric-main">{metric(row.reelfarm_avg_views)}</strong>
+                      <small className="metric-sub">{metricDetail(row.reelfarm_posts, row.reelfarm_views)}</small>
+                    </span>
+                  </td>
+                  <td>
+                    <span className="metric-stack">
+                      <strong className="metric-main">{metric(row.clone_avg_views)}</strong>
+                      <small className="metric-sub">{metricDetail(row.clone_posts, row.clone_views)}</small>
+                    </span>
+                  </td>
+                  <td><strong className="total-views-cell">{metric(row.total_views)}</strong></td>
+                  <td><strong className="download-cell">{metric(row.downloads)}</strong></td>
+                  <td><span className="rate-cell">{percent(row.download_rate)}</span></td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={10}>这个 range 暂时没有业务日数据。</td>
+                  <td colSpan={9}>这个 range 暂时没有业务日数据。</td>
                 </tr>
               )}
             </tbody>

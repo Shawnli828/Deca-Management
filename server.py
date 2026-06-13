@@ -2899,6 +2899,25 @@ def business_material_day_window(report_date="", tz=None):
     }
 
 
+def onboarding_day_window(report_date="", tz=None):
+    tz = tz or report_timezone()
+    if report_date:
+        date_value = datetime.strptime(str(report_date), "%Y-%m-%d").date()
+    else:
+        date_value = datetime.now(timezone.utc).astimezone(tz).date()
+    day_start = datetime(date_value.year, date_value.month, date_value.day, tzinfo=tz)
+    start_local = day_start - timedelta(days=1) + timedelta(hours=8)
+    end_local = day_start + timedelta(hours=8)
+    return {
+        "report_date": date_value.isoformat(),
+        "report_timezone": getattr(tz, "key", REPORT_TIMEZONE_NAME),
+        "start_local": start_local,
+        "end_local": end_local,
+        "utc_start": start_local.astimezone(timezone.utc),
+        "utc_end": end_local.astimezone(timezone.utc),
+    }
+
+
 def business_material_report_windows(date_from="", date_to="", days=7):
     tz = report_timezone()
     today = datetime.now(timezone.utc).astimezone(tz).date()
@@ -3005,6 +3024,19 @@ def business_material_date_for_utc_datetime(value, tz=None):
     return local_value.date().isoformat()
 
 
+def onboarding_date_for_utc_datetime(value, tz=None):
+    tz = tz or report_timezone()
+    if not isinstance(value, datetime):
+        return ""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    local_value = value.astimezone(tz)
+    cutoff = local_value.replace(hour=8, minute=0, second=0, microsecond=0)
+    if local_value >= cutoff:
+        return (local_value.date() + timedelta(days=1)).isoformat()
+    return local_value.date().isoformat()
+
+
 def product_channel_daily_views(product_code, channel_code, utc_start, utc_end):
     placeholder = db_placeholder()
     daily = {}
@@ -3045,6 +3077,7 @@ def product_business_material_daily_stats(product_code, utc_start, utc_end):
             f"""
             SELECT
                 ch.code AS channel_code,
+                a.id AS automation_id,
                 post.id AS post_id,
                 mat.id AS material_id,
                 mat.created_at AS material_created_at,
@@ -3069,7 +3102,7 @@ def product_business_material_daily_stats(product_code, utc_start, utc_end):
                   AND post.published_at < {placeholder}
                 )
               )
-            GROUP BY ch.code, post.id, mat.id, mat.created_at, post.published_at, post.view_count
+            GROUP BY ch.code, a.id, post.id, mat.id, mat.created_at, post.published_at, post.view_count
             """,
             (
                 str(product_code or "").upper(),
@@ -3090,6 +3123,7 @@ def product_business_material_daily_stats(product_code, utc_start, utc_end):
             "reelfarm_materials": set(),
             "clone_materials": set(),
             "reelfarm_posted_materials": set(),
+            "reelfarm_published_automations": set(),
             "clone_posts": set(),
             "reelfarm_views": 0,
             "clone_views": 0,
@@ -3107,23 +3141,31 @@ def product_business_material_daily_stats(product_code, utc_start, utc_end):
             if item.get("post_id"):
                 if material_id:
                     entry["reelfarm_posted_materials"].add(str(material_id))
+                if item.get("automation_id"):
+                    entry["reelfarm_published_automations"].add(str(item.get("automation_id")))
                 entry["reelfarm_views"] += int(item.get("view_count") or 0)
     normalized = {}
     for report_date, item in daily.items():
         reelfarm_materials = len(item.get("reelfarm_materials") or set())
         clone_materials = len(item.get("clone_materials") or set())
         reelfarm_posts = len(item.get("reelfarm_posted_materials") or set())
+        reelfarm_published_automations = len(item.get("reelfarm_published_automations") or set())
         clone_posts = len(item.get("clone_posts") or set())
+        reelfarm_views = int(item.get("reelfarm_views") or 0)
+        clone_views = int(item.get("clone_views") or 0)
         normalized[report_date] = {
             "reelfarm_materials": reelfarm_materials,
             "clone_materials": clone_materials,
             "total_materials": reelfarm_materials + clone_materials,
             "reelfarm_posts": reelfarm_posts,
+            "reelfarm_published_automations": reelfarm_published_automations,
             "clone_posts": clone_posts,
             "total_posts": reelfarm_posts + clone_posts,
-            "reelfarm_views": int(item.get("reelfarm_views") or 0),
-            "clone_views": int(item.get("clone_views") or 0),
-            "total_views": int(item.get("reelfarm_views") or 0) + int(item.get("clone_views") or 0),
+            "reelfarm_views": reelfarm_views,
+            "clone_views": clone_views,
+            "total_views": reelfarm_views + clone_views,
+            "reelfarm_avg_views": (reelfarm_views / reelfarm_posts) if reelfarm_posts else None,
+            "clone_avg_views": (clone_views / clone_posts) if clone_posts else None,
         }
     return normalized
 
@@ -3171,6 +3213,27 @@ def product_active_reelfarm_expected_schedule_count(product_code):
         ).fetchall()
 
     return sum(reelfarm_schedule_slot_count(row_dict(row).get("schedule")) for row in rows)
+
+
+def product_active_reelfarm_expected_automation_count(product_code):
+    placeholder = db_placeholder()
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        row = conn.execute(
+            f"""
+            SELECT COUNT(DISTINCT a.id) AS automation_count
+            FROM products p
+            JOIN product_markets pm ON pm.product_id = p.id
+            JOIN product_market_channels pmc ON pmc.product_market_id = pm.id
+            JOIN channels ch ON ch.id = pmc.channel_id
+            JOIN automations a ON a.product_market_channel_id = pmc.id
+            WHERE p.code = {placeholder}
+              AND ch.code = 'TIKTOK'
+              AND LOWER(COALESCE(a.status, '')) = 'active'
+            """,
+            (str(product_code or "").upper(),),
+        ).fetchone()
+    return int(row_dict(row).get("automation_count") or 0)
 
 
 def latest_snapshot_views_by_source(product_code, snapshot_date):
@@ -3324,7 +3387,7 @@ def mixpanel_event_daily_counts(config, event_name, utc_start, utc_end, value_ty
     return totals
 
 
-def mixpanel_event_business_material_counts(config, event_name, utc_start, utc_end, value_type="general"):
+def mixpanel_event_business_material_counts(config, event_name, utc_start, utc_end, value_type="general", date_mapper=None):
     project_id = (config or {}).get("project_id", "")
     username = (config or {}).get("username", "")
     secret = (config or {}).get("secret", "")
@@ -3379,7 +3442,8 @@ def mixpanel_event_business_material_counts(config, event_name, utc_start, utc_e
             timestamp = timestamp / 1000
         if timestamp < start_epoch or timestamp >= end_epoch:
             continue
-        report_date = business_material_date_for_utc_datetime(datetime.fromtimestamp(timestamp, timezone.utc))
+        mapper = date_mapper or business_material_date_for_utc_datetime
+        report_date = mapper(datetime.fromtimestamp(timestamp, timezone.utc))
         if not report_date:
             continue
         totals[report_date] = totals.get(report_date, 0) + 1
@@ -3559,10 +3623,13 @@ def business_material_report_payload(query):
         }
     overall_utc_start = windows[0]["utc_start"]
     overall_utc_end = windows[-1]["utc_end"]
+    onboarding_windows = {window["report_date"]: onboarding_day_window(window["report_date"]) for window in windows}
+    onboarding_utc_start = onboarding_windows[windows[0]["report_date"]]["utc_start"]
+    onboarding_utc_end = onboarding_windows[windows[-1]["report_date"]]["utc_end"]
     if mode in {"published", "published_materials", "legacy"}:
         material_daily = product_business_material_daily_stats(product_code, overall_utc_start, overall_utc_end)
         material_mode = "published_materials"
-        reelfarm_expected_count = product_active_reelfarm_expected_schedule_count(product_code)
+        reelfarm_expected_count = product_active_reelfarm_expected_automation_count(product_code)
     else:
         material_daily = product_business_growth_daily_stats(product_code, windows)
         material_mode = "growth_delta"
@@ -3572,26 +3639,33 @@ def business_material_report_payload(query):
     download_daily = mixpanel_event_business_material_counts(
         mixpanel_config,
         onboarding_event,
-        overall_utc_start,
-        overall_utc_end,
+        onboarding_utc_start,
+        onboarding_utc_end,
         "unique",
+        onboarding_date_for_utc_datetime,
     )
     rows = []
     source_tz = mixpanel_timezone()
     for window in windows:
         report_date = window["report_date"]
+        onboarding_window = onboarding_windows[report_date]
         stats = material_daily.get(report_date, {})
-        source_date_from, source_date_to = source_dates_for_utc_window(window["utc_start"], window["utc_end"], source_tz, clamp_to_today=True)
+        source_date_from, source_date_to = source_dates_for_utc_window(onboarding_window["utc_start"], onboarding_window["utc_end"], source_tz, clamp_to_today=True)
         downloads = download_daily.get(report_date)
         total_views = int(stats.get("total_views") or 0)
         download_rate = (int(downloads) / total_views * 100) if downloads and total_views else None
         reelfarm_materials = int(stats.get("reelfarm_materials") or stats.get("reelfarm_posts") or 0)
-        reelfarm_expected_materials = (
+        reelfarm_expected_automations = (
             int(reelfarm_expected_count or 0)
             if material_mode == "published_materials"
             else reelfarm_materials
         )
+        reelfarm_published_automations = int(stats.get("reelfarm_published_automations") or stats.get("reelfarm_posts") or 0)
         clone_materials = int(stats.get("clone_materials") or stats.get("clone_posts") or 0)
+        reelfarm_posts = int(stats.get("reelfarm_posts") or 0)
+        clone_posts = int(stats.get("clone_posts") or 0)
+        reelfarm_views = int(stats.get("reelfarm_views") or 0)
+        clone_views = int(stats.get("clone_views") or 0)
         rows.append({
             "report_date": report_date,
             "report_timezone": window["report_timezone"],
@@ -3599,28 +3673,46 @@ def business_material_report_payload(query):
                 "start": window["start_local"].isoformat(),
                 "end": window["end_local"].isoformat(),
             },
+            "onboarding_window_local": {
+                "start": onboarding_window["start_local"].isoformat(),
+                "end": onboarding_window["end_local"].isoformat(),
+            },
             "utc_window": {
                 "start": window["utc_start"].isoformat(),
                 "end": window["utc_end"].isoformat(),
             },
+            "onboarding_utc_window": {
+                "start": onboarding_window["utc_start"].isoformat(),
+                "end": onboarding_window["utc_end"].isoformat(),
+            },
             "source_date_from": source_date_from,
             "source_date_to": source_date_to,
             "reelfarm_materials": reelfarm_materials,
-            "reelfarm_expected_materials": reelfarm_expected_materials,
-            "reelfarm_posts": int(stats.get("reelfarm_posts") or 0),
-            "reelfarm_views": int(stats.get("reelfarm_views") or 0),
+            "reelfarm_expected_materials": reelfarm_expected_automations,
+            "reelfarm_published_automations": reelfarm_published_automations,
+            "reelfarm_expected_automations": reelfarm_expected_automations,
+            "reelfarm_posts": reelfarm_posts,
+            "reelfarm_views": reelfarm_views,
+            "reelfarm_avg_views": (reelfarm_views / reelfarm_posts) if reelfarm_posts else None,
             "clone_materials": clone_materials,
             "clone_expected_materials": clone_materials,
-            "clone_posts": int(stats.get("clone_posts") or 0),
-            "clone_views": int(stats.get("clone_views") or 0),
+            "clone_posts": clone_posts,
+            "clone_views": clone_views,
+            "clone_avg_views": (clone_views / clone_posts) if clone_posts else None,
             "total_materials": reelfarm_materials + clone_materials,
-            "expected_total_materials": reelfarm_expected_materials + clone_materials,
-            "total_posts": int(stats.get("total_posts") or 0),
+            "expected_total_materials": reelfarm_expected_automations + clone_materials,
+            "total_posts": reelfarm_posts + clone_posts,
             "total_views": total_views,
             "downloads": downloads,
             "download_rate": download_rate,
             "views_per_download": (total_views / int(downloads)) if downloads else None,
         })
+    total_reelfarm_posts = sum(row["reelfarm_posts"] for row in rows)
+    total_clone_posts = sum(row["clone_posts"] for row in rows)
+    total_reelfarm_views = sum(row["reelfarm_views"] for row in rows)
+    total_clone_views = sum(row["clone_views"] for row in rows)
+    total_views = sum(row["total_views"] for row in rows)
+    total_downloads = sum(int(row["downloads"] or 0) for row in rows if row["downloads"] is not None)
     return {
         "ok": True,
         "product_code": product_code,
@@ -3645,15 +3737,22 @@ def business_material_report_payload(query):
         "totals": {
             "reelfarm_materials": sum(row["reelfarm_materials"] for row in rows),
             "reelfarm_expected_materials": sum(row["reelfarm_expected_materials"] for row in rows),
-            "reelfarm_views": sum(row["reelfarm_views"] for row in rows),
+            "reelfarm_published_automations": sum(row["reelfarm_published_automations"] for row in rows),
+            "reelfarm_expected_automations": sum(row["reelfarm_expected_automations"] for row in rows),
+            "reelfarm_posts": total_reelfarm_posts,
+            "reelfarm_views": total_reelfarm_views,
+            "reelfarm_avg_views": (total_reelfarm_views / total_reelfarm_posts) if total_reelfarm_posts else None,
             "clone_materials": sum(row["clone_materials"] for row in rows),
             "clone_expected_materials": sum(row["clone_expected_materials"] for row in rows),
-            "clone_views": sum(row["clone_views"] for row in rows),
+            "clone_posts": total_clone_posts,
+            "clone_views": total_clone_views,
+            "clone_avg_views": (total_clone_views / total_clone_posts) if total_clone_posts else None,
             "total_materials": sum(row["total_materials"] for row in rows),
             "expected_total_materials": sum(row["expected_total_materials"] for row in rows),
             "total_posts": sum(row["total_posts"] for row in rows),
-            "total_views": sum(row["total_views"] for row in rows),
-            "downloads": sum(int(row["downloads"] or 0) for row in rows if row["downloads"] is not None),
+            "total_views": total_views,
+            "downloads": total_downloads,
+            "download_rate": (total_downloads / total_views * 100) if total_downloads and total_views else None,
         },
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -4984,9 +5083,14 @@ def daily_feishu_report_payload(report_date=""):
         "total_materials": 0,
         "expected_total_materials": 0,
         "total_posts": 0,
+        "reelfarm_posts": 0,
+        "clone_posts": 0,
+        "reelfarm_published_automations": 0,
+        "reelfarm_expected_automations": 0,
     }
     errors = []
     window = business_material_day_window(report_date)
+    onboarding_window = onboarding_day_window(report_date)
 
     for product_code in configured_product_codes():
         try:
@@ -5010,10 +5114,27 @@ def daily_feishu_report_payload(report_date=""):
                 "total_materials": int(row.get("total_materials") or 0),
                 "expected_total_materials": int(row.get("expected_total_materials") or row.get("total_materials") or 0),
                 "total_posts": int(row.get("total_posts") or 0),
+                "reelfarm_posts": int(row.get("reelfarm_posts") or 0),
+                "clone_posts": int(row.get("clone_posts") or 0),
+                "reelfarm_avg_views": row.get("reelfarm_avg_views"),
+                "clone_avg_views": row.get("clone_avg_views"),
+                "reelfarm_published_automations": int(row.get("reelfarm_published_automations") or 0),
+                "reelfarm_expected_automations": int(row.get("reelfarm_expected_automations") or 0),
                 "mixpanel": payload.get("mixpanel") or {},
             }
             products.append(item)
-            for key in ("reelfarm_views", "clone_views", "total_views", "total_materials", "expected_total_materials", "total_posts"):
+            for key in (
+                "reelfarm_views",
+                "clone_views",
+                "total_views",
+                "total_materials",
+                "expected_total_materials",
+                "total_posts",
+                "reelfarm_posts",
+                "clone_posts",
+                "reelfarm_published_automations",
+                "reelfarm_expected_automations",
+            ):
                 totals[key] += int(item.get(key) or 0)
             if item["downloads"] is not None:
                 totals["downloads"] += int(item["downloads"] or 0)
@@ -5021,6 +5142,8 @@ def daily_feishu_report_payload(report_date=""):
             errors.append({"product_code": product_code, "error": str(error)})
 
     totals["download_rate"] = (totals["downloads"] / totals["total_views"] * 100) if totals["total_views"] else None
+    totals["reelfarm_avg_views"] = (totals["reelfarm_views"] / totals["reelfarm_posts"]) if totals["reelfarm_posts"] else None
+    totals["clone_avg_views"] = (totals["clone_views"] / totals["clone_posts"]) if totals["clone_posts"] else None
     return {
         "ok": True,
         "report_date": report_date,
@@ -5033,11 +5156,36 @@ def daily_feishu_report_payload(report_date=""):
             "start": window["utc_start"].isoformat(),
             "end": window["utc_end"].isoformat(),
         },
+        "onboarding_window_local": {
+            "start": onboarding_window["start_local"].isoformat(),
+            "end": onboarding_window["end_local"].isoformat(),
+        },
+        "onboarding_utc_window": {
+            "start": onboarding_window["utc_start"].isoformat(),
+            "end": onboarding_window["utc_end"].isoformat(),
+        },
         "products": products,
         "totals": totals,
         "errors": errors,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+def format_number_compact(value):
+    if value is None:
+        return "—"
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return "—"
+    abs_number = abs(number)
+    if abs_number >= 1_000_000:
+        return f"{number / 1_000_000:.1f}M"
+    if abs_number >= 1_000:
+        return f"{number / 1_000:.1f}K"
+    if number.is_integer():
+        return f"{int(number):,}"
+    return f"{number:,.1f}"
 
 
 def format_percent(value):
@@ -5049,15 +5197,20 @@ def format_percent(value):
 def daily_feishu_report_text(report):
     totals = report.get("totals") or {}
     window = report.get("business_window_local") or {}
+    onboarding_window = report.get("onboarding_window_local") or {}
     lines = [
         "Deca Growth 每日业务数据",
         f"业务日：{report.get('report_date')}",
-        f"统计窗口：{window.get('start', '')} → {window.get('end', '')} BJT",
+        f"内容窗口：{window.get('start', '')} → {window.get('end', '')} BJT",
+        f"Onboarding窗口：{onboarding_window.get('start', '')} → {onboarding_window.get('end', '')} BJT",
         "",
         "总览",
         f"- 总播放：{int(totals.get('total_views') or 0):,}",
         f"- ReelFarm：{int(totals.get('reelfarm_views') or 0):,}",
         f"- Clone：{int(totals.get('clone_views') or 0):,}",
+        f"- RF发布账号/应发账号：{int(totals.get('reelfarm_published_automations') or 0):,} / {int(totals.get('reelfarm_expected_automations') or 0):,}",
+        f"- ReelFarm均播：{format_number_compact(totals.get('reelfarm_avg_views'))}",
+        f"- Clone均播：{format_number_compact(totals.get('clone_avg_views'))}",
         f"- Onboarding Unique：{int(totals.get('downloads') or 0):,}",
         f"- 下载/播放：{format_percent(totals.get('download_rate'))}",
         "",
@@ -5068,7 +5221,9 @@ def daily_feishu_report_text(report):
         lines.extend([
             f"{item.get('product_name')} ({item.get('product_code')})",
             f"- 播放：{int(item.get('total_views') or 0):,} = RF {int(item.get('reelfarm_views') or 0):,} + Clone {int(item.get('clone_views') or 0):,}",
-            f"- Posts/应发：{int(item.get('total_posts') or 0):,} / {int(item.get('expected_total_materials') or item.get('total_materials') or 0):,}",
+            f"- RF发布账号/应发账号：{int(item.get('reelfarm_published_automations') or 0):,} / {int(item.get('reelfarm_expected_automations') or 0):,}",
+            f"- ReelFarm均播：{format_number_compact(item.get('reelfarm_avg_views'))}（Posts {int(item.get('reelfarm_posts') or 0):,}，Views {int(item.get('reelfarm_views') or 0):,}）",
+            f"- Clone均播：{format_number_compact(item.get('clone_avg_views'))}（Posts {int(item.get('clone_posts') or 0):,}，Views {int(item.get('clone_views') or 0):,}）",
             f"- Onboarding Unique：{int(downloads):,}" if downloads is not None else "- Onboarding Unique：未配置/未返回",
             f"- 下载/播放：{format_percent(item.get('download_rate'))}",
             "",
