@@ -18,7 +18,7 @@
             --red: #c24135;
             --shadow: 0 20px 54px rgba(31, 41, 55, 0.12);
             --radius: 8px;
-            --font-sans: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", Arial, sans-serif;
+            --font-sans: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", Arial, sans-serif;
         }
 
         * {
@@ -6183,7 +6183,7 @@
             color: var(--text);
             font-size: clamp(32px, 4vw, 54px);
             line-height: 1;
-            font-weight: 950;
+            font-weight: 760;
             letter-spacing: 0;
         }
 
@@ -6191,7 +6191,7 @@
             margin: 12px 0 0;
             color: var(--muted);
             font-size: 14px;
-            font-weight: 750;
+            font-weight: 520;
             line-height: 1.5;
         }
 
@@ -6212,7 +6212,7 @@
             background: #ffffff;
             color: var(--text);
             font-size: 13px;
-            font-weight: 850;
+            font-weight: 520;
         }
 
         .business-report-controls > button {
@@ -6357,14 +6357,14 @@
             margin: 0;
             color: var(--text);
             font-size: 20px;
-            font-weight: 950;
+            font-weight: 720;
         }
 
         .business-report-table-title p {
             margin: 6px 0 0;
             color: var(--muted);
             font-size: 13px;
-            font-weight: 750;
+            font-weight: 520;
         }
 
         .business-report-table-wrap {
@@ -6387,7 +6387,7 @@
             text-align: left;
             color: var(--text);
             font-size: 13px;
-            font-weight: 800;
+            font-weight: 560;
             white-space: nowrap;
             vertical-align: middle;
         }
@@ -6396,7 +6396,7 @@
             background: #f5f7fb;
             color: var(--muted);
             font-size: 12px;
-            font-weight: 950;
+            font-weight: 650;
         }
 
         .business-report-table tr:last-child td {
@@ -7018,4 +7018,41 @@
         .crumb-btn:hover {
             background: #f7f8fa !important;
             border-color: var(--line-strong) !important;
+        }
+
+        /* Global typography pass: keep the lighter dashboard-card tone across the app. */
+        body,
+        body *,
+        button,
+        input,
+        select,
+        textarea,
+        table,
+        pre,
+        code {
+            font-family: var(--font-sans) !important;
+            letter-spacing: 0 !important;
+        }
+
+        body :where(p, span, small, label, td, input, select, textarea, button) {
+            font-weight: 520 !important;
+        }
+
+        body :where(h1, h2, h3, h4, h5, h6, strong, b, th) {
+            font-weight: 720 !important;
+            letter-spacing: 0 !important;
+        }
+
+        body :where(.metric-main, .total-views-cell, .download-cell, .rate-cell, .stat-value, .product-stat-value, .product-card strong, .business-report-summary strong) {
+            font-weight: 780 !important;
+        }
+
+        body :where(.business-report-table th, .pool-table th, .accounts-table th, .roaster-table th, .database-table th) {
+            font-weight: 650 !important;
+        }
+
+        body :where(.dashboard-kicker, .section-label, .meta-label, .eyebrow, .api-key-doc-card h3, .business-report-summary span) {
+            font-weight: 650 !important;
+            text-transform: none !important;
+            letter-spacing: 0 !important;
         }
