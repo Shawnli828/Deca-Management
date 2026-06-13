@@ -3128,13 +3128,36 @@ def product_business_material_daily_stats(product_code, utc_start, utc_end):
     return normalized
 
 
-def product_active_reelfarm_automation_count(product_code):
+def reelfarm_schedule_slot_count(schedule_value):
+    if isinstance(schedule_value, str):
+        raw = schedule_value.strip()
+        if not raw:
+            return 1
+        try:
+            schedule_value = json.loads(raw)
+        except json.JSONDecodeError:
+            return 1
+
+    if isinstance(schedule_value, list):
+        return max(len([item for item in schedule_value if item not in (None, "")]), 1)
+
+    if isinstance(schedule_value, dict):
+        for key in ("schedule", "schedules", "times", "cron", "crons"):
+            value = schedule_value.get(key)
+            if value not in (None, "", [], {}):
+                return reelfarm_schedule_slot_count(value)
+        return 1
+
+    return 1
+
+
+def product_active_reelfarm_expected_schedule_count(product_code):
     placeholder = db_placeholder()
     with connect_db() as conn:
         init_relational_schema(conn)
-        row = conn.execute(
+        rows = conn.execute(
             f"""
-            SELECT COUNT(DISTINCT a.id) AS active_count
+            SELECT DISTINCT a.id, a.schedule
             FROM products p
             JOIN product_markets pm ON pm.product_id = p.id
             JOIN product_market_channels pmc ON pmc.product_market_id = pm.id
@@ -3145,9 +3168,9 @@ def product_active_reelfarm_automation_count(product_code):
               AND LOWER(COALESCE(a.status, '')) = 'active'
             """,
             (str(product_code or "").upper(),),
-        ).fetchone()
-    item = row_dict(row) if row else {}
-    return int(item.get("active_count") or 0)
+        ).fetchall()
+
+    return sum(reelfarm_schedule_slot_count(row_dict(row).get("schedule")) for row in rows)
 
 
 def latest_snapshot_views_by_source(product_code, snapshot_date):
@@ -3539,7 +3562,7 @@ def business_material_report_payload(query):
     if mode in {"published", "published_materials", "legacy"}:
         material_daily = product_business_material_daily_stats(product_code, overall_utc_start, overall_utc_end)
         material_mode = "published_materials"
-        reelfarm_expected_count = product_active_reelfarm_automation_count(product_code)
+        reelfarm_expected_count = product_active_reelfarm_expected_schedule_count(product_code)
     else:
         material_daily = product_business_growth_daily_stats(product_code, windows)
         material_mode = "growth_delta"
