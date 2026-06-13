@@ -18,7 +18,7 @@
             --red: #c24135;
             --shadow: 0 20px 54px rgba(31, 41, 55, 0.12);
             --radius: 8px;
-            --font-sans: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", Arial, sans-serif;
+            --font-sans: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", Arial, sans-serif;
         }
 
         * {
@@ -4646,7 +4646,7 @@
             color: var(--muted);
             cursor: pointer;
             font-size: 12px;
-            font-weight: 850;
+            font-weight: 560;
             letter-spacing: 0.03em;
             line-height: 1;
             text-align: left;
@@ -4672,7 +4672,7 @@
             background: #151310;
             color: var(--muted);
             font-size: 13px;
-            font-weight: 700;
+            font-weight: 520;
         }
 
         .missing-account-row {
@@ -4702,7 +4702,7 @@
             overflow: hidden;
             color: var(--text);
             font-size: 15px;
-            font-weight: 850;
+            font-weight: 660;
             line-height: 1.25;
             text-overflow: ellipsis;
             white-space: nowrap;
@@ -4728,7 +4728,7 @@
             background: #050505;
             color: var(--muted);
             font-size: 13px;
-            font-weight: 850;
+            font-weight: 620;
             line-height: 1;
         }
 
@@ -6181,9 +6181,9 @@
         .business-report-head h1 {
             margin: 4px 0 0;
             color: var(--text);
-            font-size: clamp(32px, 4vw, 54px);
+            font-size: clamp(30px, 3.6vw, 48px);
             line-height: 1;
-            font-weight: 760;
+            font-weight: 680;
             letter-spacing: 0;
         }
 
@@ -6285,7 +6285,7 @@
             display: block;
             color: var(--muted);
             font-size: 14px;
-            font-weight: 650;
+            font-weight: 560;
             letter-spacing: 0;
             text-transform: none;
         }
@@ -6296,7 +6296,7 @@
             color: #10172a;
             font-size: clamp(34px, 3.8vw, 52px);
             line-height: 1;
-            font-weight: 780;
+            font-weight: 700;
             letter-spacing: 0;
         }
 
@@ -6409,7 +6409,7 @@
             min-width: 178px;
             color: #475569;
             font-size: 12px;
-            font-weight: 850;
+            font-weight: 560;
             letter-spacing: 0;
         }
 
@@ -6424,7 +6424,7 @@
             background: #eef2ff;
             color: #3157d5;
             font-size: 13px;
-            font-weight: 950;
+            font-weight: 660;
         }
 
         .metric-stack {
@@ -6436,7 +6436,7 @@
             color: #10172a;
             font-size: 18px;
             line-height: 1;
-            font-weight: 950;
+            font-weight: 680;
         }
 
         .metric-sub {
@@ -6444,25 +6444,25 @@
             margin-top: 5px;
             color: #64748b;
             font-size: 11px;
-            font-weight: 850;
+            font-weight: 520;
         }
 
         .total-views-cell {
             color: #3157d5;
             font-size: 18px;
-            font-weight: 950;
+            font-weight: 680;
         }
 
         .download-cell {
             color: #0f766e;
             font-size: 18px;
-            font-weight: 950;
+            font-weight: 680;
         }
 
         .rate-cell {
             color: #a16207;
             font-size: 15px;
-            font-weight: 950;
+            font-weight: 620;
         }
 
         .dashboard-kicker {
@@ -7039,20 +7039,28 @@
         }
 
         body :where(h1, h2, h3, h4, h5, h6, strong, b, th) {
-            font-weight: 720 !important;
+            font-weight: 680 !important;
             letter-spacing: 0 !important;
         }
 
         body :where(.metric-main, .total-views-cell, .download-cell, .rate-cell, .stat-value, .product-stat-value, .product-card strong, .business-report-summary strong) {
-            font-weight: 780 !important;
+            font-weight: 680 !important;
         }
 
         body :where(.business-report-table th, .pool-table th, .accounts-table th, .roaster-table th, .database-table th) {
-            font-weight: 650 !important;
+            font-weight: 560 !important;
         }
 
         body :where(.dashboard-kicker, .section-label, .meta-label, .eyebrow, .api-key-doc-card h3, .business-report-summary span) {
-            font-weight: 650 !important;
+            font-weight: 560 !important;
             text-transform: none !important;
             letter-spacing: 0 !important;
+        }
+
+        body :where(.assignment-table-head button, .assignment-table-head span, .assignment-row, .assignment-cell strong, .assignment-product-logo, .window-cell, .metric-sub) {
+            font-weight: 520 !important;
+        }
+
+        body :where(.coverage-pill, .metric-main, .total-views-cell, .download-cell) {
+            font-weight: 680 !important;
         }
