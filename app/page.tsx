@@ -8,6 +8,7 @@ import { CountryList } from '@/components/CountryList';
 import { CountrySettingsModal } from '@/components/CountrySettingsModal';
 import { CountryWorkspace } from '@/components/CountryWorkspace';
 import { DatabaseModal } from '@/components/DatabaseModal';
+import { FeishuReportPage } from '@/components/FeishuReportPage';
 import { GrowthDashboard } from '@/components/GrowthDashboard';
 import { ProductList } from '@/components/ProductList';
 import { ProductSettingsModal } from '@/components/ProductSettingsModal';
@@ -20,7 +21,7 @@ import { buildCountryAutomationPrefix, cardStateKey, codeFromName, getCountryRee
 export default function DashboardPage() {
   const [authenticated, setAuthenticated] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
-  const [tool, setTool] = useState<'growth' | 'businessReport' | 'slideshow' | 'cloneSlideshow' | 'publishCheck' | 'apiKeys'>('growth');
+  const [tool, setTool] = useState<'growth' | 'businessReport' | 'feishuReport' | 'slideshow' | 'cloneSlideshow' | 'publishCheck' | 'apiKeys'>('growth');
   const [sideCollapsed, setSideCollapsed] = useState(false);
   const [page, setPage] = useState<'products' | 'product' | 'country'>('products');
   const [selectedProductId, setSelectedProductId] = useState('');
@@ -758,6 +759,9 @@ export default function DashboardPage() {
           </section>
           <section className={`tool-page ${tool === 'businessReport' ? 'active' : ''}`}>
             <BusinessMaterialReport products={products} />
+          </section>
+          <section className={`tool-page ${tool === 'feishuReport' ? 'active' : ''}`}>
+            <FeishuReportPage />
           </section>
           <section className={`tool-page ${tool === 'slideshow' ? 'active' : ''}`}>
             <section className="page-shell slideshow-shell">

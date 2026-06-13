@@ -2,6 +2,8 @@ import type {
   AccountSummary,
   BusinessMaterialReportPayload,
   DatabaseSnapshot,
+  DailyFeishuPreviewPayload,
+  DailyFeishuSendResult,
   DetailedPostRow,
   ExternalApiKey,
   PublishCheckResult,
@@ -93,6 +95,18 @@ export const api = {
       }).toString()}`,
       undefined,
       'Failed to load business day report'
+    ),
+  dailyFeishuPreview: (date?: string) =>
+    apiFetch<DailyFeishuPreviewPayload>(
+      `/api/reports/daily-feishu-preview?${new URLSearchParams(date ? { date } : {}).toString()}`,
+      undefined,
+      'Failed to load Feishu report preview'
+    ),
+  sendDailyFeishuReport: (date?: string) =>
+    apiFetch<DailyFeishuSendResult>(
+      `/api/reports/daily-feishu?${new URLSearchParams(date ? { date } : {}).toString()}`,
+      { method: 'POST' },
+      'Failed to send Feishu daily report'
     ),
   accounts: (productCode: string, countryCode: string, days: number, source?: string) =>
     api.dataQuery<{ ok: boolean; data: AccountSummary[] }>(

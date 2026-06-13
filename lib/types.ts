@@ -157,6 +157,34 @@ export type BusinessMaterialReportPayload = {
   generated_at?: string;
 };
 
+export type DailyFeishuReport = {
+  report_date?: string;
+  business_window_local?: { start?: string; end?: string };
+  onboarding_window_local?: { start?: string; end?: string };
+  totals?: Record<string, any>;
+  products?: Array<Record<string, any>>;
+  errors?: Array<Record<string, any>>;
+  generated_at?: string;
+};
+
+export type DailyFeishuPreviewPayload = {
+  ok: boolean;
+  report: DailyFeishuReport;
+  message: string;
+  message_preview?: string;
+};
+
+export type DailyFeishuSendResult = {
+  ok: boolean;
+  sent_at?: string;
+  report_date?: string;
+  totals?: Record<string, any>;
+  product_count?: number;
+  error_count?: number;
+  message_preview?: string;
+  error?: string;
+};
+
 export type ProductRollupCountry = {
   country_id?: string;
   country_code?: string;

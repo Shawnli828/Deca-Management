@@ -5820,6 +5820,26 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
                 self.send_json(400, {"ok": False, "error": str(error)})
             return
 
+        if path == "/api/reports/daily-feishu-preview":
+            query = parse_qs(urlparse(self.path).query)
+            try:
+                report = daily_feishu_report_payload(query.get("date", [""])[0])
+                message = daily_feishu_report_text(report)
+                self.send_json(
+                    200,
+                    {
+                        "ok": True,
+                        "report": report,
+                        "message": message,
+                        "message_preview": message[:1200],
+                    },
+                )
+            except ValueError as error:
+                self.send_json(400, {"ok": False, "error": str(error)})
+            except RuntimeError as error:
+                self.send_json(502, {"ok": False, "error": str(error)})
+            return
+
         if path == "/api/reelfarm/config":
             self.send_json(
                 200,

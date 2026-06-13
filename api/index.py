@@ -23,6 +23,8 @@ from server import (
     cron_authorized,
     database_snapshot,
     data_query_payload,
+    daily_feishu_report_payload,
+    daily_feishu_report_text,
     default_data,
     delete_product_tag,
     delete_account_issue,
@@ -274,6 +276,24 @@ def post_reports_daily_feishu(request: Request, date: str = ""):
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result.get("error") or "Failed to send Feishu daily report.")
     return result
+
+
+@app.get("/api/reports/daily-feishu-preview")
+def get_reports_daily_feishu_preview(request: Request, date: str = ""):
+    require_dashboard_auth(request)
+    try:
+        report = daily_feishu_report_payload(date)
+        message = daily_feishu_report_text(report)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    return {
+        "ok": True,
+        "report": report,
+        "message": message,
+        "message_preview": message[:1200],
+    }
 
 
 @app.get("/api/account-tags")
