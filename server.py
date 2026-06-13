@@ -371,6 +371,9 @@ def init_relational_schema(conn):
             settings_json TEXT,
             post_mode TEXT,
             publish_method TEXT,
+            sync_status TEXT,
+            last_seen_at TEXT,
+            deleted_at TEXT,
             created_at TEXT,
             synced_at TEXT
         )
@@ -512,6 +515,13 @@ def init_relational_schema(conn):
         conn.execute(statement)
     ensure_column(conn, "automations", "post_mode", "TEXT")
     ensure_column(conn, "automations", "publish_method", "TEXT")
+    ensure_column(conn, "automations", "sync_status", "TEXT")
+    ensure_column(conn, "automations", "last_seen_at", "TEXT")
+    ensure_column(conn, "automations", "deleted_at", "TEXT")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_automations_sync_status ON automations(sync_status)")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_automations_pmc_sync_status ON automations(product_market_channel_id, sync_status)"
+    )
 
 
 def init_db():
@@ -803,6 +813,52 @@ def utc_snapshot_date(value=None):
     return datetime.now(timezone.utc).date().isoformat()
 
 
+def reelfarm_dashboard_automation_condition(alias="a"):
+    return (
+        f"LOWER(COALESCE({alias}.status, '')) IN ('active', 'paused') "
+        f"AND LOWER(COALESCE({alias}.sync_status, 'present')) <> 'deleted'"
+    )
+
+
+def reelfarm_expected_automation_condition(alias="a"):
+    return (
+        f"LOWER(COALESCE({alias}.status, '')) = 'active' "
+        f"AND LOWER(COALESCE({alias}.sync_status, 'present')) <> 'deleted'"
+    )
+
+
+def mark_missing_reelfarm_automations(conn, product_market_channel_id, seen_reelfarm_ids, synced_at):
+    seen = sorted({str(item or "").strip() for item in (seen_reelfarm_ids or []) if str(item or "").strip()})
+    placeholder = db_placeholder()
+    if seen:
+        seen_placeholders = ", ".join([placeholder] * len(seen))
+        conn.execute(
+            f"""
+            UPDATE automations
+            SET sync_status = 'deleted',
+                deleted_at = COALESCE(NULLIF(deleted_at, ''), {placeholder}),
+                synced_at = {placeholder}
+            WHERE product_market_channel_id = {placeholder}
+              AND reelfarm_automation_id NOT IN ({seen_placeholders})
+              AND LOWER(COALESCE(sync_status, 'present')) <> 'deleted'
+            """,
+            (synced_at, synced_at, product_market_channel_id, *seen),
+        )
+        return
+
+    conn.execute(
+        f"""
+        UPDATE automations
+        SET sync_status = 'deleted',
+            deleted_at = COALESCE(NULLIF(deleted_at, ''), {placeholder}),
+            synced_at = {placeholder}
+        WHERE product_market_channel_id = {placeholder}
+          AND LOWER(COALESCE(sync_status, 'present')) <> 'deleted'
+        """,
+        (synced_at, synced_at, product_market_channel_id),
+    )
+
+
 def relational_table_counts(conn):
     counts = {}
     for table in (
@@ -925,8 +981,11 @@ def project_products_to_relational(data=None, product_code_filter="", market_cod
                         ["concept_id", "name"],
                     )
 
-                result = country.get("reelFarmResult") if isinstance(country.get("reelFarmResult"), dict) else {}
+                reel_farm_result = country.get("reelFarmResult")
+                has_reelfarm_result = isinstance(reel_farm_result, dict)
+                result = reel_farm_result if has_reelfarm_result else {}
                 synced_at = country.get("reelFarmSyncedAt") or now
+                seen_reelfarm_automation_ids = set()
                 for card in result.get("cards", []) or []:
                     if not isinstance(card, dict):
                         continue
@@ -945,6 +1004,7 @@ def project_products_to_relational(data=None, product_code_filter="", market_cod
                     )
                     account_id = stable_id("account", product_market_channel_id, reelfarm_account_id)
                     automation_id = stable_id("automation", automation_reelfarm_id)
+                    seen_reelfarm_automation_ids.add(automation_reelfarm_id)
                     zero_play_candidates.setdefault(account_id, [])
 
                     upsert_row(
@@ -975,6 +1035,9 @@ def project_products_to_relational(data=None, product_code_filter="", market_cod
                             "settings_json": db_json(automation),
                             "post_mode": automation.get("post_mode") or reelfarm_post_mode(automation),
                             "publish_method": automation.get("publish_method") or reelfarm_publish_method(automation),
+                            "sync_status": "present",
+                            "last_seen_at": synced_at,
+                            "deleted_at": "",
                             "created_at": automation.get("created_at") or "",
                             "synced_at": synced_at,
                         },
@@ -1092,6 +1155,14 @@ def project_products_to_relational(data=None, product_code_filter="", market_cod
                             ["post_id", "snapshot_date"],
                         )
 
+                if has_reelfarm_result:
+                    mark_missing_reelfarm_automations(
+                        conn,
+                        product_market_channel_id,
+                        seen_reelfarm_automation_ids,
+                        synced_at,
+                    )
+
         apply_zero_play_issues(conn, zero_play_candidates, now)
         counts = relational_table_counts(conn)
         conn.commit()
@@ -1193,6 +1264,7 @@ def stored_reelfarm_country(product_code, market_code):
             WHERE p.code = {placeholder}
               AND m.code = {placeholder}
               AND ch.code = {placeholder}
+              AND {reelfarm_dashboard_automation_condition("a")}
             ORDER BY a.name, mat.created_at DESC, post.published_at DESC
             """,
             (product_code, market_code, "TIKTOK"),
@@ -1337,6 +1409,7 @@ def enrich_data_with_relational_rollups(data):
             LEFT JOIN materials mat ON mat.automation_id = a.id
             LEFT JOIN posts post ON post.material_id = mat.id
             WHERE ch.code = {placeholder}
+              AND {reelfarm_dashboard_automation_condition("a")}
             GROUP BY p.code, m.code
             """,
             ("TIKTOK",),
@@ -2401,6 +2474,9 @@ def query_country_cards(query):
 
 def query_countries(query):
     where_sql, params = common_where(query, include_post_dates=False)
+    visibility_sql = ""
+    if data_source_channel_code(query_value(query, "source")) == "TIKTOK":
+        visibility_sql = f" AND {reelfarm_dashboard_automation_condition('a')}"
     with connect_db() as conn:
         init_relational_schema(conn)
         rows = conn.execute(
@@ -2425,7 +2501,7 @@ def query_countries(query):
                 COALESCE(SUM(post.bookmark_count), 0) AS total_bookmarks,
                 MAX(COALESCE(post.synced_at, mat.synced_at, a.synced_at)) AS last_synced_at
             {relational_base_from()}
-            WHERE {where_sql}
+            WHERE {where_sql}{visibility_sql}
             GROUP BY p.id, p.code, p.name, m.id, m.code, m.name
             ORDER BY p.name, m.code
             """,
@@ -2457,6 +2533,9 @@ def query_product_kpis(query):
     if country_code:
         market_filter = f" AND m.code = {placeholder}"
         filter_params.append(country_code)
+    visibility_filter = ""
+    if channel_code == "TIKTOK":
+        visibility_filter = f" AND {reelfarm_dashboard_automation_condition('a')}"
     with connect_db() as conn:
         init_relational_schema(conn)
         row = conn.execute(
@@ -2474,7 +2553,9 @@ def query_product_kpis(query):
                 COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.share_count ELSE 0 END), 0) AS seven_day_shares,
                 COALESCE(SUM(CASE WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder} THEN post.bookmark_count ELSE 0 END), 0) AS seven_day_bookmarks
             {relational_base_from()}
-            WHERE ch.code = {placeholder} AND p.code = {placeholder}{market_filter} AND post.id IS NOT NULL
+            WHERE ch.code = {placeholder}
+              AND p.code = {placeholder}{market_filter}{visibility_filter}
+              AND post.id IS NOT NULL
             """,
             (
                 yesterday_start, yesterday_end,
@@ -3078,6 +3159,7 @@ def product_business_material_daily_stats(product_code, utc_start, utc_end):
             SELECT
                 ch.code AS channel_code,
                 a.id AS automation_id,
+                acc.id AS account_id,
                 post.id AS post_id,
                 mat.id AS material_id,
                 mat.created_at AS material_created_at,
@@ -3102,7 +3184,7 @@ def product_business_material_daily_stats(product_code, utc_start, utc_end):
                   AND post.published_at < {placeholder}
                 )
               )
-            GROUP BY ch.code, a.id, post.id, mat.id, mat.created_at, post.published_at, post.view_count
+            GROUP BY ch.code, a.id, acc.id, post.id, mat.id, mat.created_at, post.published_at, post.view_count
             """,
             (
                 str(product_code or "").upper(),
@@ -3141,8 +3223,9 @@ def product_business_material_daily_stats(product_code, utc_start, utc_end):
             if item.get("post_id"):
                 if material_id:
                     entry["reelfarm_posted_materials"].add(str(material_id))
-                if item.get("automation_id"):
-                    entry["reelfarm_published_automations"].add(str(item.get("automation_id")))
+                published_identity = item.get("account_id") or item.get("automation_id")
+                if published_identity:
+                    entry["reelfarm_published_automations"].add(str(published_identity))
                 entry["reelfarm_views"] += int(item.get("view_count") or 0)
     normalized = {}
     for report_date, item in daily.items():
@@ -3207,7 +3290,7 @@ def product_active_reelfarm_expected_schedule_count(product_code):
             JOIN automations a ON a.product_market_channel_id = pmc.id
             WHERE p.code = {placeholder}
               AND ch.code = 'TIKTOK'
-              AND LOWER(COALESCE(a.status, '')) = 'active'
+              AND {reelfarm_expected_automation_condition("a")}
             """,
             (str(product_code or "").upper(),),
         ).fetchall()
@@ -3221,15 +3304,16 @@ def product_active_reelfarm_expected_automation_count(product_code):
         init_relational_schema(conn)
         row = conn.execute(
             f"""
-            SELECT COUNT(DISTINCT a.id) AS automation_count
+            SELECT COUNT(DISTINCT acc.id) AS automation_count
             FROM products p
             JOIN product_markets pm ON pm.product_id = p.id
             JOIN product_market_channels pmc ON pmc.product_market_id = pm.id
             JOIN channels ch ON ch.id = pmc.channel_id
             JOIN automations a ON a.product_market_channel_id = pmc.id
+            JOIN accounts acc ON acc.id = a.account_id
             WHERE p.code = {placeholder}
               AND ch.code = 'TIKTOK'
-              AND LOWER(COALESCE(a.status, '')) = 'active'
+              AND {reelfarm_expected_automation_condition("a")}
             """,
             (str(product_code or "").upper(),),
         ).fetchone()
@@ -4755,6 +4839,9 @@ def query_museon_clone_account_posts(query):
 
 def query_reelfarm_accounts(query):
     where_sql, params = common_where(query, include_post_dates=False)
+    visibility_sql = ""
+    if data_source_channel_code(query_value(query, "source")) == "TIKTOK":
+        visibility_sql = f" AND {reelfarm_dashboard_automation_condition('a')}"
     date_from = query_value(query, "date_from")
     date_to = query_value(query, "date_to")
     if not date_from and not date_to:
@@ -4807,7 +4894,7 @@ def query_reelfarm_accounts(query):
                 MAX(CASE WHEN {metric_condition} THEN post.published_at END) AS latest_post_at,
                 MAX(COALESCE(post.synced_at, mat.synced_at, a.synced_at)) AS last_synced_at
             {relational_base_from()}
-            WHERE {where_sql} AND acc.id IS NOT NULL
+            WHERE {where_sql}{visibility_sql} AND acc.id IS NOT NULL
             GROUP BY acc.id, acc.reelfarm_account_id, acc.username, acc.display_name, acc.avatar_url
             ORDER BY total_views DESC, post_count DESC
             """,
@@ -4900,6 +4987,7 @@ def publish_check_accounts(product_code, country_code, utc_start, utc_end):
             WHERE ch.code = {placeholder}
               AND p.code = {placeholder}
               AND m.code = {placeholder}
+              AND {reelfarm_expected_automation_condition("a")}
               AND acc.id IS NOT NULL
             GROUP BY
                 acc.id,
