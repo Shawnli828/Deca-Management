@@ -25,6 +25,11 @@ function metricDetail(count?: unknown, views?: unknown) {
   return `${metric(count)} posts · ${metric(views)} views`;
 }
 
+function numberValue(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
 function coverage(row: BusinessMaterialReportRow) {
   return `${metric(row.reelfarm_published_automations)} / ${metric(row.reelfarm_expected_automations)}`;
 }
@@ -81,14 +86,23 @@ export function BusinessMaterialReport({ products }: { products: Product[] }) {
 
   const rows = payload?.rows || [];
   const totals = payload?.totals || {};
+  const reportDayCount = rows.length;
+  const rangeLabel = customRange ? '自定义日' : `${days}日`;
+  const averageDailyViews = reportDayCount
+    ? rows.reduce((sum, row) => sum + numberValue(row.total_views), 0) / reportDayCount
+    : null;
+  const onboardingRows = rows.filter(row => row.downloads !== null && row.downloads !== undefined);
+  const averageOnboarding = onboardingRows.length
+    ? onboardingRows.reduce((sum, row) => sum + numberValue(row.downloads), 0) / onboardingRows.length
+    : null;
   const totalDownloadRate = Number(totals.total_views || 0)
     ? (Number(totals.downloads || 0) / Number(totals.total_views || 1)) * 100
     : null;
   const summaryCards = [
     {
-      label: 'RF 发布覆盖',
-      value: `${metric(totals.reelfarm_published_automations)} / ${metric(totals.reelfarm_expected_automations)}`,
-      meta: '有发布记录的 RF automation / active automation'
+      label: '每日总播放均值',
+      value: metric(averageDailyViews),
+      meta: `${rangeLabel}平均 · ${metric(totals.total_views)} 总播放`
     },
     {
       label: 'ReelFarm 均播',
@@ -101,9 +115,9 @@ export function BusinessMaterialReport({ products }: { products: Product[] }) {
       meta: metricDetail(totals.clone_posts, totals.clone_views)
     },
     {
-      label: 'Onboarding Unique',
-      value: metric(totals.downloads),
-      meta: `下载 / 播放 ${percent(totalDownloadRate)}`
+      label: 'Onboarding Unique 均值',
+      value: metric(averageOnboarding),
+      meta: `均转化 ${percent(totalDownloadRate)}`
     }
   ];
 
