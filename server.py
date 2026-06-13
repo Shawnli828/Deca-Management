@@ -4952,27 +4952,36 @@ def query_museon_clone_account_posts(query):
 
 def query_reelfarm_accounts(query):
     where_sql, params = common_where(query, include_post_dates=False)
+    channel_code = data_source_channel_code(query_value(query, "source"))
     visibility_sql = ""
-    if data_source_channel_code(query_value(query, "source")) == "TIKTOK":
+    if channel_code == "TIKTOK":
         visibility_sql = f" AND {reelfarm_dashboard_automation_condition('a')}"
     date_from = query_value(query, "date_from")
     date_to = query_value(query, "date_to")
     if not date_from and not date_to:
         date_from, date_to = query_days_window(query)
-    metric_condition = "1 = 1"
+    metric_date_column = "mat.created_at" if channel_code == "TIKTOK" else "post.published_at"
+    metric_condition = "post.id IS NOT NULL"
+    if channel_code == "TIKTOK":
+        metric_condition += f" AND {reelfarm_expected_automation_condition('a')}"
     metric_params = []
     placeholder = db_placeholder()
     if date_from:
-        metric_condition += f" AND post.published_at >= {placeholder}"
+        metric_condition += f" AND {metric_date_column} >= {placeholder}"
         metric_params.append(post_datetime_bound(date_from))
     if date_to:
-        metric_condition += f" AND post.published_at <= {placeholder}"
+        metric_condition += f" AND {metric_date_column} <= {placeholder}"
         metric_params.append(post_datetime_bound(date_to, end=True))
-    metric_condition_count = 8
+    metric_condition_count = 9
     automation_names_sql = (
         "STRING_AGG(DISTINCT a.name, ' | ')"
         if using_postgres()
         else "GROUP_CONCAT(DISTINCT a.name)"
+    )
+    expected_account_sql = (
+        f"CASE WHEN SUM(CASE WHEN {reelfarm_expected_automation_condition('a')} THEN 1 ELSE 0 END) > 0 THEN 1 ELSE 0 END"
+        if channel_code == "TIKTOK"
+        else "1"
     )
     with connect_db() as conn:
         init_relational_schema(conn)
@@ -4999,6 +5008,8 @@ def query_reelfarm_accounts(query):
                 END AS publish_method,
                 COUNT(DISTINCT CASE WHEN {metric_condition} THEN mat.id END) AS material_count,
                 COUNT(DISTINCT CASE WHEN {metric_condition} THEN post.id END) AS post_count,
+                CASE WHEN COUNT(DISTINCT CASE WHEN {metric_condition} THEN post.id END) > 0 THEN 1 ELSE 0 END AS posted_account_count,
+                {expected_account_sql} AS expected_account_count,
                 COALESCE(SUM(CASE WHEN {metric_condition} THEN post.view_count ELSE 0 END), 0) AS total_views,
                 COALESCE(SUM(CASE WHEN {metric_condition} THEN post.like_count ELSE 0 END), 0) AS total_likes,
                 COALESCE(SUM(CASE WHEN {metric_condition} THEN post.comment_count ELSE 0 END), 0) AS total_comments,

@@ -225,6 +225,8 @@ export type AccountSummary = {
   publish_method?: string;
   material_count?: number;
   post_count?: number;
+  posted_account_count?: number;
+  expected_account_count?: number;
   total_views?: number;
   total_likes?: number;
   total_comments?: number;

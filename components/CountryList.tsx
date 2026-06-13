@@ -375,7 +375,15 @@ export function CountryList({
 
   const statusOptions = Array.from(new Set(rows.map(row => String(row.status || 'unknown').toLowerCase()))).sort();
   const performanceMetrics = useMemo(() => {
-    const accountCount = filteredRows.length;
+    const hasAccountCoverageFields = filteredRows.some(
+      row => row.posted_account_count !== undefined || row.expected_account_count !== undefined
+    );
+    const postedAccounts = hasAccountCoverageFields
+      ? filteredRows.reduce((sum, row) => sum + (Number(row.posted_account_count) || 0), 0)
+      : filteredRows.filter(row => (Number(row.post_count) || 0) > 0).length;
+    const expectedAccounts = hasAccountCoverageFields
+      ? filteredRows.reduce((sum, row) => sum + (Number(row.expected_account_count) || 0), 0)
+      : filteredRows.length;
     const posts = filteredRows.reduce((sum, row) => sum + (Number(row.post_count) || 0), 0);
     const views = filteredRows.reduce((sum, row) => sum + (Number(row.total_views) || 0), 0);
     const likes = filteredRows.reduce((sum, row) => sum + (Number(row.total_likes) || 0), 0);
@@ -385,7 +393,7 @@ export function CountryList({
     const engagement = views ? ((likes + comments + shares) / views) * 100 : 0;
 
     return [
-      { label: 'POSTED', value: `${formatNumber(posts)}/${formatNumber(accountCount)}`, note: 'Filtered posts / filtered accounts' },
+      { label: 'POSTED', value: `${formatNumber(postedAccounts)}/${formatNumber(expectedAccounts)}`, note: 'Posted accounts / expected active accounts' },
       { label: 'POSTS', value: formatNumber(posts) },
       { label: 'VIEWS', value: formatNumber(views) },
       { label: 'AVG VIEWS', value: formatNumber(avgViews), note: 'Filtered total views / filtered posts' },
