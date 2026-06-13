@@ -21,13 +21,6 @@ function dateOnly(value?: string) {
   return String(value || '').slice(0, 10) || '—';
 }
 
-function compactWindow(window?: { start?: string; end?: string }) {
-  const start = window?.start;
-  const end = window?.end;
-  if (!start || !end) return '—';
-  return `${start.slice(5, 16).replace('T', ' ')} → ${end.slice(5, 16).replace('T', ' ')}`;
-}
-
 function metricDetail(count?: unknown, views?: unknown) {
   return `${metric(count)} posts · ${metric(views)} views`;
 }
@@ -175,8 +168,6 @@ export function BusinessMaterialReport({ products }: { products: Product[] }) {
             <thead>
               <tr>
                 <th>业务日</th>
-                <th>内容窗口</th>
-                <th>Onboarding 窗口</th>
                 <th>RF 发布覆盖</th>
                 <th>ReelFarm 均播</th>
                 <th>Clone 均播</th>
@@ -189,12 +180,6 @@ export function BusinessMaterialReport({ products }: { products: Product[] }) {
               {rows.length ? rows.slice().reverse().map(row => (
                 <tr key={row.report_date}>
                   <td><strong>{dateOnly(row.report_date)}</strong></td>
-                  <td>
-                    <span className="window-cell">{compactWindow(row.business_window_local)}</span>
-                  </td>
-                  <td>
-                    <span className="window-cell">{compactWindow(row.onboarding_window_local)}</span>
-                  </td>
                   <td>
                     <span className="coverage-pill">{coverage(row)}</span>
                     <small className="metric-sub">发布账号 / 应发账号</small>
@@ -217,7 +202,7 @@ export function BusinessMaterialReport({ products }: { products: Product[] }) {
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={9}>这个 range 暂时没有业务日数据。</td>
+                  <td colSpan={7}>这个 range 暂时没有业务日数据。</td>
                 </tr>
               )}
             </tbody>
