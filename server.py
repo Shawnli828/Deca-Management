@@ -301,7 +301,13 @@ def column_exists(conn, table, column):
 
 def ensure_column(conn, table, column, definition):
     if not column_exists(conn, table, column):
-        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+        except Exception as error:
+            message = str(error).lower()
+            if "duplicate column" in message or "already exists" in message:
+                return
+            raise
 
 
 def init_relational_schema(conn):
@@ -857,6 +863,66 @@ def mark_missing_reelfarm_automations(conn, product_market_channel_id, seen_reel
         """,
         (synced_at, synced_at, product_market_channel_id),
     )
+
+
+def mark_missing_reelfarm_product_automations(conn, product_code, seen_reelfarm_ids, synced_at):
+    product_code = str(product_code or "").strip().upper()
+    if not product_code:
+        return 0
+
+    seen = sorted({str(item or "").strip() for item in (seen_reelfarm_ids or []) if str(item or "").strip()})
+    placeholder = db_placeholder()
+    seen_filter = ""
+    params = [synced_at, synced_at, product_code]
+    if seen:
+        seen_placeholders = ", ".join([placeholder] * len(seen))
+        seen_filter = f"AND a.reelfarm_automation_id NOT IN ({seen_placeholders})"
+        params.extend(seen)
+
+    cursor = conn.execute(
+        f"""
+        UPDATE automations
+        SET sync_status = 'deleted',
+            deleted_at = COALESCE(NULLIF(deleted_at, ''), {placeholder}),
+            synced_at = {placeholder}
+        WHERE id IN (
+            SELECT a.id
+            FROM automations a
+            JOIN product_market_channels pmc ON pmc.id = a.product_market_channel_id
+            JOIN product_markets pm ON pm.id = pmc.product_market_id
+            JOIN products p ON p.id = pm.product_id
+            JOIN channels ch ON ch.id = pmc.channel_id
+            WHERE p.code = {placeholder}
+              AND ch.code = 'TIKTOK'
+              AND LOWER(COALESCE(a.sync_status, 'present')) <> 'deleted'
+              {seen_filter}
+        )
+        """,
+        tuple(params),
+    )
+    return max(int(cursor.rowcount or 0), 0)
+
+
+def cleanup_reelfarm_product_from_latest_automations(product_code, automations, synced_at):
+    seen_ids = reelfarm_product_automation_ids(automations, product_code)
+    if not seen_ids:
+        return {
+            "product_code": str(product_code or "").strip().upper(),
+            "latest_reelfarm_automation_count": 0,
+            "marked_deleted_count": 0,
+            "skipped": True,
+            "reason": "No matching ReelFarm automation titles found for product code.",
+        }
+
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        deleted_count = mark_missing_reelfarm_product_automations(conn, product_code, seen_ids, synced_at)
+        conn.commit()
+    return {
+        "product_code": str(product_code or "").strip().upper(),
+        "latest_reelfarm_automation_count": len(seen_ids),
+        "marked_deleted_count": deleted_count,
+    }
 
 
 def relational_table_counts(conn):
@@ -1591,6 +1657,35 @@ def list_payload(payload, key):
     return value if isinstance(value, list) else []
 
 
+def reelfarm_fetch_automations():
+    automations_payload = reelfarm_request("/automations")
+    return list_payload(automations_payload, "automations")
+
+
+def automation_title_product_code_matches(title, product_code):
+    code = str(product_code or "").strip().upper()
+    if not code:
+        return False
+    parts = [part.upper() for part in re.split(r"[-_]+", str(title or "")) if part]
+    return code in parts[:3]
+
+
+def reelfarm_product_automation_ids(automations, product_code):
+    ids = set()
+    for automation in automations or []:
+        if not isinstance(automation, dict):
+            continue
+        title = automation.get("title") or ""
+        if not automation_title_product_code_matches(title, product_code):
+            continue
+        automation_id = str(
+            automation.get("automation_id") or stable_id("automation_source", title)
+        ).strip()
+        if automation_id:
+            ids.add(automation_id)
+    return ids
+
+
 def video_identifier(video):
     for key in ("video_id", "id", "uuid"):
         value = video.get(key)
@@ -1762,14 +1857,13 @@ def compact_post(post):
     }
 
 
-def reelfarm_matches(prefix):
+def reelfarm_matches(prefix, automations=None):
     clean_prefix = (prefix or "").strip()
     if not clean_prefix:
         raise ValueError("Missing automation prefix.")
 
     candidates = automation_prefix_candidates(clean_prefix)
-    automations_payload = reelfarm_request("/automations")
-    automations = list_payload(automations_payload, "automations")
+    automations = list(automations) if automations is not None else reelfarm_fetch_automations()
     matched = []
     seen_automation_keys = set()
     for automation in automations:
@@ -1925,15 +2019,18 @@ def sync_all_reelfarm_records():
 
     data = load_data()
     synced_at = datetime.now(timezone.utc).isoformat()
+    automations = reelfarm_fetch_automations()
     successes = 0
     errors = []
     relational_projection = None
+    product_cleanups = []
 
     for product in data:
+        product_code = str(product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
         for country in product.get("countries", []) or []:
             prefix = build_country_automation_prefix(product, country)
             try:
-                result = reelfarm_matches(prefix)
+                result = reelfarm_matches(prefix, automations=automations)
                 country["reelFarmSyncedAt"] = synced_at
                 country["creatorCount"] = reelfarm_creator_count(result)
                 country["materialCount"] = reelfarm_material_count(result)
@@ -1946,6 +2043,13 @@ def sync_all_reelfarm_records():
                 successes += 1
             except RuntimeError as error:
                 errors.append({"prefix": prefix, "error": str(error)})
+        if product_code:
+            try:
+                product_cleanups.append(
+                    cleanup_reelfarm_product_from_latest_automations(product_code, automations, synced_at)
+                )
+            except RuntimeError as error:
+                errors.append({"product_code": product_code, "error": str(error)})
 
     save_data(data)
     return {
@@ -1954,6 +2058,7 @@ def sync_all_reelfarm_records():
         "synced_count": successes,
         "error_count": len(errors),
         "errors": errors[:20],
+        "product_cleanups": product_cleanups,
         "relational_projection": relational_projection,
     }
 
@@ -2097,6 +2202,7 @@ def sync_reelfarm_country(prefix, product_id="", country_id="", product_code="",
 
     data = load_data()
     synced_at = datetime.now(timezone.utc).isoformat()
+    automations = reelfarm_fetch_automations()
 
     for product in data:
         for country in product.get("countries", []) or []:
@@ -2115,13 +2221,19 @@ def sync_reelfarm_country(prefix, product_id="", country_id="", product_code="",
             if country_code:
                 country["reelFarmCode"] = str(country_code).strip().upper()
 
-            result = reelfarm_matches(clean_prefix)
+            result = reelfarm_matches(clean_prefix, automations=automations)
             country["reelFarmSyncedAt"] = synced_at
             country["creatorCount"] = reelfarm_creator_count(result)
             country["materialCount"] = reelfarm_material_count(result)
             scoped_country = dict(country)
             scoped_country["reelFarmResult"] = result
             relational_projection = project_synced_country_to_relational(product, scoped_country)
+            effective_product_code = str(product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
+            product_cleanup = cleanup_reelfarm_product_from_latest_automations(
+                effective_product_code,
+                automations,
+                synced_at,
+            )
             save_data(data)
             return {
                 "ok": True,
@@ -2129,6 +2241,7 @@ def sync_reelfarm_country(prefix, product_id="", country_id="", product_code="",
                 "synced_at": synced_at,
                 "creator_count": country["creatorCount"],
                 "material_count": country["materialCount"],
+                "product_cleanup": product_cleanup,
                 "relational_projection": relational_projection,
             }
 

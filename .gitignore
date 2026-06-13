@@ -7,3 +7,5 @@ node_modules/
 management_table.sqlite3
 Management Table.app/
 *.png
+.vercel
+.env*
