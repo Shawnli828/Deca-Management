@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ApiKeyPage } from '@/components/ApiKeyPage';
 import { AuthGate } from '@/components/AuthGate';
 import { BusinessMaterialReport } from '@/components/BusinessMaterialReport';
+import { CloudPhoneMap } from '@/components/CloudPhoneMap';
 import { CountryList } from '@/components/CountryList';
 import { CountrySettingsModal } from '@/components/CountrySettingsModal';
 import { CountryWorkspace } from '@/components/CountryWorkspace';
@@ -21,7 +22,7 @@ import { buildCountryAutomationPrefix, cardStateKey, codeFromName, getCountryRee
 export default function DashboardPage() {
   const [authenticated, setAuthenticated] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
-  const [tool, setTool] = useState<'growth' | 'businessReport' | 'feishuReport' | 'slideshow' | 'cloneSlideshow' | 'publishCheck' | 'apiKeys'>('growth');
+  const [tool, setTool] = useState<'growth' | 'businessReport' | 'feishuReport' | 'slideshow' | 'cloneSlideshow' | 'cloudPhones' | 'publishCheck' | 'apiKeys'>('growth');
   const [sideCollapsed, setSideCollapsed] = useState(false);
   const [page, setPage] = useState<'products' | 'product' | 'country'>('products');
   const [selectedProductId, setSelectedProductId] = useState('');
@@ -833,6 +834,9 @@ export default function DashboardPage() {
                 />
               ) : null}
             </section>
+          </section>
+          <section className={`tool-page ${tool === 'cloudPhones' ? 'active' : ''}`}>
+            <CloudPhoneMap products={products} />
           </section>
           <section className={`tool-page ${tool === 'apiKeys' ? 'active' : ''}`}>
             <ApiKeyPage

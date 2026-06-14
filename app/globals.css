@@ -7354,3 +7354,541 @@
         body :where(.coverage-pill, .metric-main, .total-views-cell, .download-cell) {
             font-weight: 680 !important;
         }
+
+        .cloud-phone-page {
+            display: grid;
+            gap: 18px;
+            min-height: 100vh;
+            padding: 28px;
+            font-family: var(--font-sans);
+            letter-spacing: 0;
+            background:
+                radial-gradient(circle at 72% 12%, rgba(79, 70, 229, 0.09), transparent 24%),
+                linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+            color: var(--text);
+        }
+
+        .cloud-phone-page *,
+        .cloud-phone-page :where(button, input, select, textarea) {
+            font-family: var(--font-sans);
+            letter-spacing: 0;
+        }
+
+        .cloud-phone-hero {
+            display: flex;
+            align-items: stretch;
+            justify-content: space-between;
+            gap: 18px;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 24px;
+            background: #ffffff;
+            box-shadow: var(--shadow);
+        }
+
+        .cloud-phone-hero h1 {
+            margin: 4px 0 8px;
+            color: var(--text);
+            font-size: 42px;
+            line-height: 1.02;
+            font-weight: 680 !important;
+        }
+
+        .cloud-phone-hero p {
+            max-width: 760px;
+            margin: 0;
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.7;
+        }
+
+        .cloud-phone-status {
+            display: grid;
+            align-content: center;
+            justify-items: end;
+            min-width: 170px;
+            border-left: 1px solid var(--line);
+            padding-left: 22px;
+        }
+
+        .cloud-phone-status span,
+        .cloud-phone-status small,
+        .cloud-mini-label {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 560 !important;
+        }
+
+        .cloud-phone-status strong {
+            color: var(--accent-strong);
+            font-size: 52px;
+            line-height: 1;
+            font-weight: 680 !important;
+        }
+
+        .cloud-phone-layout {
+            display: grid;
+            grid-template-columns: 280px minmax(520px, 1fr) 280px;
+            gap: 16px;
+            align-items: start;
+        }
+
+        .cloud-inline-warning {
+            border: 1px solid #fde68a;
+            border-radius: 12px;
+            padding: 12px 14px;
+            background: #fffbeb;
+            color: #92400e;
+            font-size: 13px;
+            line-height: 1.6;
+            font-weight: 520 !important;
+        }
+
+        .cloud-product-rail,
+        .cloud-seat-map,
+        .cloud-inspector {
+            min-width: 0;
+        }
+
+        .cloud-product-rail {
+            position: sticky;
+            top: 18px;
+            display: grid;
+            gap: 10px;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 12px;
+            background: #ffffff;
+            box-shadow: 0 14px 36px rgba(15, 23, 42, 0.06);
+        }
+
+        .cloud-panel-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 4px 4px 8px;
+        }
+
+        .cloud-panel-title strong {
+            color: var(--text);
+            font-size: 15px;
+            font-weight: 650 !important;
+        }
+
+        .cloud-panel-title span,
+        .cloud-product-card small,
+        .cloud-ip-group-head small {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 520 !important;
+        }
+
+        .cloud-product-card {
+            display: grid;
+            grid-template-columns: 52px minmax(0, 1fr);
+            gap: 11px;
+            align-items: center;
+            width: 100%;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 10px;
+            background: #ffffff;
+            color: var(--text);
+            text-align: left;
+            transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+        }
+
+        .cloud-product-card:hover,
+        .cloud-product-card.active {
+            border-color: rgba(79, 70, 229, 0.34);
+            background: #f7f8ff;
+            box-shadow: 0 10px 28px rgba(79, 70, 229, 0.10);
+            transform: translateY(-1px);
+        }
+
+        .cloud-product-logo {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 52px;
+            height: 52px;
+            overflow: hidden;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            background: #f8fafc;
+            color: var(--accent-strong);
+            font-size: 13px;
+            font-weight: 660 !important;
+        }
+
+        .cloud-product-logo img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            padding: 5px;
+        }
+
+        .cloud-product-card strong,
+        .cloud-product-card small {
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .cloud-product-card strong {
+            color: var(--text);
+            font-size: 15px;
+            font-weight: 650 !important;
+        }
+
+        .cloud-seat-map {
+            display: grid;
+            gap: 14px;
+        }
+
+        .cloud-seat-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 16px 18px;
+            background: #ffffff;
+            box-shadow: 0 14px 36px rgba(15, 23, 42, 0.05);
+        }
+
+        .cloud-seat-toolbar span:first-child,
+        .cloud-env-code {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 28px;
+            border: 1px solid #dbe2ff;
+            border-radius: 999px;
+            padding: 0 10px;
+            background: #eef2ff;
+            color: #3730a3;
+            font-size: 12px;
+            font-weight: 680 !important;
+        }
+
+        .cloud-seat-toolbar h2 {
+            margin: 8px 0 0;
+            color: var(--text);
+            font-size: 24px;
+            line-height: 1.1;
+            font-weight: 680 !important;
+        }
+
+        .cloud-seat-summary {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
+        .cloud-seat-summary span {
+            min-height: 36px;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 8px 10px;
+            background: #f8fafc;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 520 !important;
+        }
+
+        .cloud-seat-summary b {
+            color: var(--text);
+            font-weight: 680 !important;
+        }
+
+        .cloud-ip-group-stack {
+            display: grid;
+            gap: 14px;
+        }
+
+        .cloud-ip-group-card {
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            background: #ffffff;
+            box-shadow: 0 14px 36px rgba(15, 23, 42, 0.05);
+        }
+
+        .cloud-ip-group-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            border-bottom: 1px solid var(--line);
+            padding: 15px 16px;
+        }
+
+        .cloud-ip-group-head > div {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr);
+            column-gap: 10px;
+            row-gap: 4px;
+            align-items: center;
+        }
+
+        .cloud-ip-group-head strong {
+            color: var(--text);
+            font-size: 18px;
+            font-weight: 650 !important;
+        }
+
+        .cloud-ip-group-head small {
+            grid-column: 2;
+        }
+
+        .cloud-env-health {
+            display: inline-flex;
+            align-items: center;
+            min-height: 28px;
+            border: 1px solid #bbf7d0;
+            border-radius: 999px;
+            padding: 0 10px;
+            background: #f0fdf4;
+            color: #15803d;
+            font-size: 12px;
+            font-weight: 650 !important;
+        }
+
+        .cloud-phone-grid {
+            display: grid;
+            grid-template-columns: repeat(8, minmax(48px, 1fr));
+            gap: 10px;
+            padding: 18px;
+            background:
+                linear-gradient(90deg, transparent calc(50% - 1px), rgba(203, 213, 225, 0.58) calc(50% - 1px), rgba(203, 213, 225, 0.58) calc(50% + 1px), transparent calc(50% + 1px)),
+                #fbfcfe;
+        }
+
+        .cloud-phone-slot {
+            display: grid;
+            justify-items: center;
+            gap: 5px;
+            min-height: 66px;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 9px 6px;
+            background: #ffffff;
+            color: var(--muted);
+            box-shadow: 0 10px 20px rgba(15, 23, 42, 0.04);
+            transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+        }
+
+        .cloud-phone-slot:hover,
+        .cloud-phone-slot.selected {
+            transform: translateY(-2px);
+            border-color: rgba(79, 70, 229, 0.5);
+            box-shadow: 0 14px 28px rgba(79, 70, 229, 0.12);
+        }
+
+        .cloud-phone-slot svg {
+            width: 23px;
+            height: 23px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.9;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .cloud-phone-slot span {
+            color: currentColor;
+            font-size: 11px;
+            font-weight: 650 !important;
+        }
+
+        .cloud-phone-slot em {
+            min-height: 18px;
+            border-radius: 999px;
+            padding: 2px 7px;
+            background: rgba(255, 255, 255, 0.78);
+            color: currentColor;
+            font-size: 10px;
+            font-style: normal;
+            font-weight: 650 !important;
+        }
+
+        .cloud-phone-slot.running {
+            background: #ecfdf5;
+            border-color: #bbf7d0;
+            color: #15803d;
+        }
+
+        .cloud-phone-slot.ready {
+            background: #eff6ff;
+            border-color: #bfdbfe;
+            color: #2563eb;
+        }
+
+        .cloud-phone-slot.warming {
+            background: #fffbeb;
+            border-color: #fde68a;
+            color: #a16207;
+        }
+
+        .cloud-phone-slot.offline {
+            background: #fef2f2;
+            border-color: #fecaca;
+            color: #b91c1c;
+        }
+
+        .cloud-phone-slot.empty {
+            background: #f8fafc;
+            border-style: dashed;
+            color: #cbd5e1;
+            box-shadow: none;
+        }
+
+        .cloud-inspector {
+            position: sticky;
+            top: 18px;
+            display: grid;
+            gap: 12px;
+        }
+
+        .cloud-inspector-card,
+        .cloud-inspector-note {
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 14px;
+            background: #ffffff;
+            box-shadow: 0 14px 36px rgba(15, 23, 42, 0.05);
+        }
+
+        .cloud-inspector-card h3 {
+            margin: 6px 0 4px;
+            color: var(--text);
+            font-size: 20px;
+            line-height: 1.15;
+            font-weight: 680 !important;
+        }
+
+        .cloud-inspector-card p,
+        .cloud-inspector-note {
+            margin: 0;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.6;
+            font-weight: 520 !important;
+        }
+
+        .cloud-inspector-card dl {
+            display: grid;
+            gap: 8px;
+            margin: 12px 0 0;
+        }
+
+        .cloud-inspector-card dl div {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 8px 10px;
+            background: #f8fafc;
+        }
+
+        .cloud-inspector-card dt {
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .cloud-inspector-card dd {
+            margin: 0;
+            color: var(--text);
+            font-size: 13px;
+            font-weight: 650 !important;
+            text-align: right;
+        }
+
+        .cloud-legend-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 30px;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .cloud-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #cbd5e1;
+        }
+
+        .cloud-dot.running {
+            background: #22c55e;
+        }
+
+        .cloud-dot.ready {
+            background: #3b82f6;
+        }
+
+        .cloud-dot.warming {
+            background: #f59e0b;
+        }
+
+        .cloud-dot.offline {
+            background: #ef4444;
+        }
+
+        .cloud-dot.empty {
+            border: 1px dashed #94a3b8;
+            background: transparent;
+        }
+
+        @media (max-width: 1180px) {
+            .cloud-phone-layout {
+                grid-template-columns: minmax(220px, 0.35fr) minmax(0, 1fr);
+            }
+
+            .cloud-inspector {
+                grid-column: 1 / -1;
+                position: static;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 760px) {
+            .cloud-phone-page {
+                padding: 18px;
+            }
+
+            .cloud-phone-hero,
+            .cloud-seat-toolbar,
+            .cloud-ip-group-head {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .cloud-phone-status {
+                justify-items: start;
+                border-left: 0;
+                border-top: 1px solid var(--line);
+                padding: 16px 0 0;
+            }
+
+            .cloud-phone-layout,
+            .cloud-inspector {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            .cloud-product-rail,
+            .cloud-inspector {
+                position: static;
+            }
+
+            .cloud-phone-grid {
+                grid-template-columns: repeat(4, minmax(52px, 1fr));
+            }
+        }
