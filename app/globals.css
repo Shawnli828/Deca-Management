@@ -7686,6 +7686,17 @@
             background: #f8fafc;
         }
 
+        .cloud-empty-state {
+            border: 1px dashed var(--line);
+            border-radius: 16px;
+            padding: 28px;
+            background: #f8fafc;
+            color: var(--muted);
+            font-size: 15px;
+            line-height: 1.6;
+            font-weight: 560 !important;
+        }
+
         .cloud-ip-group-card {
             border: 1px solid var(--line);
             border-radius: 14px;

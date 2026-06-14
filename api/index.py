@@ -217,6 +217,66 @@ def sanitize_geelark_phone(phone: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def load_geelark_phones() -> tuple[list[dict[str, Any]], int | None]:
+    all_phones: list[dict[str, Any]] = []
+    total: int | None = None
+    page_size = 100
+    for page in range(1, 20):
+        response = geelark_post("/open/v1/phone/list", {"page": page, "pageSize": page_size})
+        if response.get("code") not in (0, "0", None):
+            raise HTTPException(status_code=502, detail=response.get("msg") or response.get("message") or "GeeLark API failed")
+        items, response_total = geelark_phone_items(response)
+        if response_total is not None:
+            total = response_total
+        all_phones.extend(items)
+        if len(items) < page_size:
+            break
+    return all_phones, total
+
+
+def geelark_payload_for_pair(all_phones: list[dict[str, Any]], product_code: str, country_code: str, total: int | None = None) -> dict[str, Any]:
+    clean_product = product_code.strip().upper()
+    clean_country = country_code.strip().upper()
+    matched = [
+        sanitize_geelark_phone(phone)
+        for phone in all_phones
+        if geelark_group_matches(geelark_group_name(phone), clean_product, clean_country)
+    ]
+
+    groups: dict[str, dict[str, Any]] = {}
+    for phone in matched:
+        group_name = phone["groupName"] or f"{clean_country}-{clean_product}"
+        group = groups.setdefault(
+            group_name,
+            {
+                "id": group_name,
+                "name": group_name,
+                "productCode": clean_product,
+                "countryCode": clean_country,
+                "countryName": phone.get("countryName") or "",
+                "phones": [],
+            },
+        )
+        group["phones"].append(phone)
+        if phone.get("countryName"):
+            group["countryName"] = phone["countryName"]
+
+    ordered_groups = sorted(
+        groups.values(),
+        key=lambda item: [int(part) if part.isdigit() else part for part in re.split(r"(\\d+)", item["name"])],
+    )
+
+    return {
+        "ok": True,
+        "source": "geelark",
+        "filters": {"product_code": clean_product, "country_code": clean_country},
+        "total_loaded": total if total is not None else len(all_phones),
+        "phone_count": len(matched),
+        "group_count": len(ordered_groups),
+        "groups": ordered_groups,
+    }
+
+
 def static_file_response(asset_path: str):
     clean_path = asset_path.strip("/") or "index.html"
     requested = (BASE_DIR / clean_path).resolve()
@@ -312,57 +372,45 @@ def get_geelark_phones(request: Request, product_code: str = "DB", country_code:
     if not clean_product or not clean_country:
         raise HTTPException(status_code=400, detail="product_code and country_code are required")
 
-    all_phones: list[dict[str, Any]] = []
-    total: int | None = None
-    page_size = 100
-    for page in range(1, 20):
-        response = geelark_post("/open/v1/phone/list", {"page": page, "pageSize": page_size})
-        if response.get("code") not in (0, "0", None):
-            raise HTTPException(status_code=502, detail=response.get("msg") or response.get("message") or "GeeLark API failed")
-        items, response_total = geelark_phone_items(response)
-        if response_total is not None:
-            total = response_total
-        all_phones.extend(items)
-        if len(items) < page_size:
-            break
+    all_phones, total = load_geelark_phones()
+    return geelark_payload_for_pair(all_phones, clean_product, clean_country, total)
 
-    matched = [
-        sanitize_geelark_phone(phone)
-        for phone in all_phones
-        if geelark_group_matches(geelark_group_name(phone), clean_product, clean_country)
+
+@app.get("/api/geelark/phones-map")
+def get_geelark_phones_map(request: Request, pairs: str = ""):
+    require_dashboard_auth(request)
+    parsed_pairs: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for raw_pair in pairs.split(","):
+        parts = [part.strip().upper() for part in raw_pair.replace("-", ":").split(":") if part.strip()]
+        if len(parts) != 2:
+            continue
+        product_code, country_code = parts
+        key = f"{product_code}:{country_code}"
+        if key in seen:
+            continue
+        seen.add(key)
+        parsed_pairs.append((product_code, country_code))
+
+    if not parsed_pairs:
+        raise HTTPException(status_code=400, detail="pairs is required, for example DB:GE,DB:US")
+    if len(parsed_pairs) > 120:
+        raise HTTPException(status_code=400, detail="Too many GeeLark pairs requested")
+
+    all_phones, total = load_geelark_phones()
+    items = [
+        geelark_payload_for_pair(all_phones, product_code, country_code, total)
+        for product_code, country_code in parsed_pairs
     ]
-
-    groups: dict[str, dict[str, Any]] = {}
-    for phone in matched:
-        group_name = phone["groupName"] or f"{clean_country}-{clean_product}"
-        group = groups.setdefault(
-            group_name,
-            {
-                "id": group_name,
-                "name": group_name,
-                "productCode": clean_product,
-                "countryCode": clean_country,
-                "countryName": phone.get("countryName") or "",
-                "phones": [],
-            },
-        )
-        group["phones"].append(phone)
-        if phone.get("countryName"):
-            group["countryName"] = phone["countryName"]
-
-    ordered_groups = sorted(
-        groups.values(),
-        key=lambda item: [int(part) if part.isdigit() else part for part in re.split(r"(\\d+)", item["name"])],
-    )
 
     return {
         "ok": True,
         "source": "geelark",
-        "filters": {"product_code": clean_product, "country_code": clean_country},
+        "pairs": [item["filters"] for item in items],
         "total_loaded": total if total is not None else len(all_phones),
-        "phone_count": len(matched),
-        "group_count": len(ordered_groups),
-        "groups": ordered_groups,
+        "phone_count": sum(int(item.get("phone_count") or 0) for item in items),
+        "group_count": sum(int(item.get("group_count") or 0) for item in items),
+        "items": items,
     }
 
 

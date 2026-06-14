@@ -78,7 +78,20 @@ type GeeLarkPayload = {
   ok: boolean;
   phone_count: number;
   group_count: number;
+  filters?: {
+    product_code?: string;
+    country_code?: string;
+  };
   groups: GeeLarkGroup[];
+};
+
+type GeeLarkPayloadMap = Record<string, GeeLarkPayload>;
+
+type GeeLarkMapPayload = {
+  ok: boolean;
+  phone_count: number;
+  group_count: number;
+  items: GeeLarkPayload[];
 };
 
 const fallbackCountries: Country[] = [
@@ -86,6 +99,24 @@ const fallbackCountries: Country[] = [
   { id: 'us', name: 'United States', reelFarmCode: 'US', creatorCount: 24 },
   { id: 'fr', name: 'France', reelFarmCode: 'FR', creatorCount: 12 }
 ];
+
+const countryNamesByCode: Record<string, string> = {
+  AT: 'Austria',
+  AU: 'Australia',
+  BR: 'Brazil',
+  CA: 'Canada',
+  CN: 'China',
+  DE: 'Germany',
+  FR: 'France',
+  GB: 'United Kingdom',
+  GE: 'Germany',
+  IN: 'India',
+  IT: 'Italy',
+  JP: 'Japan',
+  KR: 'South Korea',
+  UK: 'United Kingdom',
+  US: 'United States'
+};
 
 const stateLabels: Record<PhoneState, string> = {
   ready: '可用',
@@ -111,6 +142,11 @@ function statusToState(status: number | string | null | undefined, rpaStatus: nu
   if (statusText === '2') return 'ready';
   if (statusText === '1') return 'warming';
   return 'ready';
+}
+
+function countryNameForCode(code?: string, fallback?: string) {
+  const cleanCode = String(code || '').toUpperCase();
+  return fallback || countryNamesByCode[cleanCode] || cleanCode || 'Unknown';
 }
 
 function buildSlots(productCode: string, countryCode: string, count: number): PhoneSlot[] {
@@ -141,6 +177,7 @@ function buildGeeLarkGroups(payload?: GeeLarkPayload | null): IpGroup[] {
       return String(a).localeCompare(String(b), undefined, { numeric: true });
     })
     .map(group => {
+      const countryName = countryNameForCode(group.countryCode, group.countryName);
       const slots = group.phones.map((phone, index) => {
         const label = phone.serialName || phone.serialNo || String(index + 1);
         return {
@@ -150,7 +187,7 @@ function buildGeeLarkGroups(payload?: GeeLarkPayload | null): IpGroup[] {
           serialName: phone.serialName,
           serialNo: phone.serialNo,
           groupName: group.name,
-          countryName: phone.countryName || group.countryName || 'Germany',
+          countryName: countryNameForCode(group.countryCode, phone.countryName || group.countryName),
           timeZone: phone.timeZone,
           deviceModel: phone.deviceModel,
           statusCode: phone.status,
@@ -162,13 +199,38 @@ function buildGeeLarkGroups(payload?: GeeLarkPayload | null): IpGroup[] {
         id: `geelark:${group.name}`,
         name: group.name,
         code: group.countryCode || 'GE',
-        countryName: group.countryName || 'Germany',
+        countryName,
         source: 'GeeLark',
         phoneCount: slots.length,
         activeCount: slots.filter(slot => slot.state !== 'offline' && slot.state !== 'empty').length,
         slots
       };
     });
+}
+
+function geeLarkKey(productCode: string, countryCode: string) {
+  return `${productCode.toUpperCase()}:${countryCode.toUpperCase()}`;
+}
+
+function sourceProductsForCloud(products: Product[]) {
+  return products.length ? products : [
+    { id: 'demo-db', name: 'DeenBack', reelFarmCode: 'DB', countries: fallbackCountries, creatorCount: 54 },
+    { id: 'demo-dl', name: 'Delust', reelFarmCode: 'DL', countries: fallbackCountries.slice(0, 2), creatorCount: 34 },
+    { id: 'demo-dm', name: 'Demi', reelFarmCode: 'DM', countries: fallbackCountries.slice(1, 3), creatorCount: 20 }
+  ];
+}
+
+function productCountryPairs(products: Product[]) {
+  const pairs = new Map<string, { productCode: string; countryCode: string }>();
+  sourceProductsForCloud(products).forEach(product => {
+    const productCode = getProductReelFarmCode(product) || product.name.slice(0, 2).toUpperCase();
+    const countries = product.countries?.length ? product.countries : fallbackCountries.slice(0, 2);
+    countries.forEach(country => {
+      const countryCode = getCountryReelFarmCode(country) || country.name.slice(0, 2).toUpperCase();
+      pairs.set(geeLarkKey(productCode, countryCode), { productCode, countryCode });
+    });
+  });
+  return [...pairs.values()];
 }
 
 function buildCountrySections(ipGroups: IpGroup[]): CountrySection[] {
@@ -211,20 +273,20 @@ function compactIpGroupName(name: string, countryCode: string, productCode: stri
   return name.replace(/^Zhan-/i, '').replace(new RegExp(`-${productCode}$`, 'i'), '') || name;
 }
 
-function cloudProductsFrom(products: Product[], geDbPayload?: GeeLarkPayload | null): CloudProduct[] {
-  const sourceProducts = products.length ? products : [
-    { id: 'demo-db', name: 'DeenBack', reelFarmCode: 'DB', countries: fallbackCountries, creatorCount: 54 },
-    { id: 'demo-dl', name: 'Delust', reelFarmCode: 'DL', countries: fallbackCountries.slice(0, 2), creatorCount: 34 },
-    { id: 'demo-dm', name: 'Demi', reelFarmCode: 'DM', countries: fallbackCountries.slice(1, 3), creatorCount: 20 }
-  ];
-
-  const geDbGroups = buildGeeLarkGroups(geDbPayload);
+function cloudProductsFrom(products: Product[], geeLarkPayloads: GeeLarkPayloadMap): CloudProduct[] {
+  const sourceProducts = sourceProductsForCloud(products);
+  const hasGeeLarkPayloads = Object.keys(geeLarkPayloads).length > 0;
 
   return sourceProducts.map((product, productIndex) => {
     const productCode = getProductReelFarmCode(product) || product.name.slice(0, 2).toUpperCase();
     const countries = product.countries?.length ? product.countries : fallbackCountries.slice(0, 2);
-    const ipGroups = productCode === 'DB' && geDbGroups.length
-      ? geDbGroups
+    const liveGroups = countries.flatMap(country => {
+      const countryCode = getCountryReelFarmCode(country) || country.name.slice(0, 2).toUpperCase();
+      return buildGeeLarkGroups(geeLarkPayloads[geeLarkKey(productCode, countryCode)]);
+    });
+
+    const ipGroups = hasGeeLarkPayloads
+      ? liveGroups
       : countries.map((country, countryIndex) => {
         const countryCode = getCountryReelFarmCode(country) || country.name.slice(0, 2).toUpperCase();
         const fallbackCount = 10 + productIndex * 4 + countryIndex * 3;
@@ -264,22 +326,29 @@ function PhoneGlyph() {
 }
 
 export function CloudPhoneMap({ products }: { products: Product[] }) {
-  const [geDbPayload, setGeDbPayload] = useState<GeeLarkPayload | null>(null);
-  const [geDbLoading, setGeDbLoading] = useState(false);
-  const [geDbError, setGeDbError] = useState('');
-  const cloudProducts = useMemo(() => cloudProductsFrom(products, geDbPayload), [products, geDbPayload]);
+  const [geeLarkPayloads, setGeeLarkPayloads] = useState<GeeLarkPayloadMap>({});
+  const [geeLarkLoading, setGeeLarkLoading] = useState(false);
+  const [geeLarkError, setGeeLarkError] = useState('');
+  const cloudProducts = useMemo(() => cloudProductsFrom(products, geeLarkPayloads), [products, geeLarkPayloads]);
   const defaultProductId = cloudProducts.find(product => product.code === 'DB')?.id || '';
   const [selectedProductId, setSelectedProductId] = useState('');
   const [selectedSlotId, setSelectedSlotId] = useState('');
+  const geeLarkPairs = useMemo(() => productCountryPairs(products), [products]);
 
   useEffect(() => {
     let cancelled = false;
-    setGeDbLoading(true);
-    setGeDbError('');
-    fetch('/api/geelark/phones?product_code=DB&country_code=GE')
+    if (!geeLarkPairs.length) return () => {
+      cancelled = true;
+    };
+    setGeeLarkLoading(true);
+    setGeeLarkError('');
+    const query = geeLarkPairs
+      .map(pair => `${encodeURIComponent(pair.productCode)}:${encodeURIComponent(pair.countryCode)}`)
+      .join(',');
+    fetch(`/api/geelark/phones-map?pairs=${query}`)
       .then(async response => {
         const text = await response.text();
-        let payload: GeeLarkPayload | { error?: string };
+        let payload: GeeLarkMapPayload | { error?: string };
         try {
           payload = JSON.parse(text);
         } catch {
@@ -289,18 +358,26 @@ export function CloudPhoneMap({ products }: { products: Product[] }) {
           const apiError = 'error' in payload ? payload.error : '';
           throw new Error(apiError || 'GeeLark API failed');
         }
-        if (!cancelled) setGeDbPayload(payload as GeeLarkPayload);
+        const nextPayloads: GeeLarkPayloadMap = {};
+        (payload as GeeLarkMapPayload).items?.forEach(item => {
+          const productCode = String(item.filters?.product_code || '').toUpperCase();
+          const countryCode = String(item.filters?.country_code || '').toUpperCase();
+          if (productCode && countryCode) {
+            nextPayloads[geeLarkKey(productCode, countryCode)] = item;
+          }
+        });
+        if (!cancelled) setGeeLarkPayloads(nextPayloads);
       })
       .catch(error => {
-        if (!cancelled) setGeDbError(error instanceof Error ? error.message : String(error));
+        if (!cancelled) setGeeLarkError(error instanceof Error ? error.message : String(error));
       })
       .finally(() => {
-        if (!cancelled) setGeDbLoading(false);
+        if (!cancelled) setGeeLarkLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [geeLarkPairs]);
 
   const selectedProduct = cloudProducts.find(product => product.id === (selectedProductId || defaultProductId)) || cloudProducts[0];
   const selectedSlot = selectedProduct?.ipGroups
@@ -313,7 +390,14 @@ export function CloudPhoneMap({ products }: { products: Product[] }) {
     warnings: sum.warnings + ipGroup.slots.filter(slot => slot.state === 'warming' || slot.state === 'offline').length
   }), { ipGroups: 0, phones: 0, active: 0, warnings: 0 }) || { ipGroups: 0, phones: 0, active: 0, warnings: 0 };
   const countrySections = useMemo(() => buildCountrySections(selectedProduct?.ipGroups || []), [selectedProduct]);
-  const liveLabel = geDbPayload?.ok ? `GE-DB 已接入 · ${geDbPayload.group_count} 组 / ${geDbPayload.phone_count} 台` : 'GE-DB 接入预览';
+  const liveTotals = useMemo(() => Object.values(geeLarkPayloads).reduce((sum, payload) => ({
+    pairs: sum.pairs + 1,
+    groups: sum.groups + Number(payload.group_count || 0),
+    phones: sum.phones + Number(payload.phone_count || 0)
+  }), { pairs: 0, groups: 0, phones: 0 }), [geeLarkPayloads]);
+  const liveLabel = liveTotals.groups
+    ? `GeeLark 已接入 · ${liveTotals.pairs} 区 / ${liveTotals.groups} 组 / ${formatNumber(liveTotals.phones)} 台`
+    : 'GeeLark 接入预览';
 
   return (
     <section className="cloud-phone-page">
@@ -321,18 +405,18 @@ export function CloudPhoneMap({ products }: { products: Product[] }) {
         <div>
           <p className="dashboard-kicker">GeeLark Cloud Phone</p>
           <h1>云手机分布图</h1>
-          <p>按「产品 → 国家/IP 分组 → 云手机」查看 GeeLark 资产。真实命名里 GE-DB 会被识别为 Germany + DeenBack，例如 Zhan-GE-Rola1-DB。</p>
+          <p>按「产品 → 国家 → IP 分组 → 云手机」查看 GeeLark 资产。真实命名里 US-DB、DB-US 这类顺序都会识别到对应产品和地区。</p>
         </div>
         <div className="cloud-phone-status">
-          <span>{geDbLoading ? '正在读取 GE-DB' : liveLabel}</span>
+          <span>{geeLarkLoading ? '正在读取 GeeLark' : liveLabel}</span>
           <strong>{formatNumber(totals.phones)}</strong>
           <small>台云手机</small>
         </div>
       </header>
 
-      {geDbError ? (
+      {geeLarkError ? (
         <div className="cloud-inline-warning">
-          GeeLark 接口暂未返回真实数据：{geDbError}。当前页面先显示产品结构预览；在 Vercel 环境变量加入 GEELARK_API_TOKEN 后会自动读取真实 GE-DB。
+          GeeLark 接口暂未返回真实数据：{geeLarkError}。当前页面先显示产品结构预览；配置 GEELARK_API_TOKEN 后会自动读取所有产品和地区。
         </div>
       ) : null}
 
@@ -381,7 +465,7 @@ export function CloudPhoneMap({ products }: { products: Product[] }) {
           </div>
 
           <div className="cloud-country-stack">
-            {countrySections.map(section => (
+            {countrySections.length ? countrySections.map(section => (
               <section className="cloud-country-block" key={section.id}>
                 <div className="cloud-country-head">
                   <div>
@@ -426,7 +510,11 @@ export function CloudPhoneMap({ products }: { products: Product[] }) {
                   })}
                 </div>
               </section>
-            ))}
+            )) : (
+              <div className="cloud-empty-state">
+                当前产品暂未匹配到 GeeLark 分组。请确认分组名里包含产品 code 和国家 code，例如 GE-DB 或 DB-GE。
+              </div>
+            )}
           </div>
         </section>
 
