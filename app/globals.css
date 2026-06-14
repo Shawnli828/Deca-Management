@@ -7445,8 +7445,7 @@
         }
 
         .cloud-product-rail,
-        .cloud-seat-map,
-        .cloud-inspector {
+        .cloud-seat-map {
             min-width: 0;
         }
 
@@ -7549,6 +7548,9 @@
         .cloud-seat-map {
             display: grid;
             gap: 14px;
+            height: calc(100vh - 160px);
+            min-height: 620px;
+            overflow: hidden;
             min-width: 0;
         }
 
@@ -7587,6 +7589,15 @@
             font-weight: 680 !important;
         }
 
+        .cloud-selection-inline {
+            max-width: 780px;
+            margin: 8px 0 0;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.5;
+            font-weight: 560 !important;
+        }
+
         .cloud-seat-summary {
             display: flex;
             flex-wrap: wrap;
@@ -7613,6 +7624,27 @@
         .cloud-country-stack {
             display: grid;
             gap: 16px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            max-height: 100%;
+            padding-right: 4px;
+            overscroll-behavior: contain;
+            scrollbar-gutter: stable;
+        }
+
+        .cloud-country-stack::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        .cloud-country-stack::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 999px;
+        }
+
+        .cloud-country-stack::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border: 2px solid #f1f5f9;
+            border-radius: 999px;
         }
 
         .cloud-country-block {
@@ -7844,105 +7876,122 @@
             box-shadow: none;
         }
 
-        .cloud-inspector {
-            grid-column: 2;
-            position: static;
+        .cloud-phone-detail-layer {
+            position: fixed;
+            inset: 0;
+            z-index: 80;
             display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 12px;
+            place-items: center;
+            padding: 24px;
+            pointer-events: auto;
         }
 
-        .cloud-inspector-card,
-        .cloud-inspector-note {
+        .cloud-phone-detail-card {
+            position: relative;
+            width: min(540px, calc(100vw - 40px));
             border: 1px solid var(--line);
-            border-radius: 14px;
-            padding: 14px;
+            border-radius: 20px;
+            padding: 22px;
             background: #ffffff;
-            box-shadow: 0 14px 36px rgba(15, 23, 42, 0.05);
+            box-shadow: 0 30px 80px rgba(15, 23, 42, 0.22);
         }
 
-        .cloud-inspector-card h3 {
-            margin: 6px 0 4px;
+        .cloud-detail-close {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 34px;
+            height: 34px;
+            border: 1px solid var(--line);
+            border-radius: 11px;
+            background: #f8fafc;
             color: var(--text);
-            font-size: 20px;
+            font-size: 24px;
+            line-height: 1;
+            font-weight: 520 !important;
+        }
+
+        .cloud-detail-state {
+            display: inline-flex;
+            align-items: center;
+            min-height: 30px;
+            border-radius: 999px;
+            padding: 0 12px;
+            background: #eff6ff;
+            color: #2563eb;
+            font-size: 13px;
+            font-weight: 650 !important;
+        }
+
+        .cloud-detail-state.running {
+            background: #ecfdf5;
+            color: #15803d;
+        }
+
+        .cloud-detail-state.warming {
+            background: #fffbeb;
+            color: #a16207;
+        }
+
+        .cloud-detail-state.offline {
+            background: #fef2f2;
+            color: #b91c1c;
+        }
+
+        .cloud-detail-state.empty {
+            background: #f8fafc;
+            color: #94a3b8;
+        }
+
+        .cloud-phone-detail-card h3 {
+            margin: 12px 44px 6px 0;
+            color: var(--text);
+            font-size: 28px;
             line-height: 1.15;
             font-weight: 680 !important;
         }
 
-        .cloud-inspector-card p,
-        .cloud-inspector-note {
+        .cloud-phone-detail-card p {
             margin: 0;
             color: var(--muted);
-            font-size: 13px;
+            font-size: 14px;
             line-height: 1.6;
-            font-weight: 520 !important;
+            font-weight: 560 !important;
         }
 
-        .cloud-inspector-card dl {
+        .cloud-phone-detail-card dl {
             display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 8px;
-            margin: 12px 0 0;
+            margin: 18px 0 0;
         }
 
-        .cloud-inspector-card dl div {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 10px;
+        .cloud-phone-detail-card dl div {
+            display: grid;
+            gap: 5px;
+            min-width: 0;
             border: 1px solid var(--line);
             border-radius: 10px;
             padding: 8px 10px;
             background: #f8fafc;
         }
 
-        .cloud-inspector-card dt {
+        .cloud-phone-detail-card dt {
             color: var(--muted);
             font-size: 12px;
         }
 
-        .cloud-inspector-card dd {
+        .cloud-phone-detail-card dd {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
             margin: 0;
             color: var(--text);
             font-size: 13px;
             font-weight: 650 !important;
-            text-align: right;
-        }
-
-        .cloud-legend-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            min-height: 30px;
-            color: var(--muted);
-            font-size: 13px;
-        }
-
-        .cloud-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: #cbd5e1;
-        }
-
-        .cloud-dot.running {
-            background: #22c55e;
-        }
-
-        .cloud-dot.ready {
-            background: #3b82f6;
-        }
-
-        .cloud-dot.warming {
-            background: #f59e0b;
-        }
-
-        .cloud-dot.offline {
-            background: #ef4444;
-        }
-
-        .cloud-dot.empty {
-            border: 1px dashed #94a3b8;
-            background: transparent;
         }
 
         @media (max-width: 1180px) {
@@ -7950,10 +7999,8 @@
                 grid-template-columns: minmax(220px, 0.35fr) minmax(0, 1fr);
             }
 
-            .cloud-inspector {
-                grid-column: 1 / -1;
-                position: static;
-                grid-template-columns: repeat(2, minmax(0, 1fr));
+            .cloud-seat-map {
+                height: calc(100vh - 150px);
             }
         }
 
@@ -7977,13 +8024,23 @@
             }
 
             .cloud-phone-layout,
-            .cloud-inspector {
+            .cloud-phone-detail-card dl {
                 grid-template-columns: minmax(0, 1fr);
             }
 
-            .cloud-product-rail,
-            .cloud-inspector {
+            .cloud-product-rail {
                 position: static;
+            }
+
+            .cloud-seat-map {
+                height: auto;
+                min-height: 0;
+                overflow: visible;
+            }
+
+            .cloud-country-stack {
+                max-height: none;
+                overflow: visible;
             }
 
             .cloud-phone-grid {

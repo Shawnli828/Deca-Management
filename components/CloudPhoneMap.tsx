@@ -398,6 +398,9 @@ export function CloudPhoneMap({ products }: { products: Product[] }) {
   const liveLabel = liveTotals.groups
     ? `GeeLark 已接入 · ${liveTotals.pairs} 区 / ${liveTotals.groups} 组 / ${formatNumber(liveTotals.phones)} 台`
     : 'GeeLark 接入预览';
+  const selectedPhoneTitle = selectedSlot
+    ? (selectedSlot.serialNo ? `No. ${selectedSlot.serialNo}` : selectedSlot.label)
+    : '点击手机查看详情';
 
   return (
     <section className="cloud-phone-page">
@@ -456,6 +459,11 @@ export function CloudPhoneMap({ products }: { products: Product[] }) {
             <div>
               <span>{selectedProduct?.code}</span>
               <h2>{selectedProduct?.name} IP 分组视图</h2>
+              <p className="cloud-selection-inline">
+                {selectedSlot
+                  ? `${selectedPhoneTitle} · ${selectedSlot.groupName || selectedSlot.ipGroup.name} · ${stateLabels[selectedSlot.state]}`
+                  : '点击任意云手机后，会弹出 GeeLark 分组、国家、serialNo、运行状态和 tags。'}
+              </p>
             </div>
             <div className="cloud-seat-summary">
               <span><b>{totals.ipGroups}</b> IP 分组</span>
@@ -497,7 +505,7 @@ export function CloudPhoneMap({ products }: { products: Product[] }) {
                               type="button"
                               title={`${slot.label} · ${stateLabels[slot.state]}${slot.tags?.length ? ` · ${slot.tags.join(', ')}` : ''}`}
                               key={slot.id}
-                              onClick={() => setSelectedSlotId(slot.id)}
+                              onClick={() => setSelectedSlotId(selectedSlotId === slot.id ? '' : slot.id)}
                             >
                               <PhoneGlyph />
                               <span>{slot.label}</span>
@@ -517,50 +525,36 @@ export function CloudPhoneMap({ products }: { products: Product[] }) {
             )}
           </div>
         </section>
+      </div>
 
-        <aside className="cloud-inspector">
-          <div className="cloud-inspector-card">
-            <span className="cloud-mini-label">当前产品</span>
-            <h3>{selectedProduct?.name}</h3>
-            <p>{selectedProduct?.code} · {selectedProduct?.folder}</p>
+      {selectedSlot ? (
+        <div
+          className="cloud-phone-detail-layer"
+          role="dialog"
+          aria-modal="false"
+          aria-label="云手机详情"
+          onClick={() => setSelectedSlotId('')}
+        >
+          <div className="cloud-phone-detail-card" onClick={event => event.stopPropagation()}>
+            <button className="cloud-detail-close" type="button" onClick={() => setSelectedSlotId('')} aria-label="关闭详情">
+              ×
+            </button>
+            <span className={`cloud-detail-state ${selectedSlot.state}`}>{stateLabels[selectedSlot.state]}</span>
+            <h3>{selectedPhoneTitle}</h3>
+            <p>{selectedSlot.groupName || selectedSlot.ipGroup.name}</p>
             <dl>
-              <div><dt>IP 分组</dt><dd>{totals.ipGroups}</dd></div>
-              <div><dt>云手机</dt><dd>{formatNumber(totals.phones)}</dd></div>
-              <div><dt>可用</dt><dd>{formatNumber(totals.active)}</dd></div>
-              <div><dt>待检查</dt><dd>{formatNumber(totals.warnings)}</dd></div>
+              <div><dt>国家/地区</dt><dd>{selectedSlot.countryName || selectedSlot.ipGroup.countryName}</dd></div>
+              <div><dt>分组</dt><dd>{selectedSlot.groupName || selectedSlot.ipGroup.name}</dd></div>
+              <div><dt>Serial Name</dt><dd>{selectedSlot.serialName || '—'}</dd></div>
+              <div><dt>Serial No</dt><dd>{selectedSlot.serialNo || selectedSlot.label}</dd></div>
+              <div><dt>RPA</dt><dd>{selectedSlot.rpaStatus ?? '—'}</dd></div>
+              <div><dt>时区</dt><dd>{selectedSlot.timeZone || '—'}</dd></div>
+              <div><dt>设备</dt><dd>{selectedSlot.deviceModel || '—'}</dd></div>
+              <div><dt>Tags</dt><dd>{selectedSlot.tags?.join(' · ') || '—'}</dd></div>
             </dl>
           </div>
-          <div className="cloud-inspector-card">
-            <span className="cloud-mini-label">选中手机</span>
-            {selectedSlot ? (
-              <>
-                <h3>{selectedSlot.serialNo ? `No. ${selectedSlot.serialNo}` : selectedSlot.label}</h3>
-                <p>{selectedSlot.groupName || selectedSlot.ipGroup.name}</p>
-                <dl>
-                  <div><dt>国家</dt><dd>{selectedSlot.countryName || selectedSlot.ipGroup.countryName}</dd></div>
-                  <div><dt>状态</dt><dd>{stateLabels[selectedSlot.state]}</dd></div>
-                  <div><dt>RPA</dt><dd>{selectedSlot.rpaStatus ?? '—'}</dd></div>
-                  <div><dt>标签</dt><dd>{selectedSlot.tags?.join(' · ') || '—'}</dd></div>
-                </dl>
-              </>
-            ) : (
-              <p>点击中间任意手机后，这里会展示 GeeLark 分组、国家、serialNo、运行状态和 tags。</p>
-            )}
-          </div>
-          <div className="cloud-inspector-card">
-            <span className="cloud-mini-label">状态说明</span>
-            {(['running', 'ready', 'warming', 'offline', 'empty'] as PhoneState[]).map(state => (
-              <div className="cloud-legend-row" key={state}>
-                <span className={`cloud-dot ${state}`} />
-                <strong>{stateLabels[state]}</strong>
-              </div>
-            ))}
-          </div>
-          <div className="cloud-inspector-note">
-            下一步可以把 GeeLark 数据落到数据库：product_code、country_code、group_name、phone_id、serial_no、status、tags、synced_at。
-          </div>
-        </aside>
-      </div>
+        </div>
+      ) : null}
     </section>
   );
 }
