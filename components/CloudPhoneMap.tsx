@@ -42,6 +42,16 @@ type CloudProduct = {
   ipGroups: IpGroup[];
 };
 
+type CountrySection = {
+  id: string;
+  code: string;
+  countryName: string;
+  ipGroups: IpGroup[];
+  phoneCount: number;
+  activeCount: number;
+  warningCount: number;
+};
+
 type GeeLarkPhone = {
   id: string;
   serialName?: string;
@@ -161,6 +171,46 @@ function buildGeeLarkGroups(payload?: GeeLarkPayload | null): IpGroup[] {
     });
 }
 
+function buildCountrySections(ipGroups: IpGroup[]): CountrySection[] {
+  const sections = new Map<string, CountrySection>();
+  ipGroups.forEach(ipGroup => {
+    const code = ipGroup.code || 'UN';
+    const countryName = ipGroup.countryName || code;
+    const key = `${code}:${countryName}`;
+    const current = sections.get(key) || {
+      id: key,
+      code,
+      countryName,
+      ipGroups: [],
+      phoneCount: 0,
+      activeCount: 0,
+      warningCount: 0
+    };
+    current.ipGroups.push(ipGroup);
+    current.phoneCount += ipGroup.phoneCount;
+    current.activeCount += ipGroup.activeCount;
+    current.warningCount += ipGroup.slots.filter(slot => slot.state === 'warming' || slot.state === 'offline').length;
+    sections.set(key, current);
+  });
+  return [...sections.values()].sort((left, right) => left.code.localeCompare(right.code));
+}
+
+function compactIpGroupName(name: string, countryCode: string, productCode: string) {
+  const parts = name.split('-').filter(Boolean);
+  const countryIndex = parts.findIndex(part => part.toUpperCase() === countryCode.toUpperCase());
+  let productIndex = -1;
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    if (parts[index].toUpperCase() === productCode.toUpperCase()) {
+      productIndex = index;
+      break;
+    }
+  }
+  if (countryIndex !== -1 && productIndex > countryIndex + 1) {
+    return parts.slice(countryIndex + 1, productIndex).join('-');
+  }
+  return name.replace(/^Zhan-/i, '').replace(new RegExp(`-${productCode}$`, 'i'), '') || name;
+}
+
 function cloudProductsFrom(products: Product[], geDbPayload?: GeeLarkPayload | null): CloudProduct[] {
   const sourceProducts = products.length ? products : [
     { id: 'demo-db', name: 'DeenBack', reelFarmCode: 'DB', countries: fallbackCountries, creatorCount: 54 },
@@ -262,6 +312,7 @@ export function CloudPhoneMap({ products }: { products: Product[] }) {
     active: sum.active + ipGroup.activeCount,
     warnings: sum.warnings + ipGroup.slots.filter(slot => slot.state === 'warming' || slot.state === 'offline').length
   }), { ipGroups: 0, phones: 0, active: 0, warnings: 0 }) || { ipGroups: 0, phones: 0, active: 0, warnings: 0 };
+  const countrySections = useMemo(() => buildCountrySections(selectedProduct?.ipGroups || []), [selectedProduct]);
   const liveLabel = geDbPayload?.ok ? `GE-DB 已接入 · ${geDbPayload.group_count} 组 / ${geDbPayload.phone_count} 台` : 'GE-DB 接入预览';
 
   return (
@@ -329,34 +380,52 @@ export function CloudPhoneMap({ products }: { products: Product[] }) {
             </div>
           </div>
 
-          <div className="cloud-ip-group-stack">
-            {selectedProduct?.ipGroups.map(ipGroup => (
-              <article className="cloud-ip-group-card" key={ipGroup.id}>
-                <div className="cloud-ip-group-head">
+          <div className="cloud-country-stack">
+            {countrySections.map(section => (
+              <section className="cloud-country-block" key={section.id}>
+                <div className="cloud-country-head">
                   <div>
-                    <span className="cloud-env-code">{ipGroup.code}</span>
-                    <strong>{ipGroup.name}</strong>
-                    <small>{ipGroup.countryName} · {ipGroup.source || 'GeeLark'} 分组 · {ipGroup.phoneCount} 台手机 · {ipGroup.activeCount} 台可用</small>
+                    <span className="cloud-env-code cloud-country-code">{section.code}</span>
+                    <div>
+                      <strong>{section.countryName}</strong>
+                      <small>{section.ipGroups.length} 个分组 · {formatNumber(section.phoneCount)} 台手机 · {formatNumber(section.activeCount)} 台可用</small>
+                    </div>
                   </div>
-                  <span className="cloud-env-health">{ipGroup.activeCount >= ipGroup.phoneCount * 0.75 ? '状态正常' : '需要检查'}</span>
+                  <span className="cloud-country-health">{section.warningCount ? `${section.warningCount} 台待检查` : '状态正常'}</span>
                 </div>
-                <div className="cloud-phone-grid" aria-label={`${ipGroup.name} 云手机`}>
-                  {ipGroup.slots.map((slot, index) => (
-                    <button
-                      className={`cloud-phone-slot ${slot.state} ${selectedSlotId === slot.id ? 'selected' : ''}`}
-                      type="button"
-                      title={`${slot.label} · ${stateLabels[slot.state]}${slot.tags?.length ? ` · ${slot.tags.join(', ')}` : ''}`}
-                      key={slot.id}
-                      onClick={() => setSelectedSlotId(slot.id)}
-                      style={{ marginLeft: index % 3 === 0 && index > 0 ? 14 : undefined }}
-                    >
-                      <PhoneGlyph />
-                      <span>{slot.label}</span>
-                      {slot.tags?.[0] ? <em>{slot.tags[0]}</em> : null}
-                    </button>
-                  ))}
+
+                <div className="cloud-ip-group-grid">
+                  {section.ipGroups.map(ipGroup => {
+                    const displayName = compactIpGroupName(ipGroup.name, ipGroup.code, selectedProduct?.code || '');
+                    return (
+                      <article className="cloud-ip-group-card" key={ipGroup.id}>
+                        <div className="cloud-ip-group-head">
+                          <div>
+                            <strong>{displayName}</strong>
+                            <small>{ipGroup.name}</small>
+                          </div>
+                          <span className="cloud-env-health">{ipGroup.activeCount}/{ipGroup.phoneCount}</span>
+                        </div>
+                        <div className="cloud-phone-grid" aria-label={`${ipGroup.name} 云手机`}>
+                          {ipGroup.slots.map(slot => (
+                            <button
+                              className={`cloud-phone-slot ${slot.state} ${selectedSlotId === slot.id ? 'selected' : ''}`}
+                              type="button"
+                              title={`${slot.label} · ${stateLabels[slot.state]}${slot.tags?.length ? ` · ${slot.tags.join(', ')}` : ''}`}
+                              key={slot.id}
+                              onClick={() => setSelectedSlotId(slot.id)}
+                            >
+                              <PhoneGlyph />
+                              <span>{slot.label}</span>
+                              {slot.tags?.[0] ? <em>{slot.tags[0]}</em> : null}
+                            </button>
+                          ))}
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
-              </article>
+              </section>
             ))}
           </div>
         </section>
