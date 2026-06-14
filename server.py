@@ -39,7 +39,7 @@ REELFARM_API_KEY = "reel_farm_api_key"
 PUBLISH_CHECK_STATE_KEY = "publish_check_state"
 EXTERNAL_API_KEYS_KEY = "external_api_keys"
 ZERO_PLAY_ISSUE = "0播警告"
-ZERO_PLAY_VIEW_THRESHOLD = 0
+ZERO_PLAY_VIEW_THRESHOLD = 300
 ZERO_PLAY_POST_LIMIT = 2
 BUSINESS_TIMEZONE = timezone(timedelta(hours=8))
 REELFARM_BASE_URL = "https://reel.farm/api/v1"
@@ -1843,7 +1843,7 @@ def apply_zero_play_issues(conn, candidates, synced_at):
             reverse=True,
         )[:ZERO_PLAY_POST_LIMIT]
         should_warn = len(latest_posts) == ZERO_PLAY_POST_LIMIT and all(
-            item.get("view_count") == ZERO_PLAY_VIEW_THRESHOLD
+            item.get("view_count") is not None and item.get("view_count") < ZERO_PLAY_VIEW_THRESHOLD
             for item in latest_posts
         )
         if should_warn:
