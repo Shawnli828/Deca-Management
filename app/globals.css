@@ -7547,6 +7547,7 @@
 
         .cloud-seat-map {
             display: grid;
+            grid-template-rows: auto minmax(0, 1fr);
             gap: 14px;
             height: calc(100vh - 160px);
             min-height: 620px;
@@ -7624,6 +7625,7 @@
         .cloud-country-stack {
             display: grid;
             gap: 16px;
+            min-height: 0;
             overflow-y: auto;
             overflow-x: hidden;
             max-height: 100%;
@@ -7649,6 +7651,7 @@
 
         .cloud-country-block {
             overflow: hidden;
+            min-height: max-content;
             border: 1px solid var(--line);
             border-radius: 16px;
             background: #ffffff;
@@ -7790,6 +7793,7 @@
             gap: 8px;
             padding: 12px;
             background: #fbfcfe;
+            overflow: visible;
         }
 
         .cloud-phone-slot {
