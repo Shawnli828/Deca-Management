@@ -833,6 +833,32 @@ def reelfarm_expected_automation_condition(alias="a"):
     )
 
 
+def reelfarm_automation_is_active(automation):
+    return str((automation or {}).get("status") or "").strip().lower() == "active"
+
+
+def active_tiktok_automation_account_ids(conn, account_ids):
+    ids = [str(item or "").strip() for item in (account_ids or []) if str(item or "").strip()]
+    if not ids:
+        return set()
+    placeholder = db_placeholder()
+    placeholders = ",".join([placeholder] * len(ids))
+    rows = conn.execute(
+        f"""
+        SELECT DISTINCT acc.id AS account_id
+        FROM accounts acc
+        JOIN product_market_channels pmc ON pmc.id = acc.product_market_channel_id
+        JOIN channels ch ON ch.id = pmc.channel_id
+        JOIN automations a ON a.account_id = acc.id
+        WHERE acc.id IN ({placeholders})
+          AND UPPER(COALESCE(ch.code, '')) = {placeholder}
+          AND {reelfarm_expected_automation_condition("a")}
+        """,
+        tuple(ids + ["TIKTOK"]),
+    ).fetchall()
+    return {str(row_dict(row).get("account_id") or "") for row in rows}
+
+
 def mark_missing_reelfarm_automations(conn, product_market_channel_id, seen_reelfarm_ids, synced_at):
     seen = sorted({str(item or "").strip() for item in (seen_reelfarm_ids or []) if str(item or "").strip()})
     placeholder = db_placeholder()
@@ -1071,7 +1097,9 @@ def project_products_to_relational(data=None, product_code_filter="", market_cod
                     account_id = stable_id("account", product_market_channel_id, reelfarm_account_id)
                     automation_id = stable_id("automation", automation_reelfarm_id)
                     seen_reelfarm_automation_ids.add(automation_reelfarm_id)
-                    zero_play_candidates.setdefault(account_id, [])
+                    is_active_tiktok_automation = reelfarm_automation_is_active(automation)
+                    if is_active_tiktok_automation:
+                        zero_play_candidates.setdefault(account_id, [])
 
                     upsert_row(
                         conn,
@@ -1176,13 +1204,14 @@ def project_products_to_relational(data=None, product_code_filter="", market_cod
                         reelfarm_post_id = str(post.get("post_id") or stable_id("post_source", material_id))
                         post_id = stable_id("post", reelfarm_post_id)
                         snapshot_date = utc_snapshot_date()
-                        collect_zero_play_issue_candidate(
-                            zero_play_candidates,
-                            account_id,
-                            post.get("published_at"),
-                            post.get("view_count"),
-                            business_date_string(synced_at),
-                        )
+                        if is_active_tiktok_automation:
+                            collect_zero_play_issue_candidate(
+                                zero_play_candidates,
+                                account_id,
+                                post.get("published_at"),
+                                post.get("view_count"),
+                                business_date_string(synced_at),
+                            )
                         upsert_row(
                             conn,
                             "posts",
@@ -1836,6 +1865,24 @@ def apply_zero_play_issues(conn, candidates, synced_at):
                 f"DELETE FROM account_issues WHERE account_id = {placeholder} AND issue = {placeholder} AND COALESCE(source, '') = {placeholder}",
                 (account_id, ZERO_PLAY_ISSUE, "auto"),
             )
+    cleanup_zero_play_issues_for_non_active_tiktok(conn)
+
+
+def cleanup_zero_play_issues_for_non_active_tiktok(conn):
+    placeholder = db_placeholder()
+    rows = conn.execute(
+        f"SELECT account_id FROM account_issues WHERE issue = {placeholder} AND COALESCE(source, '') = {placeholder}",
+        (ZERO_PLAY_ISSUE, "auto"),
+    ).fetchall()
+    ids = [str(row_dict(row).get("account_id") or "").strip() for row in rows]
+    active_ids = active_tiktok_automation_account_ids(conn, ids)
+    for account_id in ids:
+        if account_id in active_ids:
+            continue
+        conn.execute(
+            f"DELETE FROM account_issues WHERE account_id = {placeholder} AND issue = {placeholder} AND COALESCE(source, '') = {placeholder}",
+            (account_id, ZERO_PLAY_ISSUE, "auto"),
+        )
 
 
 def compact_post(post):
@@ -4007,9 +4054,12 @@ def account_issues_payload(account_ids):
             f"SELECT account_id, issue FROM account_issues WHERE account_id IN ({placeholders}) ORDER BY issue",
             tuple(ids),
         ).fetchall()
+        zero_play_active_ids = active_tiktok_automation_account_ids(conn, ids)
     issues = {}
     for row in rows:
         data = row_dict(row)
+        if data.get("issue") == ZERO_PLAY_ISSUE and data.get("account_id") not in zero_play_active_ids:
+            continue
         issues.setdefault(data.get("account_id"), []).append(data.get("issue"))
     return {"ok": True, "issues": issues}
 
@@ -4584,7 +4634,6 @@ def sync_museon_clone_country(product_id="", country_id="", product_code="", cou
 
     with connect_db() as conn:
         init_relational_schema(conn)
-        zero_play_candidates = {}
         upsert_row(conn, "channels", {"id": channel_id, "name": "Clone Slide Show", "code": "MUSEON_CLONE"}, ["code"])
         upsert_row(
             conn,
@@ -4634,14 +4683,6 @@ def sync_museon_clone_country(product_id="", country_id="", product_code="", cou
             account_ids.add(account_id)
             material_count += 1
             post_count += 1
-            zero_play_candidates.setdefault(account_id, [])
-            collect_zero_play_issue_candidate(
-                zero_play_candidates,
-                account_id,
-                published_at,
-                metrics["view_count"],
-                business_date_string(synced_at),
-            )
 
             upsert_row(
                 conn,
@@ -4737,7 +4778,6 @@ def sync_museon_clone_country(product_id="", country_id="", product_code="", cou
                 },
                 ["post_id", "snapshot_date"],
             )
-        apply_zero_play_issues(conn, zero_play_candidates, synced_at)
         conn.commit()
 
     return {
