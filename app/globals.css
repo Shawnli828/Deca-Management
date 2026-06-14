@@ -7623,7 +7623,8 @@
         }
 
         .cloud-country-stack {
-            display: grid;
+            display: flex;
+            flex-direction: column;
             gap: 16px;
             min-height: 0;
             overflow-y: auto;
@@ -7650,8 +7651,11 @@
         }
 
         .cloud-country-block {
+            display: flex;
+            flex: 0 0 auto;
+            flex-direction: column;
             overflow: hidden;
-            min-height: max-content;
+            min-height: 0;
             border: 1px solid var(--line);
             border-radius: 16px;
             background: #ffffff;
@@ -7715,7 +7719,8 @@
 
         .cloud-ip-group-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(245px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(245px, 1fr));
+            align-items: start;
             gap: 12px;
             padding: 14px;
             background: #f8fafc;
@@ -7733,6 +7738,7 @@
         }
 
         .cloud-ip-group-card {
+            align-self: start;
             border: 1px solid var(--line);
             border-radius: 14px;
             overflow: hidden;
