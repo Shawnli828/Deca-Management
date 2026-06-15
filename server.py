@@ -54,7 +54,7 @@ REELFARM_API_KEY = "reel_farm_api_key"
 PUBLISH_CHECK_STATE_KEY = "publish_check_state"
 EXTERNAL_API_KEYS_KEY = "external_api_keys"
 ZERO_PLAY_ISSUE = "0播警告"
-ZERO_PLAY_VIEW_THRESHOLD = 300
+ZERO_PLAY_VIEW_THRESHOLD = 150
 ZERO_PLAY_POST_LIMIT = 2
 REELFARM_BASE_URL = "https://reel.farm/api/v1"
 MUSEON_BASE_URL = os.environ.get("MUSEON_BASE_URL", "https://api.museon.ai/external/api/v1").strip().rstrip("/")
@@ -1818,6 +1818,11 @@ def readable_utc_datetime(value):
 
 
 def collect_zero_play_issue_candidate(candidates, account_id, published_at, view_count, sync_date):
+    """Collect non-current-day posts for the automatic low-view issue check.
+
+    The current day is interpreted in the business timezone so fresh posts do
+    not trigger a warning before they have had enough time to accumulate views.
+    """
     account_id = str(account_id or "").strip()
     published = parse_iso_datetime(published_at)
     if not account_id or not published:
