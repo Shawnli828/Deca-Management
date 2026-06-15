@@ -29,6 +29,7 @@ from server import (
     cron_authorized,
     database_snapshot,
     data_query_payload,
+    daily_feishu_ai_analysis,
     daily_feishu_report_payload,
     daily_feishu_report_text,
     default_data,
@@ -455,17 +456,32 @@ def post_publish_check_send_reminder(request: Request):
     return result
 
 
+def truthy_query_value(value: str) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
 @app.api_route("/api/reports/daily-feishu", methods=["GET", "POST"])
-def post_reports_daily_feishu(request: Request, date: str = ""):
+def post_reports_daily_feishu(request: Request, date: str = "", include_ai: str = "", model: str = ""):
     if not cron_authorized(request.headers):
         require_dashboard_auth(request)
     try:
-        result = send_daily_feishu_report(date)
+        result = send_daily_feishu_report(date, include_ai=truthy_query_value(include_ai), model=model)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result.get("error") or "Failed to send Feishu daily report.")
     return result
+
+
+@app.api_route("/api/reports/daily-feishu-analysis", methods=["GET", "POST"])
+def post_reports_daily_feishu_analysis(request: Request, date: str = "", model: str = ""):
+    require_dashboard_auth(request)
+    try:
+        return daily_feishu_ai_analysis(date, model)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
 
 
 @app.get("/api/reports/daily-feishu-preview")

@@ -2,6 +2,7 @@ import type {
   AccountSummary,
   BusinessMaterialReportPayload,
   DatabaseSnapshot,
+  DailyFeishuAnalysisPayload,
   DailyFeishuPreviewPayload,
   DailyFeishuSendResult,
   DetailedPostRow,
@@ -102,9 +103,22 @@ export const api = {
       undefined,
       'Failed to load Feishu report preview'
     ),
-  sendDailyFeishuReport: (date?: string) =>
+  dailyFeishuAnalysis: (date?: string, model?: string) =>
+    apiFetch<DailyFeishuAnalysisPayload>(
+      `/api/reports/daily-feishu-analysis?${new URLSearchParams({
+        ...(date ? { date } : {}),
+        ...(model ? { model } : {})
+      }).toString()}`,
+      { method: 'POST' },
+      'Failed to generate Feishu AI analysis'
+    ),
+  sendDailyFeishuReport: (date?: string, options?: { includeAi?: boolean; model?: string }) =>
     apiFetch<DailyFeishuSendResult>(
-      `/api/reports/daily-feishu?${new URLSearchParams(date ? { date } : {}).toString()}`,
+      `/api/reports/daily-feishu?${new URLSearchParams({
+        ...(date ? { date } : {}),
+        ...(options?.includeAi ? { include_ai: '1' } : {}),
+        ...(options?.model ? { model: options.model } : {})
+      }).toString()}`,
       { method: 'POST' },
       'Failed to send Feishu daily report'
     ),

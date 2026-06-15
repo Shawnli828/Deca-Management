@@ -20,10 +20,25 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote, unquote, urlencode, urlparse
 from urllib.request import Request, urlopen
-try:
-    from zoneinfo import ZoneInfo
-except ImportError:  # pragma: no cover
-    ZoneInfo = None
+
+from server_modules.time_windows import (
+    BUSINESS_TIMEZONE,
+    business_date_string,
+    business_material_date_for_utc_datetime,
+    business_material_day_window,
+    business_material_report_windows,
+    growth_report_windows,
+    mixpanel_timezone,
+    onboarding_date_for_utc_datetime,
+    onboarding_day_window,
+    parse_iso_datetime,
+    previous_complete_windows,
+    report_date_for_utc_datetime,
+    report_day_window,
+    report_timezone,
+    source_dates_for_utc_window,
+    utc_date_string,
+)
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -41,7 +56,6 @@ EXTERNAL_API_KEYS_KEY = "external_api_keys"
 ZERO_PLAY_ISSUE = "0播警告"
 ZERO_PLAY_VIEW_THRESHOLD = 300
 ZERO_PLAY_POST_LIMIT = 2
-BUSINESS_TIMEZONE = timezone(timedelta(hours=8))
 REELFARM_BASE_URL = "https://reel.farm/api/v1"
 MUSEON_BASE_URL = os.environ.get("MUSEON_BASE_URL", "https://api.museon.ai/external/api/v1").strip().rstrip("/")
 MUSEON_API_KEY = os.environ.get("MUSEON_API_KEY", "").strip()
@@ -57,6 +71,8 @@ REPORT_TIMEZONE_NAME = os.environ.get("REPORT_TIMEZONE", "Asia/Shanghai").strip(
 MIXPANEL_TIMEZONE_NAME = os.environ.get("MIXPANEL_TIMEZONE", "America/Los_Angeles").strip()
 FEISHU_WEBHOOK_URL = os.environ.get("FEISHU_WEBHOOK_URL", "").strip()
 FEISHU_WEBHOOK_SECRET = os.environ.get("FEISHU_WEBHOOK_SECRET", "").strip()
+LLM_API_BASE = os.environ.get("LLM_API_BASE", "https://api.openai.com/v1").strip().rstrip("/")
+LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4.1-mini").strip()
 SEED_DATA_PATH = BASE_DIR / "seed_data.json"
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "Deca888").strip()
 ADMIN_PASSWORD_HASH = os.environ.get(
@@ -1789,37 +1805,6 @@ def readable_utc_datetime(value):
     return parsed.astimezone(timezone.utc).strftime("%Y/%m/%d %H:%M UTC")
 
 
-def parse_iso_datetime(value):
-    raw_value = str(value or "").strip()
-    if not raw_value:
-        return None
-    try:
-        parsed = datetime.fromisoformat(raw_value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed
-
-
-def utc_date_string(value=None):
-    if isinstance(value, datetime):
-        return value.astimezone(timezone.utc).date().isoformat()
-    parsed = parse_iso_datetime(value)
-    if parsed:
-        return parsed.astimezone(timezone.utc).date().isoformat()
-    return datetime.now(timezone.utc).date().isoformat()
-
-
-def business_date_string(value=None):
-    if isinstance(value, datetime):
-        return value.astimezone(BUSINESS_TIMEZONE).date().isoformat()
-    parsed = parse_iso_datetime(value)
-    if parsed:
-        return parsed.astimezone(BUSINESS_TIMEZONE).date().isoformat()
-    return datetime.now(BUSINESS_TIMEZONE).date().isoformat()
-
-
 def collect_zero_play_issue_candidate(candidates, account_id, published_at, view_count, sync_date):
     account_id = str(account_id or "").strip()
     published = parse_iso_datetime(published_at)
@@ -2988,37 +2973,6 @@ def query_museon_clone_product_rollups(query):
     return results
 
 
-def previous_complete_windows(now_utc=None):
-    beijing = timezone(timedelta(hours=8))
-    current_local = (now_utc or datetime.now(timezone.utc)).astimezone(beijing)
-    today_start_local = datetime(current_local.year, current_local.month, current_local.day, tzinfo=beijing)
-    yesterday_start_local = today_start_local - timedelta(days=1)
-    seven_start_local = yesterday_start_local - timedelta(days=6)
-    return {
-        "yesterday_start": yesterday_start_local.astimezone(timezone.utc).isoformat(),
-        "yesterday_end": today_start_local.astimezone(timezone.utc).isoformat(),
-        "seven_start": seven_start_local.astimezone(timezone.utc).isoformat(),
-        "seven_end": today_start_local.astimezone(timezone.utc).isoformat(),
-    }
-
-
-def named_timezone(name, fallback):
-    if ZoneInfo:
-        try:
-            return ZoneInfo(name)
-        except Exception:
-            pass
-    return fallback
-
-
-def report_timezone():
-    return named_timezone(REPORT_TIMEZONE_NAME, BUSINESS_TIMEZONE)
-
-
-def mixpanel_timezone():
-    return named_timezone(MIXPANEL_TIMEZONE_NAME, timezone(timedelta(hours=-7)))
-
-
 def product_mixpanel_config(product_code):
     code = str(product_code or "").strip().upper()
     project_id = (
@@ -3102,107 +3056,6 @@ def mixpanel_distinct_id(event, properties):
     return str(value) if value else ""
 
 
-def report_day_window(report_date="", tz=None):
-    tz = tz or report_timezone()
-    if report_date:
-        date_value = datetime.strptime(str(report_date), "%Y-%m-%d").date()
-    else:
-        current_local = datetime.now(timezone.utc).astimezone(tz)
-        date_value = (datetime(current_local.year, current_local.month, current_local.day, tzinfo=tz) - timedelta(days=1)).date()
-    start_local = datetime(date_value.year, date_value.month, date_value.day, tzinfo=tz)
-    end_local = start_local + timedelta(days=1)
-    return {
-        "report_date": date_value.isoformat(),
-        "report_timezone": getattr(tz, "key", REPORT_TIMEZONE_NAME),
-        "start_local": start_local,
-        "end_local": end_local,
-        "utc_start": start_local.astimezone(timezone.utc),
-        "utc_end": end_local.astimezone(timezone.utc),
-    }
-
-
-def business_material_day_window(report_date="", tz=None):
-    tz = tz or report_timezone()
-    if report_date:
-        date_value = datetime.strptime(str(report_date), "%Y-%m-%d").date()
-    else:
-        date_value = datetime.now(timezone.utc).astimezone(tz).date()
-    day_start = datetime(date_value.year, date_value.month, date_value.day, tzinfo=tz)
-    start_local = day_start - timedelta(minutes=1)
-    end_local = day_start + timedelta(days=1) - timedelta(minutes=1)
-    return {
-        "report_date": date_value.isoformat(),
-        "report_timezone": getattr(tz, "key", REPORT_TIMEZONE_NAME),
-        "start_local": start_local,
-        "end_local": end_local,
-        "utc_start": start_local.astimezone(timezone.utc),
-        "utc_end": end_local.astimezone(timezone.utc),
-    }
-
-
-def onboarding_day_window(report_date="", tz=None):
-    tz = tz or report_timezone()
-    if report_date:
-        date_value = datetime.strptime(str(report_date), "%Y-%m-%d").date()
-    else:
-        date_value = datetime.now(timezone.utc).astimezone(tz).date()
-    day_start = datetime(date_value.year, date_value.month, date_value.day, tzinfo=tz)
-    start_local = day_start - timedelta(days=1) + timedelta(hours=8)
-    end_local = day_start + timedelta(hours=8)
-    return {
-        "report_date": date_value.isoformat(),
-        "report_timezone": getattr(tz, "key", REPORT_TIMEZONE_NAME),
-        "start_local": start_local,
-        "end_local": end_local,
-        "utc_start": start_local.astimezone(timezone.utc),
-        "utc_end": end_local.astimezone(timezone.utc),
-    }
-
-
-def business_material_report_windows(date_from="", date_to="", days=7):
-    tz = report_timezone()
-    today = datetime.now(timezone.utc).astimezone(tz).date()
-    try:
-        if date_to:
-            end_date = datetime.strptime(str(date_to), "%Y-%m-%d").date()
-        else:
-            end_date = today
-    except ValueError:
-        end_date = today
-    try:
-        if date_from:
-            start_date = datetime.strptime(str(date_from), "%Y-%m-%d").date()
-        else:
-            try:
-                day_count = int(days)
-            except (TypeError, ValueError):
-                day_count = 7
-            day_count = max(1, min(90, day_count))
-            start_date = end_date - timedelta(days=day_count - 1)
-    except ValueError:
-        start_date = end_date - timedelta(days=6)
-    if start_date > end_date:
-        start_date, end_date = end_date, start_date
-    if (end_date - start_date).days > 89:
-        start_date = end_date - timedelta(days=89)
-    windows = []
-    current = start_date
-    while current <= end_date:
-        windows.append(business_material_day_window(current.isoformat(), tz))
-        current += timedelta(days=1)
-    return windows
-
-
-def source_dates_for_utc_window(utc_start, utc_end, source_tz, clamp_to_today=False):
-    start_source = utc_start.astimezone(source_tz).date()
-    end_source = (utc_end - timedelta(microseconds=1)).astimezone(source_tz).date()
-    if clamp_to_today:
-        today_source = datetime.now(timezone.utc).astimezone(source_tz).date()
-        if end_source > today_source:
-            end_source = today_source
-    return start_source.isoformat(), end_source.isoformat()
-
-
 def product_channel_views_for_window(product_code, channel_code, utc_start, utc_end):
     placeholder = db_placeholder()
     with connect_db() as conn:
@@ -3230,52 +3083,6 @@ def product_channel_views_for_window(product_code, channel_code, utc_start, utc_
         "views": int(data.get("views") or 0),
         "likes": int(data.get("likes") or 0),
     }
-
-
-def growth_report_windows(days):
-    tz = report_timezone()
-    current_local = datetime.now(timezone.utc).astimezone(tz)
-    today_start = datetime(current_local.year, current_local.month, current_local.day, tzinfo=tz)
-    windows = []
-    for offset in range(days, 0, -1):
-        report_date = (today_start - timedelta(days=offset)).date().isoformat()
-        windows.append(report_day_window(report_date, tz))
-    return windows
-
-
-def report_date_for_utc_datetime(value, tz=None):
-    tz = tz or report_timezone()
-    if not isinstance(value, datetime):
-        return ""
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    return value.astimezone(tz).date().isoformat()
-
-
-def business_material_date_for_utc_datetime(value, tz=None):
-    tz = tz or report_timezone()
-    if not isinstance(value, datetime):
-        return ""
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    local_value = value.astimezone(tz)
-    cutoff = local_value.replace(hour=23, minute=59, second=0, microsecond=0)
-    if local_value >= cutoff:
-        return (local_value.date() + timedelta(days=1)).isoformat()
-    return local_value.date().isoformat()
-
-
-def onboarding_date_for_utc_datetime(value, tz=None):
-    tz = tz or report_timezone()
-    if not isinstance(value, datetime):
-        return ""
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    local_value = value.astimezone(tz)
-    cutoff = local_value.replace(hour=8, minute=0, second=0, microsecond=0)
-    if local_value >= cutoff:
-        return (local_value.date() + timedelta(days=1)).isoformat()
-    return local_value.date().isoformat()
 
 
 def product_channel_daily_views(product_code, channel_code, utc_start, utc_end):
@@ -5569,13 +5376,257 @@ def daily_feishu_report_text(report):
     return "\n".join(lines).strip()
 
 
-def send_daily_feishu_report(report_date=""):
+def daily_feishu_llm_api_key():
+    return (
+        os.environ.get("LLM_API_KEY", "").strip()
+        or os.environ.get("OPENAI_API_KEY", "").strip()
+    )
+
+
+def daily_feishu_llm_model(model=""):
+    value = str(model or "").strip() or os.environ.get("LLM_MODEL", "").strip() or LLM_MODEL
+    if not re.fullmatch(r"[A-Za-z0-9._:/-]{1,96}", value):
+        return LLM_MODEL
+    return value
+
+
+def compact_daily_feishu_report(report):
+    totals = report.get("totals") or {}
+    products = []
+    for item in report.get("products") or []:
+        countries = []
+        for country in item.get("countries") or []:
+            countries.append({
+                "country_code": country.get("country_code"),
+                "country_name": country.get("country_name"),
+                "reelfarm_posts": country.get("reelfarm_posts"),
+                "reelfarm_views": country.get("reelfarm_views"),
+                "reelfarm_avg_views": country.get("reelfarm_avg_views"),
+            })
+        products.append({
+            "product_code": item.get("product_code"),
+            "product_name": item.get("product_name"),
+            "total_views": item.get("total_views"),
+            "reelfarm_views": item.get("reelfarm_views"),
+            "clone_views": item.get("clone_views"),
+            "reelfarm_posts": item.get("reelfarm_posts"),
+            "clone_posts": item.get("clone_posts"),
+            "reelfarm_avg_views": item.get("reelfarm_avg_views"),
+            "clone_avg_views": item.get("clone_avg_views"),
+            "reelfarm_published_automations": item.get("reelfarm_published_automations"),
+            "reelfarm_expected_automations": item.get("reelfarm_expected_automations"),
+            "downloads": item.get("downloads"),
+            "download_rate": item.get("download_rate"),
+            "countries": countries,
+        })
+    return {
+        "report_date": report.get("report_date"),
+        "business_window_local": report.get("business_window_local"),
+        "onboarding_window_local": report.get("onboarding_window_local"),
+        "totals": {
+            "total_views": totals.get("total_views"),
+            "reelfarm_views": totals.get("reelfarm_views"),
+            "clone_views": totals.get("clone_views"),
+            "reelfarm_posts": totals.get("reelfarm_posts"),
+            "clone_posts": totals.get("clone_posts"),
+            "reelfarm_avg_views": totals.get("reelfarm_avg_views"),
+            "clone_avg_views": totals.get("clone_avg_views"),
+            "reelfarm_published_automations": totals.get("reelfarm_published_automations"),
+            "reelfarm_expected_automations": totals.get("reelfarm_expected_automations"),
+            "downloads": totals.get("downloads"),
+            "download_rate": totals.get("download_rate"),
+        },
+        "products": products,
+        "errors": report.get("errors") or [],
+    }
+
+
+def previous_daily_report_date(report_date):
+    parsed = datetime.strptime(str(report_date), "%Y-%m-%d").date()
+    return (parsed - timedelta(days=1)).isoformat()
+
+
+def daily_feishu_analysis_prompt(report, previous_report=None):
+    context = {
+        "current": compact_daily_feishu_report(report),
+        "previous": compact_daily_feishu_report(previous_report) if previous_report else None,
+    }
+    return (
+        "你是 Deca Growth 中台的增长运营分析助手。请基于下面的日报 JSON 做一份适合发给团队的中文分析。"
+        "不要编造 JSON 里没有的数字。重点回答："
+        "1. 今日最重要的结论；"
+        "2. RF 发布账号/应发账号是否有缺口，哪些产品需要关注；"
+        "3. 播放量相比昨日变化，优先判断是 RF/Clone 哪边变化、均播下降、还是国家结构变化；"
+        "4. Onboarding Unique 和下载/播放转化是否异常，轻微波动可以说正常；"
+        "5. 明天建议跟进的动作。"
+        "如果缺少昨日数据，就只分析当前日报。输出请用短段落和项目符号，控制在 700 字内。\n\n"
+        f"{json.dumps(context, ensure_ascii=False, separators=(',', ':'))}"
+    )
+
+
+def call_daily_feishu_llm(messages, model=""):
+    api_key = daily_feishu_llm_api_key()
+    selected_model = daily_feishu_llm_model(model)
+    if not api_key:
+        return {
+            "ok": True,
+            "configured": False,
+            "needs_api_key": True,
+            "model": selected_model,
+            "analysis": "需要在后端环境变量配置 LLM_API_KEY 或 OPENAI_API_KEY 后，才能生成 AI 分析。",
+        }
+
+    endpoint = f"{(os.environ.get('LLM_API_BASE', '').strip().rstrip('/') or LLM_API_BASE)}/chat/completions"
+    body = json.dumps(
+        {
+            "model": selected_model,
+            "messages": messages,
+            "temperature": 0.2,
+            "max_tokens": 1200,
+        },
+        ensure_ascii=False,
+    ).encode("utf-8")
+    request = Request(
+        endpoint,
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=45, context=make_ssl_context()) as response:
+            raw = response.read().decode("utf-8", errors="replace")
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        return {"ok": False, "error": f"LLM API returned HTTP {exc.code}: {detail[:500]}", "model": selected_model}
+    except URLError as exc:
+        return {"ok": False, "error": f"Could not reach LLM API: {exc.reason}", "model": selected_model}
+    except Exception as exc:
+        return {"ok": False, "error": f"LLM analysis failed: {exc}", "model": selected_model}
+
+    try:
+        payload = json.loads(raw)
+        analysis = ((payload.get("choices") or [{}])[0].get("message") or {}).get("content", "").strip()
+    except (json.JSONDecodeError, AttributeError, IndexError):
+        analysis = ""
+    if not analysis:
+        return {"ok": False, "error": "LLM API returned an empty analysis.", "model": selected_model}
+    return {
+        "ok": True,
+        "configured": True,
+        "needs_api_key": False,
+        "model": selected_model,
+        "analysis": analysis,
+    }
+
+
+def daily_feishu_ai_analysis(report_date="", model="", report=None, require_config=False):
+    report = report or daily_feishu_report_payload(report_date)
+    previous_report = None
+    try:
+        previous_report = daily_feishu_report_payload(previous_daily_report_date(report.get("report_date")))
+    except Exception:
+        previous_report = None
+    messages = [
+        {
+            "role": "system",
+            "content": "你只根据用户提供的 Deca Growth 日报数据做业务分析，避免夸张措辞，结论要可执行。",
+        },
+        {"role": "user", "content": daily_feishu_analysis_prompt(report, previous_report)},
+    ]
+    result = call_daily_feishu_llm(messages, model)
+    if require_config and result.get("needs_api_key"):
+        return {"ok": False, "error": result.get("analysis"), "needs_api_key": True, "model": result.get("model")}
+    result.update(
+        {
+            "report": report,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "message_preview": (result.get("analysis") or "")[:1200],
+        }
+    )
+    return result
+
+
+def daily_feishu_report_text(report, analysis=""):
+    totals = report.get("totals") or {}
+    window = report.get("business_window_local") or {}
+    onboarding_window = report.get("onboarding_window_local") or {}
+    lines = [
+        "Deca Growth 每日业务数据",
+        f"业务日：{report.get('report_date')}",
+        f"内容窗口：{window.get('start', '')} → {window.get('end', '')} BJT",
+        f"Onboarding窗口：{onboarding_window.get('start', '')} → {onboarding_window.get('end', '')} BJT",
+        "",
+        "总览",
+        f"- 总播放：{int(totals.get('total_views') or 0):,}",
+        f"- ReelFarm：{int(totals.get('reelfarm_views') or 0):,}",
+        f"- Clone：{int(totals.get('clone_views') or 0):,}",
+        f"- RF发布账号/应发账号：{int(totals.get('reelfarm_published_automations') or 0):,} / {int(totals.get('reelfarm_expected_automations') or 0):,}",
+        f"- ReelFarm均播：{format_number_compact(totals.get('reelfarm_avg_views'))}",
+        f"- Clone均播：{format_number_compact(totals.get('clone_avg_views'))}",
+        f"- Onboarding Unique：{int(totals.get('downloads') or 0):,}",
+        f"- 下载/播放：{format_percent(totals.get('download_rate'))}",
+        "",
+    ]
+
+    for item in report.get("products") or []:
+        downloads = item.get("downloads")
+        countries = item.get("countries") if isinstance(item.get("countries"), list) else []
+        lines.extend([
+            f"{item.get('product_name')} ({item.get('product_code')})",
+            "总览",
+            f"- 播放：{int(item.get('total_views') or 0):,} = RF {int(item.get('reelfarm_views') or 0):,} + Clone {int(item.get('clone_views') or 0):,}",
+            f"- RF发布账号/应发账号：{int(item.get('reelfarm_published_automations') or 0):,} / {int(item.get('reelfarm_expected_automations') or 0):,}",
+            f"- RF总均播：{format_number_compact(item.get('reelfarm_avg_views'))}（Posts {int(item.get('reelfarm_posts') or 0):,}，Views {int(item.get('reelfarm_views') or 0):,}）",
+            f"- Clone均播：{format_number_compact(item.get('clone_avg_views'))}（Posts {int(item.get('clone_posts') or 0):,}，Views {int(item.get('clone_views') or 0):,}）",
+        ])
+        lines.append("国家 RF 均播")
+        if countries:
+            for country in countries:
+                lines.append(
+                    f"- {country.get('country_name') or country.get('country_code')}："
+                    f"{format_number_compact(country.get('reelfarm_avg_views'))}"
+                    f"（Posts {int(country.get('reelfarm_posts') or 0):,}，Views {int(country.get('reelfarm_views') or 0):,}）"
+                )
+        else:
+            lines.append("- 暂无 RF 发布数据")
+        lines.extend([
+            "下载",
+            f"- Onboarding Unique：{int(downloads):,}" if downloads is not None else "- Onboarding Unique：未配置/未返回",
+            f"- 下载/播放：{format_percent(item.get('download_rate'))}",
+            "",
+        ])
+
+    if analysis:
+        lines.extend(["AI 分析", str(analysis).strip(), ""])
+
+    errors = report.get("errors") or []
+    if errors:
+        lines.append("注意")
+        for error in errors[:6]:
+            lines.append(f"- {error.get('product_code')}: {error.get('error')}")
+        if len(errors) > 6:
+            lines.append(f"- 还有 {len(errors) - 6} 个错误未展示")
+
+    return "\n".join(lines).strip()
+
+
+def send_daily_feishu_report(report_date="", include_ai=False, model=""):
     report = daily_feishu_report_payload(report_date)
-    message = daily_feishu_report_text(report)
+    analysis = ""
+    analysis_payload = None
+    if include_ai:
+        analysis_payload = daily_feishu_ai_analysis(report_date, model, report=report, require_config=True)
+        if not analysis_payload.get("ok"):
+            return analysis_payload
+        analysis = analysis_payload.get("analysis") or ""
+    message = daily_feishu_report_text(report, analysis=analysis)
     sent = send_feishu_message(message)
     if not sent.get("ok"):
         return sent
-    return {
+    result = {
         "ok": True,
         "sent_at": datetime.now(timezone.utc).isoformat(),
         "report_date": report.get("report_date"),
@@ -5584,6 +5635,10 @@ def send_daily_feishu_report(report_date=""):
         "error_count": len(report.get("errors") or []),
         "message_preview": message[:800],
     }
+    if analysis_payload:
+        result["analysis"] = analysis_payload.get("analysis")
+        result["model"] = analysis_payload.get("model")
+    return result
 
 
 def send_publish_check_reminder():
@@ -6142,11 +6197,24 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
         if path == "/api/reports/daily-feishu":
             query = parse_qs(urlparse(self.path).query)
             try:
-                result = send_daily_feishu_report(query.get("date", [""])[0])
+                include_ai = str(query.get("include_ai", [""])[0]).strip().lower() in {"1", "true", "yes", "y", "on"}
+                result = send_daily_feishu_report(query.get("date", [""])[0], include_ai=include_ai, model=query.get("model", [""])[0])
                 status = 200 if result.get("ok") else 400
                 self.send_json(status, result)
             except ValueError as error:
                 self.send_json(400, {"ok": False, "error": str(error)})
+            return
+
+        if path == "/api/reports/daily-feishu-analysis":
+            query = parse_qs(urlparse(self.path).query)
+            try:
+                result = daily_feishu_ai_analysis(query.get("date", [""])[0], query.get("model", [""])[0])
+                status = 200 if result.get("ok") else 400
+                self.send_json(status, result)
+            except ValueError as error:
+                self.send_json(400, {"ok": False, "error": str(error)})
+            except RuntimeError as error:
+                self.send_json(502, {"ok": False, "error": str(error)})
             return
 
         if path == "/api/reports/daily-feishu-preview":
@@ -6447,11 +6515,22 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
         if path == "/api/reports/daily-feishu":
             query = parse_qs(urlparse(self.path).query)
             try:
-                result = send_daily_feishu_report(query.get("date", [""])[0])
+                include_ai = str(query.get("include_ai", [""])[0]).strip().lower() in {"1", "true", "yes", "y", "on"}
+                result = send_daily_feishu_report(query.get("date", [""])[0], include_ai=include_ai, model=query.get("model", [""])[0])
                 status = 200 if result.get("ok") else 400
                 self.send_json(status, result)
             except ValueError as error:
                 self.send_json(400, {"ok": False, "error": str(error)})
+            return
+
+        if path == "/api/reports/daily-feishu-analysis":
+            query = parse_qs(urlparse(self.path).query)
+            try:
+                self.send_json(200, daily_feishu_ai_analysis(query.get("date", [""])[0], query.get("model", [""])[0]))
+            except ValueError as error:
+                self.send_json(400, {"ok": False, "error": str(error)})
+            except RuntimeError as error:
+                self.send_json(502, {"ok": False, "error": str(error)})
             return
 
         if path == "/api/reelfarm/sync-all":

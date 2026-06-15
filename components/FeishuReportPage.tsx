@@ -2,8 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
-import type { DailyFeishuPreviewPayload, DailyFeishuReport, DailyFeishuSendResult } from '@/lib/types';
+import type { DailyFeishuAnalysisPayload, DailyFeishuPreviewPayload, DailyFeishuReport, DailyFeishuSendResult } from '@/lib/types';
 import { formatNumber } from '@/lib/utils';
+
+const DEFAULT_LLM_MODEL = 'gpt-4.1-mini';
+const MODEL_OPTIONS = ['gpt-4.1-mini', 'gpt-4o-mini', 'gpt-4.1'];
 
 function localIsoDate(offsetDays = 0) {
   const date = new Date();
@@ -42,15 +45,24 @@ export function FeishuReportPage() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [sendResult, setSendResult] = useState<DailyFeishuSendResult | null>(null);
+  const [model, setModel] = useState(DEFAULT_LLM_MODEL);
+  const [customModel, setCustomModel] = useState('');
+  const [includeAi, setIncludeAi] = useState(false);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisPayload, setAnalysisPayload] = useState<DailyFeishuAnalysisPayload | null>(null);
+  const [analysisError, setAnalysisError] = useState('');
 
   const totals = useMemo(() => reportTotals(payload?.report), [payload]);
   const products = payload?.report?.products || [];
   const downloadRate = ratio(totals.download_rate);
+  const selectedModel = customModel.trim() || model;
 
   async function loadPreview(nextDate = reportDate) {
     setLoading(true);
     setError('');
     setSendResult(null);
+    setAnalysisPayload(null);
+    setAnalysisError('');
     try {
       const next = await api.dailyFeishuPreview(nextDate);
       setPayload(next);
@@ -66,13 +78,29 @@ export function FeishuReportPage() {
     setError('');
     setSendResult(null);
     try {
-      const result = await api.sendDailyFeishuReport(reportDate);
+      const selectedModel = customModel.trim() || model;
+      const result = await api.sendDailyFeishuReport(reportDate, { includeAi, model: selectedModel });
       setSendResult(result);
       await loadPreview(reportDate);
     } catch (sendError: any) {
       setError(sendError?.message || '飞书发送失败');
     } finally {
       setSending(false);
+    }
+  }
+
+  async function generateAnalysis() {
+    setAnalysisLoading(true);
+    setAnalysisError('');
+    setAnalysisPayload(null);
+    try {
+      const selectedModel = customModel.trim() || model;
+      const result = await api.dailyFeishuAnalysis(reportDate, selectedModel);
+      setAnalysisPayload(result);
+    } catch (analysisException: any) {
+      setAnalysisError(analysisException?.message || 'AI 分析生成失败');
+    } finally {
+      setAnalysisLoading(false);
     }
   }
 
@@ -109,9 +137,9 @@ export function FeishuReportPage() {
       <section className="feishu-flow-grid" aria-label="AI 日报流程">
         {[
           ['01', 'Data Snapshot', '读取 Daily Metric 当前业务日数据', 'Ready'],
-          ['02', 'LLM Insight', '后续让模型总结波动、异常和重点产品', 'Planned'],
+          ['02', 'LLM Insight', '让模型总结波动、异常和重点产品', analysisPayload ? (analysisPayload.configured ? 'Ready' : 'Needs Key') : 'Optional'],
           ['03', 'Image Render', '后续把总结渲染成日报图片', 'Planned'],
-          ['04', 'Feishu Send', '手动发送当前文本，自动发送仍沿用现有任务', 'Ready']
+          ['04', 'Feishu Send', includeAi ? '发送文本时附带 AI 分析' : '手动发送当前日报文本', 'Ready']
         ].map(([index, title, description, status]) => (
           <article className="feishu-flow-card" key={title}>
             <span>{index}</span>
@@ -120,6 +148,67 @@ export function FeishuReportPage() {
             <small>{status}</small>
           </article>
         ))}
+      </section>
+
+      <section className="feishu-ai-panel">
+        <div className="feishu-ai-copy">
+          <p className="dashboard-kicker">LLM Insight</p>
+          <h2>日报 AI 分析</h2>
+          <p>
+            模型会读取当前业务日和昨日数据，先找发布缺口、播放变化、Onboarding 和下载/播放转化，再生成可以直接放进飞书的中文分析。
+          </p>
+          <small>
+            API Key 只在后端环境变量读取：<code>LLM_API_KEY</code> 或 <code>OPENAI_API_KEY</code>。
+            可选配置：<code>LLM_MODEL</code>、<code>LLM_API_BASE</code>。
+          </small>
+        </div>
+        <div className="feishu-ai-workspace">
+          <div className="feishu-ai-controls">
+            <label>
+              <span>模型</span>
+              <select value={model} onChange={event => setModel(event.target.value)}>
+                {MODEL_OPTIONS.map(option => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>自定义模型</span>
+              <input
+                value={customModel}
+                onChange={event => setCustomModel(event.target.value)}
+                placeholder="例如 gpt-4.1-mini"
+              />
+            </label>
+            <button type="button" onClick={generateAnalysis} disabled={analysisLoading || loading}>
+              {analysisLoading ? '分析中...' : '生成分析'}
+            </button>
+          </div>
+          <label className="feishu-ai-checkbox">
+            <input
+              type="checkbox"
+              checked={includeAi}
+              onChange={event => setIncludeAi(event.target.checked)}
+            />
+            <span>发送飞书时附带 AI 分析</span>
+          </label>
+          {analysisError ? <div className="feishu-ai-error">{analysisError}</div> : null}
+          <div className="feishu-ai-output">
+            {analysisPayload ? (
+              <>
+                <div className="feishu-ai-output-meta">
+                  <strong>{analysisPayload.needs_api_key ? '等待配置 API Key' : '分析结果'}</strong>
+                  <span>{analysisPayload.model || selectedModel}</span>
+                </div>
+                <p>{analysisPayload.analysis}</p>
+              </>
+            ) : (
+              <p>
+                选择模型后点击“生成分析”。如果还没配置 API Key，这里会提示需要配置哪些环境变量。
+              </p>
+            )}
+          </div>
+        </div>
       </section>
 
       <section className="feishu-report-summary">
