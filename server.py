@@ -5592,27 +5592,48 @@ def call_daily_feishu_llm(messages, model=""):
         }
 
     endpoint = f"{(os.environ.get('LLM_API_BASE', '').strip().rstrip('/') or LLM_API_BASE)}/chat/completions"
-    body = json.dumps(
+    request_payloads = [
         {
             "model": selected_model,
             "messages": messages,
-            "temperature": 0.2,
+            "max_completion_tokens": 1200,
+        },
+        {
+            "model": selected_model,
+            "messages": messages,
             "max_tokens": 1200,
         },
-        ensure_ascii=False,
-    ).encode("utf-8")
-    request = Request(
-        endpoint,
-        data=body,
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}",
-        },
-        method="POST",
-    )
+    ]
+    last_http_error = None
     try:
-        with urlopen(request, timeout=45, context=make_ssl_context()) as response:
-            raw = response.read().decode("utf-8", errors="replace")
+        raw = ""
+        for payload in request_payloads:
+            body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            request = Request(
+                endpoint,
+                data=body,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {api_key}",
+                },
+                method="POST",
+            )
+            try:
+                with urlopen(request, timeout=45, context=make_ssl_context()) as response:
+                    raw = response.read().decode("utf-8", errors="replace")
+                last_http_error = None
+                break
+            except HTTPError as exc:
+                detail = exc.read().decode("utf-8", errors="replace")
+                last_http_error = (exc.code, detail)
+                if exc.code == 400 and "max_completion_tokens" in payload and "max_completion_tokens" in detail:
+                    continue
+                if exc.code == 400 and "max_tokens" in payload and "max_tokens" in detail:
+                    continue
+                raise
+        if last_http_error:
+            code, detail = last_http_error
+            return {"ok": False, "error": f"LLM API returned HTTP {code}: {detail[:500]}", "model": selected_model}
     except HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         return {"ok": False, "error": f"LLM API returned HTTP {exc.code}: {detail[:500]}", "model": selected_model}
