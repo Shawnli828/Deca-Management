@@ -199,6 +199,17 @@ export type DailyFeishuAnalysisPayload = {
   error?: string;
 };
 
+export type LlmModelsPayload = {
+  ok: boolean;
+  configured?: boolean;
+  needs_api_key?: boolean;
+  fallback?: boolean;
+  models: string[];
+  default_model: string;
+  generated_at?: string;
+  error?: string;
+};
+
 export type ProductRollupCountry = {
   country_id?: string;
   country_code?: string;

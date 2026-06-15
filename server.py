@@ -73,6 +73,18 @@ FEISHU_WEBHOOK_URL = os.environ.get("FEISHU_WEBHOOK_URL", "").strip()
 FEISHU_WEBHOOK_SECRET = os.environ.get("FEISHU_WEBHOOK_SECRET", "").strip()
 LLM_API_BASE = os.environ.get("LLM_API_BASE", "https://api.openai.com/v1").strip().rstrip("/")
 LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4.1-mini").strip()
+FALLBACK_LLM_MODELS = [
+    "gpt-5",
+    "gpt-5-mini",
+    "gpt-5-nano",
+    "gpt-4.1",
+    "gpt-4.1-mini",
+    "gpt-4.1-nano",
+    "gpt-4o",
+    "gpt-4o-mini",
+    "gpt-4-turbo",
+    "gpt-4",
+]
 SEED_DATA_PATH = BASE_DIR / "seed_data.json"
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "Deca888").strip()
 ADMIN_PASSWORD_HASH = os.environ.get(
@@ -5390,6 +5402,109 @@ def daily_feishu_llm_model(model=""):
     return value
 
 
+def fallback_llm_models():
+    models = []
+    configured_model = os.environ.get("LLM_MODEL", "").strip() or LLM_MODEL
+    if configured_model:
+        models.append(configured_model)
+    models.extend(FALLBACK_LLM_MODELS)
+    return list(dict.fromkeys(models))
+
+
+def selectable_gpt_model(model_id):
+    value = str(model_id or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9._:/-]{1,128}", value):
+        return False
+    if not value.startswith("gpt-"):
+        return False
+    lowered = value.lower()
+    blocked_fragments = (
+        "audio",
+        "image",
+        "realtime",
+        "search-preview",
+        "transcribe",
+        "tts",
+        "vision",
+    )
+    return not any(fragment in lowered for fragment in blocked_fragments)
+
+
+def sort_llm_models(models):
+    preferred = fallback_llm_models()
+    preferred_index = {model: index for index, model in enumerate(preferred)}
+    return sorted(
+        list(dict.fromkeys(models)),
+        key=lambda model: (
+            preferred_index.get(model, len(preferred)),
+            model,
+        ),
+    )
+
+
+def llm_models_payload():
+    fallback_models = fallback_llm_models()
+    selected_default = daily_feishu_llm_model()
+    api_key = daily_feishu_llm_api_key()
+    generated_at = datetime.now(timezone.utc).isoformat()
+    if not api_key:
+        return {
+            "ok": True,
+            "configured": False,
+            "needs_api_key": True,
+            "fallback": True,
+            "models": fallback_models,
+            "default_model": selected_default,
+            "generated_at": generated_at,
+        }
+
+    endpoint = f"{(os.environ.get('LLM_API_BASE', '').strip().rstrip('/') or LLM_API_BASE)}/models"
+    request = Request(
+        endpoint,
+        headers={"Authorization": f"Bearer {api_key}"},
+        method="GET",
+    )
+    try:
+        with urlopen(request, timeout=20, context=make_ssl_context()) as response:
+            raw = response.read().decode("utf-8", errors="replace")
+        payload = json.loads(raw)
+        models = [
+            str(item.get("id", "")).strip()
+            for item in payload.get("data", [])
+            if isinstance(item, dict) and selectable_gpt_model(item.get("id"))
+        ]
+        models = sort_llm_models(models or fallback_models)
+        if selected_default not in models:
+            selected_default = models[0] if models else LLM_MODEL
+        return {
+            "ok": True,
+            "configured": True,
+            "needs_api_key": False,
+            "fallback": False,
+            "models": models,
+            "default_model": selected_default,
+            "generated_at": generated_at,
+        }
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        error = f"LLM models API returned HTTP {exc.code}: {detail[:300]}"
+    except URLError as exc:
+        error = f"Could not reach LLM models API: {exc.reason}"
+    except Exception as exc:
+        error = f"Could not load LLM models: {exc}"
+
+    return {
+        "ok": True,
+        "configured": True,
+        "needs_api_key": False,
+        "fallback": True,
+        "models": fallback_models,
+        "default_model": selected_default,
+        "error": error,
+        "generated_at": generated_at,
+    }
+
+
 def compact_daily_feishu_report(report):
     totals = report.get("totals") or {}
     products = []
@@ -6215,6 +6330,10 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
                 self.send_json(400, {"ok": False, "error": str(error)})
             except RuntimeError as error:
                 self.send_json(502, {"ok": False, "error": str(error)})
+            return
+
+        if path == "/api/reports/llm-models":
+            self.send_json(200, llm_models_payload())
             return
 
         if path == "/api/reports/daily-feishu-preview":

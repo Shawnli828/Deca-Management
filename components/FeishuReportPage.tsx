@@ -6,7 +6,18 @@ import type { DailyFeishuAnalysisPayload, DailyFeishuPreviewPayload, DailyFeishu
 import { formatNumber } from '@/lib/utils';
 
 const DEFAULT_LLM_MODEL = 'gpt-4.1-mini';
-const MODEL_OPTIONS = ['gpt-4.1-mini', 'gpt-4o-mini', 'gpt-4.1'];
+const FALLBACK_MODEL_OPTIONS = [
+  'gpt-5',
+  'gpt-5-mini',
+  'gpt-5-nano',
+  'gpt-4.1',
+  'gpt-4.1-mini',
+  'gpt-4.1-nano',
+  'gpt-4o',
+  'gpt-4o-mini',
+  'gpt-4-turbo',
+  'gpt-4'
+];
 
 function localIsoDate(offsetDays = 0) {
   const date = new Date();
@@ -46,6 +57,8 @@ export function FeishuReportPage() {
   const [error, setError] = useState('');
   const [sendResult, setSendResult] = useState<DailyFeishuSendResult | null>(null);
   const [model, setModel] = useState(DEFAULT_LLM_MODEL);
+  const [modelOptions, setModelOptions] = useState(FALLBACK_MODEL_OPTIONS);
+  const [modelListStatus, setModelListStatus] = useState('');
   const [customModel, setCustomModel] = useState('');
   const [includeAi, setIncludeAi] = useState(false);
   const [analysisLoading, setAnalysisLoading] = useState(false);
@@ -109,6 +122,38 @@ export function FeishuReportPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    api.llmModels()
+      .then(result => {
+        if (cancelled) return;
+        const options = (Array.isArray(result.models) && result.models.length > 0)
+          ? result.models
+          : FALLBACK_MODEL_OPTIONS;
+        setModelOptions(options);
+        setModel(current => {
+          if (options.includes(current)) return current;
+          if (result.default_model && options.includes(result.default_model)) return result.default_model;
+          return options[0] || DEFAULT_LLM_MODEL;
+        });
+        if (result.fallback && result.error) {
+          setModelListStatus(`模型列表使用默认候选：${result.error}`);
+        } else if (result.fallback || result.needs_api_key) {
+          setModelListStatus('模型列表使用默认候选。');
+        } else {
+          setModelListStatus(`${options.length} 个可用 GPT 模型`);
+        }
+      })
+      .catch(modelError => {
+        if (cancelled) return;
+        setModelOptions(FALLBACK_MODEL_OPTIONS);
+        setModelListStatus(modelError?.message || '模型列表读取失败，使用默认候选。');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <section className="feishu-report-page">
       <header className="feishu-report-hero">
@@ -167,7 +212,7 @@ export function FeishuReportPage() {
             <label>
               <span>模型</span>
               <select value={model} onChange={event => setModel(event.target.value)}>
-                {MODEL_OPTIONS.map(option => (
+                {modelOptions.map(option => (
                   <option key={option} value={option}>{option}</option>
                 ))}
               </select>
@@ -184,6 +229,7 @@ export function FeishuReportPage() {
               {analysisLoading ? '分析中...' : '生成分析'}
             </button>
           </div>
+          {modelListStatus ? <small className="feishu-ai-model-note">{modelListStatus}</small> : null}
           <label className="feishu-ai-checkbox">
             <input
               type="checkbox"

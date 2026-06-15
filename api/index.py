@@ -42,6 +42,7 @@ from server import (
     init_relational_schema,
     load_data,
     load_publish_check_state,
+    llm_models_payload,
     make_auth_token,
     password_hash,
     product_tags_payload,
@@ -482,6 +483,12 @@ def post_reports_daily_feishu_analysis(request: Request, date: str = "", model: 
         raise HTTPException(status_code=400, detail=str(error)) from error
     except RuntimeError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@app.get("/api/reports/llm-models")
+def get_reports_llm_models(request: Request):
+    require_dashboard_auth(request)
+    return llm_models_payload()
 
 
 @app.get("/api/reports/daily-feishu-preview")

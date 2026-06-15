@@ -6704,6 +6704,12 @@
             cursor: default;
         }
 
+        .feishu-ai-model-note {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 600;
+        }
+
         .feishu-ai-checkbox {
             display: flex;
             width: fit-content;

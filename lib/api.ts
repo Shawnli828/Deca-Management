@@ -7,6 +7,7 @@ import type {
   DailyFeishuSendResult,
   DetailedPostRow,
   ExternalApiKey,
+  LlmModelsPayload,
   PublishCheckResult,
   PublishCheckState,
   Product,
@@ -112,6 +113,8 @@ export const api = {
       { method: 'POST' },
       'Failed to generate Feishu AI analysis'
     ),
+  llmModels: () =>
+    apiFetch<LlmModelsPayload>('/api/reports/llm-models', undefined, 'Failed to load LLM models'),
   sendDailyFeishuReport: (date?: string, options?: { includeAi?: boolean; model?: string }) =>
     apiFetch<DailyFeishuSendResult>(
       `/api/reports/daily-feishu?${new URLSearchParams({
