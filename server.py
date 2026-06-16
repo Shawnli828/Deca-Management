@@ -3680,6 +3680,8 @@ def mixpanel_event_daily_counts(config, event_name, utc_start, utc_end, value_ty
             event = json.loads(line)
         except json.JSONDecodeError:
             continue
+        if isinstance(event, dict) and event.get("event") != event_name:
+            continue
         properties = event.get("properties") if isinstance(event, dict) else {}
         if not isinstance(properties, dict):
             properties = {}
@@ -3746,6 +3748,8 @@ def mixpanel_event_business_material_counts(config, event_name, utc_start, utc_e
         try:
             event = json.loads(line)
         except json.JSONDecodeError:
+            continue
+        if isinstance(event, dict) and event.get("event") != event_name:
             continue
         properties = event.get("properties") if isinstance(event, dict) else {}
         if not isinstance(properties, dict):
@@ -3823,36 +3827,60 @@ def mixpanel_event_user_unique_query_count(config, event_name, utc_start, utc_en
     region = (config or {}).get("region", MIXPANEL_REGION)
     if not project_id or not username or not secret or not event_name:
         return None
+    start_epoch = int(utc_start.timestamp())
+    end_epoch = int(utc_end.timestamp())
     source_date_from, source_date_to = source_dates_for_utc_window(utc_start, utc_end, mixpanel_timezone(), clamp_to_today=True)
     if not source_date_from or source_date_from > source_date_to:
         return None
     params = urlencode({
         "project_id": project_id,
-        "event": event_name,
+        "event": json.dumps([event_name], ensure_ascii=False),
         "from_date": source_date_from,
         "to_date": source_date_to,
-        "type": "unique",
-        "interval": mixpanel_source_day_span(source_date_from, source_date_to),
     })
     credentials = f"{username}:{secret}".encode("utf-8")
     request = Request(
-        f"{mixpanel_query_base_url(region)}/segmentation?{params}",
+        f"{mixpanel_export_base_url(region)}?{params}",
         headers={
             "Authorization": "Basic " + base64.b64encode(credentials).decode("ascii"),
-            "Accept": "application/json",
+            "Accept": "text/plain",
         },
     )
     try:
-        with urlopen(request, timeout=45, context=make_ssl_context()) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+        with urlopen(request, timeout=60, context=make_ssl_context()) as response:
+            payload = response.read().decode("utf-8")
     except HTTPError as error:
         detail = error.read().decode("utf-8", errors="ignore")[:240]
-        raise RuntimeError(f"Mixpanel Query API failed: {error.code} {detail}") from error
+        raise RuntimeError(f"Mixpanel Export API failed: {error.code} {detail}") from error
     except (URLError, TimeoutError) as error:
-        raise RuntimeError(f"Mixpanel Query API failed: {error}") from error
-    except json.JSONDecodeError as error:
-        raise RuntimeError("Mixpanel Query API returned non-JSON response") from error
-    return mixpanel_segmentation_unique_from_payload(payload, event_name)
+        raise RuntimeError(f"Mixpanel Export API failed: {error}") from error
+
+    unique_ids = set()
+    for line in payload.splitlines():
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(event, dict) and event.get("event") != event_name:
+            continue
+        properties = event.get("properties") if isinstance(event, dict) else {}
+        if not isinstance(properties, dict):
+            properties = {}
+        raw_time = properties.get("time", event.get("time") if isinstance(event, dict) else None)
+        try:
+            timestamp = float(raw_time)
+        except (TypeError, ValueError):
+            continue
+        if timestamp > 10_000_000_000:
+            timestamp = timestamp / 1000
+        if timestamp < start_epoch or timestamp >= end_epoch:
+            continue
+        distinct_id = mixpanel_distinct_id(event, properties)
+        if distinct_id:
+            unique_ids.add(distinct_id)
+    return len(unique_ids)
 
 
 def mixpanel_event_total(config, event_name, utc_start, utc_end, value_type="general"):
@@ -4121,7 +4149,7 @@ def business_material_report_payload(query):
         "source_timezone": MIXPANEL_TIMEZONE_NAME,
         "mixpanel": {
             "event": onboarding_event,
-            "method": "query_api_segmentation_unique",
+            "method": "raw_export_exact_unique",
             "metric": "user_uniques",
             "region": mixpanel_config.get("region"),
             "scope": mixpanel_config.get("scope"),
