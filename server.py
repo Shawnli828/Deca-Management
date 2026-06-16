@@ -3826,8 +3826,6 @@ def mixpanel_event_user_unique_query_count(config, event_name, utc_start, utc_en
     source_date_from, source_date_to = source_dates_for_utc_window(utc_start, utc_end, mixpanel_timezone(), clamp_to_today=True)
     if not source_date_from or source_date_from > source_date_to:
         return None
-    start_epoch = int(utc_start.timestamp())
-    end_epoch = int(utc_end.timestamp())
     params = urlencode({
         "project_id": project_id,
         "event": event_name,
@@ -3835,7 +3833,6 @@ def mixpanel_event_user_unique_query_count(config, event_name, utc_start, utc_en
         "to_date": source_date_to,
         "type": "unique",
         "interval": mixpanel_source_day_span(source_date_from, source_date_to),
-        "where": f'properties["time"] >= {start_epoch} and properties["time"] < {end_epoch}',
     })
     credentials = f"{username}:{secret}".encode("utf-8")
     request = Request(
