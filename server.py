@@ -29,7 +29,6 @@ from server_modules.time_windows import (
     business_material_report_windows,
     growth_report_windows,
     mixpanel_timezone,
-    onboarding_date_for_utc_datetime,
     onboarding_day_window,
     parse_iso_datetime,
     previous_complete_windows,
@@ -3773,6 +3772,92 @@ def mixpanel_event_business_material_counts(config, event_name, utc_start, utc_e
     return totals
 
 
+def collect_numeric_values(value):
+    if isinstance(value, bool) or value is None:
+        return []
+    if isinstance(value, (int, float)):
+        return [float(value)]
+    if isinstance(value, dict):
+        values = []
+        for child in value.values():
+            values.extend(collect_numeric_values(child))
+        return values
+    if isinstance(value, list):
+        values = []
+        for child in value:
+            values.extend(collect_numeric_values(child))
+        return values
+    return []
+
+
+def mixpanel_segmentation_unique_from_payload(payload, event_name):
+    if not isinstance(payload, dict):
+        return 0
+    data = payload.get("data")
+    if isinstance(data, dict):
+        values = data.get("values")
+        if isinstance(values, dict):
+            candidate = values.get(event_name)
+            if candidate is None and len(values) == 1:
+                candidate = next(iter(values.values()))
+            return int(round(sum(collect_numeric_values(candidate))))
+    results = payload.get("results")
+    if isinstance(results, dict):
+        return int(round(sum(collect_numeric_values(results))))
+    return 0
+
+
+def mixpanel_source_day_span(source_date_from, source_date_to):
+    try:
+        start = datetime.strptime(source_date_from, "%Y-%m-%d").date()
+        end = datetime.strptime(source_date_to, "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        return 1
+    return max(1, (end - start).days + 1)
+
+
+def mixpanel_event_user_unique_query_count(config, event_name, utc_start, utc_end):
+    project_id = (config or {}).get("project_id", "")
+    username = (config or {}).get("username", "")
+    secret = (config or {}).get("secret", "")
+    region = (config or {}).get("region", MIXPANEL_REGION)
+    if not project_id or not username or not secret or not event_name:
+        return None
+    source_date_from, source_date_to = source_dates_for_utc_window(utc_start, utc_end, mixpanel_timezone(), clamp_to_today=True)
+    if not source_date_from or source_date_from > source_date_to:
+        return None
+    start_epoch = int(utc_start.timestamp())
+    end_epoch = int(utc_end.timestamp())
+    params = urlencode({
+        "project_id": project_id,
+        "event": event_name,
+        "from_date": source_date_from,
+        "to_date": source_date_to,
+        "type": "unique",
+        "interval": mixpanel_source_day_span(source_date_from, source_date_to),
+        "where": f'properties["time"] >= {start_epoch} and properties["time"] < {end_epoch}',
+    })
+    credentials = f"{username}:{secret}".encode("utf-8")
+    request = Request(
+        f"{mixpanel_query_base_url(region)}/segmentation?{params}",
+        headers={
+            "Authorization": "Basic " + base64.b64encode(credentials).decode("ascii"),
+            "Accept": "application/json",
+        },
+    )
+    try:
+        with urlopen(request, timeout=45, context=make_ssl_context()) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except HTTPError as error:
+        detail = error.read().decode("utf-8", errors="ignore")[:240]
+        raise RuntimeError(f"Mixpanel Query API failed: {error.code} {detail}") from error
+    except (URLError, TimeoutError) as error:
+        raise RuntimeError(f"Mixpanel Query API failed: {error}") from error
+    except json.JSONDecodeError as error:
+        raise RuntimeError("Mixpanel Query API returned non-JSON response") from error
+    return mixpanel_segmentation_unique_from_payload(payload, event_name)
+
+
 def mixpanel_event_total(config, event_name, utc_start, utc_end, value_type="general"):
     daily = mixpanel_event_daily_counts(config, event_name, utc_start, utc_end, value_type)
     if not daily and not (config or {}).get("project_id"):
@@ -3942,8 +4027,6 @@ def business_material_report_payload(query):
     overall_utc_start = windows[0]["utc_start"]
     overall_utc_end = windows[-1]["utc_end"]
     onboarding_windows = {window["report_date"]: onboarding_day_window(window["report_date"]) for window in windows}
-    onboarding_utc_start = onboarding_windows[windows[0]["report_date"]]["utc_start"]
-    onboarding_utc_end = onboarding_windows[windows[-1]["report_date"]]["utc_end"]
     if mode in {"published", "published_materials", "legacy"}:
         material_daily = product_business_material_daily_stats(product_code, overall_utc_start, overall_utc_end)
         material_mode = "published_materials"
@@ -3954,14 +4037,16 @@ def business_material_report_payload(query):
         reelfarm_expected_count = None
     mixpanel_config = product_mixpanel_config(product_code)
     onboarding_event = product_mixpanel_event_name(product_code, "ONBOARDING")
-    download_daily = mixpanel_event_business_material_counts(
-        mixpanel_config,
-        onboarding_event,
-        onboarding_utc_start,
-        onboarding_utc_end,
-        "unique",
-        onboarding_date_for_utc_datetime,
-    )
+    download_daily = {}
+    for report_date, onboarding_window in onboarding_windows.items():
+        onboarding_unique = mixpanel_event_user_unique_query_count(
+            mixpanel_config,
+            onboarding_event,
+            onboarding_window["utc_start"],
+            onboarding_window["utc_end"],
+        )
+        if onboarding_unique is not None:
+            download_daily[report_date] = onboarding_unique
     rows = []
     source_tz = mixpanel_timezone()
     for window in windows:
@@ -4039,6 +4124,8 @@ def business_material_report_payload(query):
         "source_timezone": MIXPANEL_TIMEZONE_NAME,
         "mixpanel": {
             "event": onboarding_event,
+            "method": "query_api_segmentation_unique",
+            "metric": "user_uniques",
             "region": mixpanel_config.get("region"),
             "scope": mixpanel_config.get("scope"),
             "has_project_id": bool(mixpanel_config.get("project_id")),
