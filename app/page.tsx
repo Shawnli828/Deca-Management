@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ApiKeyPage } from '@/components/ApiKeyPage';
 import { AuthGate } from '@/components/AuthGate';
 import { BusinessMaterialReport } from '@/components/BusinessMaterialReport';
@@ -19,9 +19,10 @@ import { useDatabaseAccess } from '@/hooks/useDatabaseAccess';
 import { useProductCatalog } from '@/hooks/useProductCatalog';
 import { useProductMetrics } from '@/hooks/useProductMetrics';
 import { usePublishCheck } from '@/hooks/usePublishCheck';
-import { accountSummaryToCard, api, mergePostRowsIntoCard } from '@/lib/api';
-import type { Country, Product, ReelFarmCard, ReelFarmResult } from '@/lib/types';
-import { buildCountryAutomationPrefix, cardStateKey, getCountryReelFarmCode, getProductReelFarmCode } from '@/lib/utils';
+import { useReelFarmDashboard } from '@/hooks/useReelFarmDashboard';
+import { api } from '@/lib/api';
+import type { Country, Product } from '@/lib/types';
+import { buildCountryAutomationPrefix, getCountryReelFarmCode, getProductReelFarmCode } from '@/lib/utils';
 
 export default function DashboardPage() {
   const [authenticated, setAuthenticated] = useState(false);
@@ -30,17 +31,11 @@ export default function DashboardPage() {
   const [page, setPage] = useState<'products' | 'product' | 'country'>('products');
   const [status, setStatus] = useState('正在连接数据库...');
   const [statusError, setStatusError] = useState(false);
-  const [days, setDays] = useState(30);
-  const [reelFarmResults, setReelFarmResults] = useState<Record<string, ReelFarmResult>>({});
-  const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
-  const [postLoading, setPostLoading] = useState<Record<string, boolean>>({});
-  const [postCache, setPostCache] = useState<Record<string, { data: any[]; pagination: { limit: number; offset: number; has_more: boolean; total?: number } }>>({});
-  const [slideIndexes, setSlideIndexes] = useState<Record<string, number>>({});
   const [syncPrefix, setSyncPrefix] = useState('');
   const [syncProductId, setSyncProductId] = useState('');
   const [syncAllRunning, setSyncAllRunning] = useState(false);
   const [syncAllProgress, setSyncAllProgress] = useState('');
-  const [productTags, setProductTags] = useState<Record<string, string[]>>({});
+  const reelFarmResetRef = useRef<(() => void) | null>(null);
 
   function reportStatus(message: string, isError = false) {
     setStatus(message);
@@ -69,12 +64,7 @@ export default function DashboardPage() {
   } = useProductCatalog({
     onStatus: reportStatus,
     onProductAdded: () => setPage('products'),
-    onCountrySettingsSaved: () => {
-      setReelFarmResults({});
-      setPostCache({});
-      setExpandedCards({});
-      setSlideIndexes({});
-    }
+    onCountrySettingsSaved: () => reelFarmResetRef.current?.()
   });
 
   const {
@@ -115,6 +105,34 @@ export default function DashboardPage() {
     onStatus: reportStatus
   });
 
+  const {
+    days,
+    reelFarmResults,
+    expandedCards,
+    postLoading,
+    slideIndexes,
+    productTags,
+    loadAccounts,
+    addCardTag,
+    removeCardTag,
+    changeDays,
+    toggleCard,
+    pagePosts,
+    moveSlide,
+    resetReelFarmState
+  } = useReelFarmDashboard({
+    authenticated,
+    page,
+    selectedProduct,
+    selectedCountry,
+    selectedProductId,
+    selectedCountryId
+  });
+
+  useEffect(() => {
+    reelFarmResetRef.current = resetReelFarmState;
+  }, [resetReelFarmState]);
+
   const currentPrefix = selectedProduct && selectedCountry ? buildCountryAutomationPrefix(selectedProduct, selectedCountry) : '';
 
   useEffect(() => {
@@ -137,91 +155,11 @@ export default function DashboardPage() {
     await loadApp();
   }
 
-  async function loadAccounts(product = selectedProduct, country = selectedCountry, force = false, daysOverride = days) {
-    if (!product || !country) return;
-    const prefix = buildCountryAutomationPrefix(product, country);
-    if (!force && reelFarmResults[prefix]) return;
-
-    setReelFarmResults(prev => ({ ...prev, [prefix]: { prefix, count: 0, cards: [], loading: true } }));
-    try {
-      await loadProductTags(product);
-      const payload = await api.accounts(getProductReelFarmCode(product), getCountryReelFarmCode(country), daysOverride);
-      let cards = (payload.data || []).map(accountSummaryToCard);
-      const accountIds = cards.map(getCardAccountId).filter(Boolean);
-      if (accountIds.length) {
-        const tagPayload = await api.accountTags(accountIds);
-        cards = cards.map(card => ({ ...card, tags: tagPayload.tags[getCardAccountId(card)] || [] }));
-      }
-      setReelFarmResults(prev => ({ ...prev, [prefix]: { prefix, count: cards.length, cards } }));
-    } catch (error: any) {
-      setReelFarmResults(prev => ({ ...prev, [prefix]: { prefix, count: 0, cards: [], error: error?.message || '账号数据加载失败' } }));
-    }
-  }
-
-  async function loadProductTags(product = selectedProduct) {
-    if (!product) return [];
-    const productCode = getProductReelFarmCode(product);
-    const payload = await api.productTags(productCode);
-    setProductTags(previous => ({ ...previous, [productCode]: payload.tags || [] }));
-    return payload.tags || [];
-  }
-
-  function getCardAccountId(card: ReelFarmCard) {
-    const account = card.account || {};
-    return String(account.id || account.account_id || '').trim();
-  }
-
   useEffect(() => {
     if (authenticated && tool === 'apiKeys') {
       loadApiKeys().catch(() => {});
     }
   }, [authenticated, tool]);
-
-  useEffect(() => {
-    if (authenticated && selectedProduct) {
-      loadProductTags(selectedProduct).catch(() => {});
-    }
-  }, [authenticated, selectedProductId]);
-
-  async function addCardTag(card: ReelFarmCard, tag: string) {
-    const accountId = getCardAccountId(card);
-    if (!accountId) return;
-    if (!tag?.trim()) return;
-    const product = selectedProduct;
-    if (product) {
-      const productCode = getProductReelFarmCode(product);
-      const productTagPayload = await api.createProductTag(productCode, tag.trim());
-      setProductTags(previous => ({ ...previous, [productCode]: productTagPayload.tags || [] }));
-    }
-    const payload = await api.addAccountTag(accountId, tag.trim());
-    updateCardTags(accountId, previous => Array.from(new Set([...previous, payload.tag])));
-  }
-
-  async function removeCardTag(card: ReelFarmCard, tag: string) {
-    const accountId = getCardAccountId(card);
-    if (!accountId) return;
-    await api.deleteAccountTag(accountId, tag);
-    updateCardTags(accountId, previous => previous.filter(item => item !== tag));
-  }
-
-  function updateCardTags(accountId: string, updater: (tags: string[]) => string[]) {
-    setReelFarmResults(prev => {
-      const next = { ...prev };
-      for (const [prefix, result] of Object.entries(next)) {
-        next[prefix] = {
-          ...result,
-          cards: result.cards.map(card => getCardAccountId(card) === accountId ? { ...card, tags: updater(card.tags || []) } : card)
-        };
-      }
-      return next;
-    });
-  }
-
-  useEffect(() => {
-    if (authenticated && page === 'country') {
-      loadAccounts(selectedProduct, selectedCountry, false);
-    }
-  }, [authenticated, page, selectedProductId, selectedCountryId]);
 
   function selectProduct(product: Product) {
     setSelectedProductId(product.id);
@@ -240,102 +178,7 @@ export default function DashboardPage() {
     setSelectedCountryId(country.id);
     setPage('country');
     loadCountryKpis(selectedProduct, country);
-    setReelFarmResults({});
-    setPostCache({});
-    setPostLoading({});
-    setExpandedCards({});
-    setSlideIndexes({});
-  }
-
-  function changeDays(nextDays: number) {
-    if (![7, 14, 30].includes(nextDays)) return;
-    setDays(nextDays);
-    setReelFarmResults({});
-    setPostCache({});
-    setExpandedCards({});
-    setSlideIndexes({});
-    setTimeout(() => loadAccounts(selectedProduct, selectedCountry, true, nextDays), 0);
-  }
-
-  function findCard(cardKey: string) {
-    for (const result of Object.values(reelFarmResults)) {
-      const card = result.cards.find(item => cardStateKey(item) === cardKey);
-      if (card) return card;
-    }
-    return null;
-  }
-
-  async function loadPosts(cardKey: string, offset = 0) {
-    const product = selectedProduct;
-    const country = selectedCountry;
-    const card = findCard(cardKey);
-    if (!product || !country || !card) return;
-    const account = card.account || {};
-    const accountId = account.id || account.account_id || account.reelfarm_account_id || account.tiktok_account_id || account.username || account.account_username || '';
-    const cacheKey = [getProductReelFarmCode(product), getCountryReelFarmCode(country), accountId, days, offset].join('|');
-    const cached = postCache[cacheKey];
-
-    function updateCard(data: any[], pagination: { limit: number; offset: number; has_more: boolean; total?: number }) {
-      const prefix = buildCountryAutomationPrefix(product, country);
-      setReelFarmResults(prev => {
-        const result = prev[prefix];
-        if (!result) return prev;
-        const cards = result.cards.map(item => {
-          if (cardStateKey(item) !== cardKey) return item;
-          const clone = structuredClone(item);
-          mergePostRowsIntoCard(clone, data);
-          clone.pagination = pagination;
-          return clone;
-        });
-        return { ...prev, [prefix]: { ...result, cards } };
-      });
-    }
-
-    if (cached) {
-      updateCard(cached.data, cached.pagination);
-      return;
-    }
-
-    setPostLoading(prev => ({ ...prev, [cardKey]: true }));
-    try {
-      const payload = await api.accountPosts(getProductReelFarmCode(product), getCountryReelFarmCode(country), String(accountId), days, 4, offset);
-      const pagination = payload.pagination || { limit: 4, offset, has_more: false, total: payload.data?.length || 0 };
-      setPostCache(prev => ({ ...prev, [cacheKey]: { data: payload.data || [], pagination } }));
-      updateCard(payload.data || [], pagination);
-    } catch (error: any) {
-      setReelFarmResults(prev => {
-        const prefix = buildCountryAutomationPrefix(product, country);
-        const result = prev[prefix];
-        if (!result) return prev;
-        const cards = result.cards.map(item => cardStateKey(item) === cardKey ? { ...item, errors: { videos: null, posts: error?.message || 'Posts loading failed.' } } : item);
-        return { ...prev, [prefix]: { ...result, cards } };
-      });
-    } finally {
-      setPostLoading(prev => {
-        const next = { ...prev };
-        delete next[cardKey];
-        return next;
-      });
-    }
-  }
-
-  function toggleCard(cardKey: string) {
-    setExpandedCards(prev => {
-      const next = { ...prev, [cardKey]: !prev[cardKey] };
-      if (next[cardKey]) loadPosts(cardKey, 0);
-      return next;
-    });
-  }
-
-  function pagePosts(cardKey: string, direction: number) {
-    const card = findCard(cardKey);
-    const limit = Number(card?.pagination?.limit) || 4;
-    const offset = Number(card?.pagination?.offset) || 0;
-    loadPosts(cardKey, Math.max(0, offset + direction * limit));
-  }
-
-  function moveSlide(videoId: string, direction: number, total: number) {
-    setSlideIndexes(prev => ({ ...prev, [videoId]: ((prev[videoId] || 0) + direction + total) % total }));
+    resetReelFarmState();
   }
 
   function applySyncResult(productId: string, countryId: string, payload: { creator_count?: number; material_count?: number; synced_at?: string }) {
@@ -377,8 +220,7 @@ export default function DashboardPage() {
         country_code: getCountryReelFarmCode(selectedCountry)
       });
       applySyncResult(selectedProduct.id, selectedCountry.id, payload);
-      setPostCache({});
-      setExpandedCards({});
+      resetReelFarmState({ includeResults: false });
       await loadAccounts(selectedProduct, selectedCountry, true);
       await loadProductKpis(selectedProduct);
       await loadCountryKpis(selectedProduct, selectedCountry);
@@ -396,9 +238,7 @@ export default function DashboardPage() {
     const countries = product.countries || [];
     if (!countries.length || syncProductId) return;
     setSyncProductId(product.id);
-    setPostCache({});
-    setExpandedCards({});
-    setReelFarmResults({});
+    resetReelFarmState();
     let failed = 0;
     try {
       for (let index = 0; index < countries.length; index += 1) {
@@ -474,9 +314,7 @@ export default function DashboardPage() {
     const jobs = products.flatMap(product => (product.countries || []).map(country => ({ product, country })));
     if (!jobs.length) return;
     setSyncAllRunning(true);
-    setPostCache({});
-    setExpandedCards({});
-    setReelFarmResults({});
+    resetReelFarmState();
     let failed = 0;
     try {
       for (let index = 0; index < jobs.length; index += 1) {
