@@ -39,11 +39,14 @@ from server_modules.time_windows import (
     utc_date_string,
 )
 from server_modules.metrics_service import (
+    build_daily_report_product_item,
     business_report_windows_with_onboarding,
     daily_metric_windows,
     evaluate_sync_readiness,
     normalize_business_report_row,
+    normalize_reelfarm_account_row,
     summarize_business_report_rows,
+    summarize_daily_report_products,
 )
 
 
@@ -5528,7 +5531,7 @@ def query_reelfarm_accounts(query):
             """,
             tuple(metric_params * metric_condition_count + params),
         ).fetchall()
-    return [row_dict(row) for row in rows]
+    return [normalize_reelfarm_account_row(row_dict(row)) for row in rows]
 
 
 def query_accounts(query):
@@ -5791,21 +5794,6 @@ def daily_feishu_report_payload(report_date=""):
 
     names = configured_product_name_map()
     products = []
-    totals = {
-        "reelfarm_views": 0,
-        "clone_views": 0,
-        "total_views": 0,
-        "downloads": 0,
-        "total_materials": 0,
-        "expected_total_materials": 0,
-        "total_posts": 0,
-        "reelfarm_posts": 0,
-        "clone_posts": 0,
-        "reelfarm_published_automations": 0,
-        "reelfarm_expected_automations": 0,
-        "missing_account_count": 0,
-        "zero_play_account_count": 0,
-    }
     errors = []
     windows_for_day = daily_metric_windows(report_date)
     window = windows_for_day["content"]
@@ -5820,54 +5808,21 @@ def daily_feishu_report_payload(report_date=""):
                 "mode": ["published_materials"],
             })
             row = (payload.get("rows") or [{}])[0]
-            downloads = row.get("downloads")
             account_alerts = daily_reelfarm_account_alerts(product_code, window["utc_start"], window["utc_end"])
-            item = {
-                "product_code": product_code,
-                "product_name": names.get(product_code, product_code),
-                "report_date": report_date,
-                "reelfarm_views": int(row.get("reelfarm_views") or 0),
-                "clone_views": int(row.get("clone_views") or 0),
-                "total_views": int(row.get("total_views") or 0),
-                "downloads": int(downloads or 0) if downloads is not None else None,
-                "download_rate": row.get("download_rate"),
-                "total_materials": int(row.get("total_materials") or 0),
-                "expected_total_materials": int(row.get("expected_total_materials") or row.get("total_materials") or 0),
-                "total_posts": int(row.get("total_posts") or 0),
-                "reelfarm_posts": int(row.get("reelfarm_posts") or 0),
-                "clone_posts": int(row.get("clone_posts") or 0),
-                "reelfarm_avg_views": row.get("reelfarm_avg_views"),
-                "clone_avg_views": row.get("clone_avg_views"),
-                "reelfarm_published_automations": int(row.get("reelfarm_published_automations") or 0),
-                "reelfarm_expected_automations": int(row.get("reelfarm_expected_automations") or 0),
-                "countries": product_reelfarm_country_avg_views(product_code, window["utc_start"], window["utc_end"]),
-                "account_alerts": account_alerts,
-                "mixpanel": payload.get("mixpanel") or {},
-            }
+            item = build_daily_report_product_item(
+                product_code,
+                names.get(product_code, product_code),
+                report_date,
+                row,
+                product_reelfarm_country_avg_views(product_code, window["utc_start"], window["utc_end"]),
+                account_alerts,
+                payload.get("mixpanel") or {},
+            )
             products.append(item)
-            for key in (
-                "reelfarm_views",
-                "clone_views",
-                "total_views",
-                "total_materials",
-                "expected_total_materials",
-                "total_posts",
-                "reelfarm_posts",
-                "clone_posts",
-                "reelfarm_published_automations",
-                "reelfarm_expected_automations",
-            ):
-                totals[key] += int(item.get(key) or 0)
-            if item["downloads"] is not None:
-                totals["downloads"] += int(item["downloads"] or 0)
-            totals["missing_account_count"] += int(account_alerts.get("missing_account_count") or 0)
-            totals["zero_play_account_count"] += int(account_alerts.get("zero_play_account_count") or 0)
         except (RuntimeError, ValueError) as error:
             errors.append({"product_code": product_code, "error": str(error)})
 
-    totals["download_rate"] = (totals["downloads"] / totals["total_views"] * 100) if totals["total_views"] else None
-    totals["reelfarm_avg_views"] = (totals["reelfarm_views"] / totals["reelfarm_posts"]) if totals["reelfarm_posts"] else None
-    totals["clone_avg_views"] = (totals["clone_views"] / totals["clone_posts"]) if totals["clone_posts"] else None
+    totals = summarize_daily_report_products(products)
     sync_status = sync_status_payload()
     sync_ready = sync_readiness_payload(
         sync_status,

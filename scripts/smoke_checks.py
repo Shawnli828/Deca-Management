@@ -21,10 +21,13 @@ from server_modules.time_windows import (  # noqa: E402
     previous_complete_windows,
 )
 from server_modules.metrics_service import (  # noqa: E402
+    build_daily_report_product_item,
     daily_metric_windows,
     evaluate_sync_readiness,
     normalize_business_report_row,
+    normalize_reelfarm_account_row,
     summarize_business_report_rows,
+    summarize_daily_report_products,
 )
 
 
@@ -72,6 +75,29 @@ def main():
     shared_totals = summarize_business_report_rows([shared_row])
     assert_equal(shared_totals["total_views"], 360, "shared metrics total views")
     assert_equal(shared_totals["download_rate"], 5.0, "shared metrics totals download rate")
+
+    account_row = normalize_reelfarm_account_row({
+        "post_count": "4",
+        "total_views": "1000",
+        "posted_account_count": "1",
+        "expected_account_count": "1",
+    })
+    assert_equal(account_row["avg_views"], 250.0, "rf account avg views")
+    assert_equal(account_row["post_count"], 4, "rf account post count normalization")
+
+    product_item = build_daily_report_product_item(
+        "DB",
+        "DeenBack",
+        "2026-06-13",
+        shared_row,
+        [{"country_code": "GE"}],
+        {"missing_account_count": 2, "zero_play_account_count": 1},
+        {"event": "Onboarding Step Viewed"},
+    )
+    product_totals = summarize_daily_report_products([product_item])
+    assert_equal(product_totals["reelfarm_views"], 300, "daily report product total rf views")
+    assert_equal(product_totals["missing_account_count"], 2, "daily report product missing total")
+    assert_equal(product_totals["download_rate"], 5.0, "daily report product download rate")
 
     before_material_cutoff = parse_iso_datetime("2026-06-13T15:58:59+00:00")
     at_material_cutoff = parse_iso_datetime("2026-06-13T15:59:00+00:00")

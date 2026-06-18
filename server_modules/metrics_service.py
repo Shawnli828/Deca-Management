@@ -139,6 +139,121 @@ def summarize_business_report_rows(rows):
     }
 
 
+def normalize_reelfarm_account_row(row):
+    data = dict(row or {})
+    int_fields = (
+        "automation_count",
+        "material_count",
+        "post_count",
+        "posted_account_count",
+        "expected_account_count",
+        "total_views",
+        "total_likes",
+        "total_comments",
+        "total_shares",
+        "total_bookmarks",
+    )
+    for field in int_fields:
+        data[field] = safe_int(data.get(field))
+    data["avg_views"] = (
+        data["total_views"] / data["post_count"]
+        if data["post_count"]
+        else None
+    )
+    return data
+
+
+def build_daily_report_product_item(
+    product_code,
+    product_name,
+    report_date,
+    row,
+    countries=None,
+    account_alerts=None,
+    mixpanel=None,
+):
+    row = row or {}
+    downloads = row.get("downloads")
+    return {
+        "product_code": product_code,
+        "product_name": product_name,
+        "report_date": report_date,
+        "reelfarm_views": safe_int(row.get("reelfarm_views")),
+        "clone_views": safe_int(row.get("clone_views")),
+        "total_views": safe_int(row.get("total_views")),
+        "downloads": safe_int(downloads) if downloads is not None else None,
+        "download_rate": row.get("download_rate"),
+        "total_materials": safe_int(row.get("total_materials")),
+        "expected_total_materials": safe_int(
+            row.get("expected_total_materials") or row.get("total_materials")
+        ),
+        "total_posts": safe_int(row.get("total_posts")),
+        "reelfarm_posts": safe_int(row.get("reelfarm_posts")),
+        "clone_posts": safe_int(row.get("clone_posts")),
+        "reelfarm_avg_views": row.get("reelfarm_avg_views"),
+        "clone_avg_views": row.get("clone_avg_views"),
+        "reelfarm_published_automations": safe_int(row.get("reelfarm_published_automations")),
+        "reelfarm_expected_automations": safe_int(row.get("reelfarm_expected_automations")),
+        "countries": countries or [],
+        "account_alerts": account_alerts or {},
+        "mixpanel": mixpanel or {},
+    }
+
+
+def summarize_daily_report_products(products):
+    totals = {
+        "reelfarm_views": 0,
+        "clone_views": 0,
+        "total_views": 0,
+        "downloads": 0,
+        "total_materials": 0,
+        "expected_total_materials": 0,
+        "total_posts": 0,
+        "reelfarm_posts": 0,
+        "clone_posts": 0,
+        "reelfarm_published_automations": 0,
+        "reelfarm_expected_automations": 0,
+        "missing_account_count": 0,
+        "zero_play_account_count": 0,
+    }
+    for item in products or []:
+        for key in (
+            "reelfarm_views",
+            "clone_views",
+            "total_views",
+            "total_materials",
+            "expected_total_materials",
+            "total_posts",
+            "reelfarm_posts",
+            "clone_posts",
+            "reelfarm_published_automations",
+            "reelfarm_expected_automations",
+        ):
+            totals[key] += safe_int(item.get(key))
+        if item.get("downloads") is not None:
+            totals["downloads"] += safe_int(item.get("downloads"))
+        alerts = item.get("account_alerts") or {}
+        totals["missing_account_count"] += safe_int(alerts.get("missing_account_count"))
+        totals["zero_play_account_count"] += safe_int(alerts.get("zero_play_account_count"))
+
+    totals["download_rate"] = (
+        totals["downloads"] / totals["total_views"] * 100
+        if totals["total_views"]
+        else None
+    )
+    totals["reelfarm_avg_views"] = (
+        totals["reelfarm_views"] / totals["reelfarm_posts"]
+        if totals["reelfarm_posts"]
+        else None
+    )
+    totals["clone_avg_views"] = (
+        totals["clone_views"] / totals["clone_posts"]
+        if totals["clone_posts"]
+        else None
+    )
+    return totals
+
+
 def evaluate_sync_readiness(sync_status, required_sources=None, min_finished_at=None):
     required_sources = list(required_sources or ("reelfarm", "museon_clone", "growth_mixpanel"))
     sources = (sync_status or {}).get("sources") if isinstance(sync_status, dict) else {}
