@@ -11,7 +11,6 @@ import ssl
 import sqlite3
 import socket
 import time
-import uuid
 import webbrowser
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
@@ -77,6 +76,18 @@ from server_modules.museon_utils import (
     normalize_image_entries,
 )
 from server_modules.mixpanel_utils import mixpanel_segmentation_unique_from_payload
+from server_modules.common import (
+    code_from_name,
+    db_json,
+    generate_id,
+    int_or_none,
+    normalize_username,
+    parse_json_list,
+    readable_utc_datetime,
+    slug_part,
+    stable_id,
+    utc_snapshot_date,
+)
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -174,39 +185,6 @@ def make_ssl_context():
     return ssl.create_default_context()
 
 
-def generate_id():
-    return uuid.uuid4().hex[:9]
-
-
-def stable_id(namespace, *parts):
-    value = "|".join(str(part or "").strip() for part in parts)
-    return uuid.uuid5(uuid.NAMESPACE_URL, f"deca-growth:{namespace}:{value}").hex
-
-
-def slug_part(value):
-    cleaned = re.sub(r"[^a-zA-Z0-9]+", " ", str(value or "")).strip()
-    if not cleaned:
-        return "Item"
-    return "".join(part[:1].upper() + part[1:] for part in cleaned.split())
-
-
-def code_from_name(value):
-    cleaned = re.sub(r"[^a-zA-Z0-9 ]+", " ", str(value or "")).strip()
-    if not cleaned:
-        return "APP"
-
-    alias = re.sub(r"\s+", "", cleaned).lower()
-    if alias in {"delust", "dl"}:
-        return "DL"
-
-    compact = re.sub(r"\s+", "", cleaned)
-    if len(compact) <= 4:
-        return compact.upper()
-
-    initials = "".join(part[:1] for part in cleaned.split())
-    return (initials or compact[:4]).upper()
-
-
 def build_automation_prefix(product, country, concept):
     country_code = (
         country.get("reelFarmCode")
@@ -267,10 +245,6 @@ def prefixes_equivalent(left, right):
     left_values = {candidate.upper() for candidate in automation_prefix_candidates(left)}
     right_value = str(right or "").strip().upper()
     return bool(right_value and right_value in left_values)
-
-
-def normalize_username(value):
-    return re.sub(r"[^a-z0-9_.]+", "", str(value or "").strip().lower().lstrip("@"))
 
 
 def default_data():
@@ -855,19 +829,6 @@ def strip_reelfarm_state(value):
     return clean
 
 
-def db_json(value):
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
-
-
-def int_or_none(value):
-    try:
-        if value is None or value == "":
-            return None
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
 def data_source_channel_code(source):
     return "MUSEON_CLONE" if str(source or "").strip().lower() in {"museon_clone", "clone", "museon"} else "TIKTOK"
 
@@ -984,12 +945,6 @@ def parse_concept_format_from_automation(title, country_code, product_code):
         return "", ""
 
     return parts[0], "-".join(parts[1:])
-
-
-def utc_snapshot_date(value=None):
-    if isinstance(value, datetime):
-        return value.astimezone(timezone.utc).date().isoformat()
-    return datetime.now(timezone.utc).date().isoformat()
 
 
 def reelfarm_dashboard_automation_condition(alias="a"):
@@ -1475,16 +1430,6 @@ def project_synced_country_to_relational(product, country):
     )
 
 
-def parse_json_list(value):
-    if isinstance(value, list):
-        return value
-    try:
-        parsed = json.loads(value or "[]")
-    except (TypeError, json.JSONDecodeError):
-        return []
-    return parsed if isinstance(parsed, list) else []
-
-
 def stored_reelfarm_country(product_code, market_code):
     product_code = str(product_code or "").strip().upper()
     market_code = str(market_code or "").strip().upper()
@@ -1953,21 +1898,6 @@ def compact_video(video):
         "hook": hook_match.group(1) if hook_match else "",
         "prompt": prompt,
     }
-
-
-def readable_utc_datetime(value):
-    raw_value = str(value or "").strip()
-    if not raw_value:
-        return ""
-
-    try:
-        parsed = datetime.fromisoformat(raw_value.replace("Z", "+00:00"))
-    except ValueError:
-        return raw_value
-
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc).strftime("%Y/%m/%d %H:%M UTC")
 
 
 def collect_zero_play_issue_candidate(candidates, account_id, published_at, view_count, sync_date):
