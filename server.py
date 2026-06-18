@@ -6,7 +6,6 @@ import hmac
 import mimetypes
 import os
 import re
-import secrets
 import ssl
 import sqlite3
 import socket
@@ -76,6 +75,22 @@ from server_modules.museon_utils import (
     normalize_image_entries,
 )
 from server_modules.mixpanel_utils import mixpanel_segmentation_unique_from_payload
+from server_modules.api_keys import (
+    create_external_api_key_record,
+    external_api_key_authorized as external_api_key_record_authorized,
+    list_public_external_api_keys,
+    parse_external_api_keys,
+    public_external_api_key,
+    revoke_external_api_key_record,
+    serialize_external_api_keys,
+)
+from server_modules.auth_utils import (
+    cookie_header,
+    cron_authorized as cron_secret_authorized,
+    make_auth_token as make_signed_auth_token,
+    password_hash,
+    valid_auth_token as signed_auth_token_valid,
+)
 from server_modules.common import (
     code_from_name,
     db_json,
@@ -1683,52 +1698,16 @@ def enrich_data_with_relational_rollups(data):
     return enriched
 
 
-def hash_api_key(value):
-    return hashlib.sha256(str(value or "").encode("utf-8")).hexdigest()
-
-
 def load_external_api_keys():
-    value = load_app_value(EXTERNAL_API_KEYS_KEY)
-    if not value:
-        return []
-
-    try:
-        keys = json.loads(value)
-    except json.JSONDecodeError:
-        return []
-
-    return keys if isinstance(keys, list) else []
+    return parse_external_api_keys(load_app_value(EXTERNAL_API_KEYS_KEY))
 
 
 def save_external_api_keys(keys):
-    save_app_value(EXTERNAL_API_KEYS_KEY, keys if isinstance(keys, list) else [])
-
-
-def public_external_api_key(key_record):
-    return {
-        "id": key_record.get("id"),
-        "name": key_record.get("name"),
-        "prefix": key_record.get("prefix"),
-        "permissions": key_record.get("permissions", []),
-        "active": bool(key_record.get("active")),
-        "created_at": key_record.get("created_at"),
-        "revoked_at": key_record.get("revoked_at"),
-    }
+    save_app_value(EXTERNAL_API_KEYS_KEY, serialize_external_api_keys(keys))
 
 
 def create_external_api_key(name, permissions=None):
-    now = datetime.now(timezone.utc).isoformat()
-    raw_key = f"deca_{secrets.token_urlsafe(32)}"
-    key_record = {
-        "id": generate_id(),
-        "name": (name or "External AI").strip() or "External AI",
-        "prefix": raw_key[:14],
-        "key_hash": hash_api_key(raw_key),
-        "permissions": permissions or ["materials:read"],
-        "active": True,
-        "created_at": now,
-        "revoked_at": None,
-    }
+    raw_key, key_record = create_external_api_key_record(name, permissions, generate_id)
     keys = load_external_api_keys()
     keys.append(key_record)
     save_external_api_keys(keys)
@@ -1737,42 +1716,17 @@ def create_external_api_key(name, permissions=None):
 
 def revoke_external_api_key(key_id):
     keys = load_external_api_keys()
-    now = datetime.now(timezone.utc).isoformat()
-    updated_record = None
-    for key_record in keys:
-        if str(key_record.get("id")) == str(key_id):
-            key_record["active"] = False
-            key_record["revoked_at"] = now
-            updated_record = key_record
-            break
-
-    if updated_record is None:
-        raise ValueError("API key not found.")
-
+    updated_record = revoke_external_api_key_record(keys, key_id)
     save_external_api_keys(keys)
     return public_external_api_key(updated_record)
 
 
 def list_external_api_keys():
-    return [public_external_api_key(key_record) for key_record in load_external_api_keys()]
+    return list_public_external_api_keys(load_external_api_keys())
 
 
 def external_api_key_authorized(token, permission):
-    if not token:
-        return False
-    if AI_API_KEY and hmac.compare_digest(token, AI_API_KEY):
-        return True
-
-    token_hash = hash_api_key(token)
-    for key_record in load_external_api_keys():
-        if not key_record.get("active"):
-            continue
-        if permission not in (key_record.get("permissions") or []):
-            continue
-        if hmac.compare_digest(str(key_record.get("key_hash", "")), token_hash):
-            return True
-
-    return False
+    return external_api_key_record_authorized(token, permission, AI_API_KEY, load_external_api_keys())
 
 
 def reelfarm_api_key():
@@ -2460,51 +2414,15 @@ def sync_reelfarm_prefix(prefix, product_id="", country_id="", concept_id="", pr
 
 
 def cron_authorized(headers):
-    secret = os.environ.get("CRON_SECRET", "").strip()
-    if not secret:
-        return True
-    return headers.get("Authorization", "") == f"Bearer {secret}"
-
-
-def password_hash(value):
-    return hashlib.sha256(str(value or "").encode("utf-8")).hexdigest()
-
-
-def auth_signature(username, expires_at):
-    payload = f"{username}|{expires_at}"
-    return hmac.new(SESSION_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    return cron_secret_authorized(headers, os.environ.get("CRON_SECRET", "").strip())
 
 
 def make_auth_token(username):
-    expires_at = int(time.time()) + SESSION_TTL_SECONDS
-    signature = auth_signature(username, expires_at)
-    return f"{username}|{expires_at}|{signature}"
+    return make_signed_auth_token(username, SESSION_SECRET, SESSION_TTL_SECONDS)
 
 
 def valid_auth_token(token):
-    try:
-        username, expires_at_text, signature = str(token or "").split("|", 2)
-        expires_at = int(expires_at_text)
-    except (TypeError, ValueError):
-        return False
-
-    if username != ADMIN_USERNAME or expires_at < int(time.time()):
-        return False
-
-    expected = auth_signature(username, expires_at)
-    return hmac.compare_digest(signature, expected)
-
-
-def cookie_header(name, value, max_age=None):
-    parts = [
-        f"{name}={value}",
-        "Path=/",
-        "HttpOnly",
-        "SameSite=Lax",
-    ]
-    if max_age is not None:
-        parts.append(f"Max-Age={int(max_age)}")
-    return "; ".join(parts)
+    return signed_auth_token_valid(token, ADMIN_USERNAME, SESSION_SECRET)
 
 
 def database_snapshot():
