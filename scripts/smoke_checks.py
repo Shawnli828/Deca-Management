@@ -9,9 +9,8 @@ if str(ROOT) not in sys.path:
 
 from server import (  # noqa: E402
     ZERO_PLAY_VIEW_THRESHOLD,
-    daily_feishu_report_text,
-    format_sync_readiness_line,
 )
+from server_modules.daily_report import daily_feishu_report_text  # noqa: E402
 from server_modules.time_windows import (  # noqa: E402
     business_material_date_for_utc_datetime,
     business_material_day_window,
@@ -29,7 +28,7 @@ from server_modules.metrics_service import (  # noqa: E402
     summarize_business_report_rows,
     summarize_daily_report_products,
 )
-from server_modules.sync_status import sync_status_from_runs  # noqa: E402
+from server_modules.sync_status import format_sync_readiness_line, sync_status_from_runs  # noqa: E402
 
 
 def assert_equal(actual, expected, label):
