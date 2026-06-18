@@ -29,6 +29,7 @@ from server_modules.metrics_service import (  # noqa: E402
     summarize_business_report_rows,
     summarize_daily_report_products,
 )
+from server_modules.sync_status import sync_status_from_runs  # noqa: E402
 
 
 def assert_equal(actual, expected, label):
@@ -98,6 +99,19 @@ def main():
     assert_equal(product_totals["reelfarm_views"], 300, "daily report product total rf views")
     assert_equal(product_totals["missing_account_count"], 2, "daily report product missing total")
     assert_equal(product_totals["download_rate"], 5.0, "daily report product download rate")
+
+    sync_status = sync_status_from_runs({
+        "reelfarm": {
+            "status": "success",
+            "started_at": "2026-06-14T00:00:00+00:00",
+            "finished_at": "2026-06-14T00:30:00+00:00",
+            "duration_seconds": 1800,
+            "records_count": 12,
+            "error": "",
+        }
+    })
+    assert_equal(sync_status["sources"]["reelfarm"]["label"], "RF", "sync status label")
+    assert_equal(sync_status["sources"]["reelfarm"]["records_count"], 12, "sync status record count")
 
     before_material_cutoff = parse_iso_datetime("2026-06-13T15:58:59+00:00")
     at_material_cutoff = parse_iso_datetime("2026-06-13T15:59:00+00:00")
