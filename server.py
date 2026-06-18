@@ -38,6 +38,12 @@ from server_modules.time_windows import (
     source_dates_for_utc_window,
     utc_date_string,
 )
+from server_modules.metrics_service import (
+    business_report_windows_with_onboarding,
+    daily_metric_windows,
+    normalize_business_report_row,
+    summarize_business_report_rows,
+)
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -337,6 +343,113 @@ def ensure_column(conn, table, column, definition):
             raise
 
 
+def schema_migration_applied(conn, version):
+    placeholder = db_placeholder()
+    row = conn.execute(
+        f"SELECT version FROM schema_migrations WHERE version = {placeholder} LIMIT 1",
+        (version,),
+    ).fetchone()
+    return bool(row)
+
+
+def mark_schema_migration(conn, version):
+    now = datetime.now(timezone.utc).isoformat()
+    if using_postgres():
+        conn.execute(
+            """
+            INSERT INTO schema_migrations (version, applied_at)
+            VALUES (%s, %s)
+            ON CONFLICT(version) DO UPDATE SET applied_at = EXCLUDED.applied_at
+            """,
+            (version, now),
+        )
+        return
+    conn.execute(
+        "INSERT OR REPLACE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+        (version, now),
+    )
+
+
+def apply_neutral_source_fields_migration(conn):
+    ensure_column(conn, "accounts", "source", "TEXT")
+    ensure_column(conn, "accounts", "source_account_id", "TEXT")
+    ensure_column(conn, "automations", "source", "TEXT")
+    ensure_column(conn, "automations", "source_automation_id", "TEXT")
+    ensure_column(conn, "materials", "source", "TEXT")
+    ensure_column(conn, "materials", "source_material_id", "TEXT")
+    ensure_column(conn, "posts", "source", "TEXT")
+    ensure_column(conn, "posts", "source_post_id", "TEXT")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_accounts_source_account_id ON accounts(source, source_account_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_automations_source_automation_id ON automations(source, source_automation_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_materials_source_material_id ON materials(source, source_material_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_posts_source_post_id ON posts(source, source_post_id)")
+    conn.execute(
+        "UPDATE accounts SET source = 'museon_clone' WHERE source IS NULL AND reelfarm_account_id LIKE 'museon:%'"
+    )
+    conn.execute(
+        "UPDATE accounts SET source = 'reelfarm' WHERE source IS NULL AND reelfarm_account_id IS NOT NULL"
+    )
+    conn.execute(
+        "UPDATE accounts SET source_account_id = reelfarm_account_id WHERE source_account_id IS NULL AND reelfarm_account_id IS NOT NULL"
+    )
+    conn.execute(
+        "UPDATE automations SET source = 'museon_clone' WHERE source IS NULL AND reelfarm_automation_id LIKE 'museon:%'"
+    )
+    conn.execute(
+        "UPDATE automations SET source = 'reelfarm' WHERE source IS NULL AND reelfarm_automation_id IS NOT NULL"
+    )
+    conn.execute(
+        "UPDATE automations SET source_automation_id = reelfarm_automation_id WHERE source_automation_id IS NULL AND reelfarm_automation_id IS NOT NULL"
+    )
+    conn.execute(
+        "UPDATE materials SET source = 'museon_clone' WHERE source IS NULL AND reelfarm_video_id LIKE 'museon:%'"
+    )
+    conn.execute(
+        "UPDATE materials SET source = 'reelfarm' WHERE source IS NULL AND reelfarm_video_id IS NOT NULL"
+    )
+    conn.execute(
+        "UPDATE materials SET source_material_id = reelfarm_video_id WHERE source_material_id IS NULL AND reelfarm_video_id IS NOT NULL"
+    )
+    conn.execute(
+        "UPDATE posts SET source = 'museon_clone' WHERE source IS NULL AND reelfarm_post_id LIKE 'museon:%'"
+    )
+    conn.execute(
+        "UPDATE posts SET source = 'reelfarm' WHERE source IS NULL AND reelfarm_post_id IS NOT NULL"
+    )
+    conn.execute(
+        "UPDATE posts SET source_post_id = reelfarm_post_id WHERE source_post_id IS NULL AND reelfarm_post_id IS NOT NULL"
+    )
+
+
+def correct_museon_source_fields_migration(conn):
+    conn.execute(
+        "UPDATE accounts SET source = 'museon_clone' WHERE reelfarm_account_id LIKE 'museon:%'"
+    )
+    conn.execute(
+        "UPDATE automations SET source = 'museon_clone' WHERE reelfarm_automation_id LIKE 'museon:%'"
+    )
+    conn.execute(
+        "UPDATE materials SET source = 'museon_clone' WHERE reelfarm_video_id LIKE 'museon:%'"
+    )
+    conn.execute(
+        "UPDATE posts SET source = 'museon_clone' WHERE reelfarm_post_id LIKE 'museon:%'"
+    )
+
+
+SCHEMA_MIGRATIONS = (
+    ("2026_06_18_neutral_source_fields", apply_neutral_source_fields_migration),
+    ("2026_06_18_correct_museon_source_fields", correct_museon_source_fields_migration),
+)
+
+
+def run_schema_migrations(conn):
+    for version, handler in SCHEMA_MIGRATIONS:
+        if schema_migration_applied(conn, version):
+            continue
+        handler(conn)
+        mark_schema_migration(conn, version)
+
+
 def init_relational_schema(conn):
     statements = [
         """
@@ -530,6 +643,27 @@ def init_relational_schema(conn):
             UNIQUE(product_code, report_date)
         )
         """,
+        """
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            version TEXT PRIMARY KEY,
+            applied_at TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS sync_runs (
+            id TEXT PRIMARY KEY,
+            source TEXT NOT NULL,
+            product_code TEXT,
+            country_code TEXT,
+            status TEXT NOT NULL,
+            started_at TEXT NOT NULL,
+            finished_at TEXT,
+            duration_seconds REAL,
+            records_count INTEGER,
+            error TEXT,
+            meta_json TEXT
+        )
+        """,
         "CREATE INDEX IF NOT EXISTS idx_post_daily_snapshots_snapshot_date ON post_daily_snapshots(snapshot_date)",
         "CREATE INDEX IF NOT EXISTS idx_post_daily_snapshots_post_id ON post_daily_snapshots(post_id)",
         "CREATE INDEX IF NOT EXISTS idx_account_tags_account_id ON account_tags(account_id)",
@@ -543,6 +677,8 @@ def init_relational_schema(conn):
         "CREATE INDEX IF NOT EXISTS idx_automations_product_market_channel_id ON automations(product_market_channel_id)",
         "CREATE INDEX IF NOT EXISTS idx_product_daily_growth_snapshots_product_date ON product_daily_growth_snapshots(product_code, report_date)",
         "CREATE INDEX IF NOT EXISTS idx_product_daily_growth_snapshots_report_date ON product_daily_growth_snapshots(report_date)",
+        "CREATE INDEX IF NOT EXISTS idx_sync_runs_source_finished_at ON sync_runs(source, finished_at)",
+        "CREATE INDEX IF NOT EXISTS idx_sync_runs_product_source_finished_at ON sync_runs(product_code, source, finished_at)",
     ]
     for statement in statements:
         conn.execute(statement)
@@ -555,6 +691,7 @@ def init_relational_schema(conn):
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_automations_pmc_sync_status ON automations(product_market_channel_id, sync_status)"
     )
+    run_schema_migrations(conn)
 
 
 def init_db():
@@ -814,6 +951,151 @@ def upsert_row(conn, table, values, conflict_cols, update_cols=None):
         """,
         tuple(values[column] for column in columns),
     )
+
+
+SYNC_RUN_SOURCE_LABELS = {
+    "reelfarm": "RF",
+    "museon_clone": "Clone",
+    "growth_mixpanel": "Mixpanel",
+    "daily_all": "全部同步",
+}
+
+
+def sync_run_records_count(payload):
+    if not isinstance(payload, dict):
+        return 0
+    for key in ("synced_count", "count", "material_count", "post_count"):
+        try:
+            value = int(payload.get(key) or 0)
+        except (TypeError, ValueError):
+            value = 0
+        if value:
+            return value
+    records = payload.get("records")
+    if isinstance(records, list):
+        return len(records)
+    stages = payload.get("stages")
+    if isinstance(stages, dict):
+        return sum(sync_run_records_count(stage) for stage in stages.values())
+    return 0
+
+
+def compact_sync_run_meta(payload):
+    if not isinstance(payload, dict):
+        return {}
+    compact = {}
+    for key in (
+        "ok",
+        "synced_count",
+        "error_count",
+        "duration_total_seconds",
+        "product_cleanups",
+    ):
+        if key in payload:
+            compact[key] = payload.get(key)
+    errors = payload.get("errors")
+    if isinstance(errors, list):
+        compact["errors_preview"] = errors[:5]
+    records = payload.get("records")
+    if isinstance(records, list):
+        compact["records_preview"] = records[:8]
+        compact["records_count"] = len(records)
+    return compact
+
+
+def record_sync_run(source, status, started_at, finished_at=None, duration_seconds=None, product_code="", country_code="", records_count=0, error="", meta=None):
+    source = str(source or "").strip()
+    if not source:
+        return None
+    started_at = str(started_at or datetime.now(timezone.utc).isoformat())
+    finished_at = str(finished_at or datetime.now(timezone.utc).isoformat())
+    try:
+        records_count = int(records_count or 0)
+    except (TypeError, ValueError):
+        records_count = 0
+    values = {
+        "id": stable_id("sync_run", source, product_code or "", country_code or "", started_at),
+        "source": source,
+        "product_code": str(product_code or "").strip().upper() or None,
+        "country_code": str(country_code or "").strip().upper() or None,
+        "status": str(status or "unknown"),
+        "started_at": started_at,
+        "finished_at": finished_at,
+        "duration_seconds": duration_seconds,
+        "records_count": records_count,
+        "error": str(error or "")[:1000],
+        "meta_json": json.dumps(meta or {}, ensure_ascii=False),
+    }
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        upsert_row(conn, "sync_runs", values, ["id"])
+        conn.commit()
+    return values
+
+
+def safe_record_sync_run(*args, **kwargs):
+    try:
+        return record_sync_run(*args, **kwargs)
+    except Exception as error:
+        return {"error": str(error)}
+
+
+def latest_sync_runs(sources=None):
+    sources = list(sources or SYNC_RUN_SOURCE_LABELS.keys())
+    if not sources:
+        return {}
+    placeholder = db_placeholder()
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        result = {}
+        for source in sources:
+            row = conn.execute(
+                f"""
+                SELECT *
+                FROM sync_runs
+                WHERE source = {placeholder}
+                ORDER BY COALESCE(finished_at, started_at) DESC
+                LIMIT 1
+                """,
+                (source,),
+            ).fetchone()
+            result[source] = row_dict(row) if row else None
+        return result
+
+
+def sync_status_payload():
+    runs = latest_sync_runs()
+    return {
+        "sources": {
+            source: {
+                "label": SYNC_RUN_SOURCE_LABELS.get(source, source),
+                "status": (run or {}).get("status"),
+                "started_at": (run or {}).get("started_at"),
+                "finished_at": (run or {}).get("finished_at"),
+                "duration_seconds": (run or {}).get("duration_seconds"),
+                "records_count": (run or {}).get("records_count"),
+                "error": (run or {}).get("error"),
+            }
+            for source, run in runs.items()
+        },
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def format_sync_status_line(sync_status):
+    if not isinstance(sync_status, dict):
+        return "数据同步：暂无同步记录"
+    parts = []
+    for source in ("reelfarm", "museon_clone", "growth_mixpanel"):
+        item = (sync_status.get("sources") or {}).get(source) or {}
+        label = item.get("label") or SYNC_RUN_SOURCE_LABELS.get(source, source)
+        finished_at = item.get("finished_at")
+        status = item.get("status") or "unknown"
+        if finished_at:
+            parts.append(f"{label} {finished_at} ({status})")
+        else:
+            parts.append(f"{label} 暂无记录")
+    return "数据同步：" + "；".join(parts)
 
 
 def parse_concept_format_from_automation(title, country_code, product_code):
@@ -1134,6 +1416,8 @@ def project_products_to_relational(data=None, product_code_filter="", market_cod
                         {
                             "id": account_id,
                             "product_market_channel_id": product_market_channel_id,
+                            "source": "reelfarm",
+                            "source_account_id": reelfarm_account_id,
                             "reelfarm_account_id": reelfarm_account_id,
                             "username": account.get("account_username") or account.get("account_name") or "",
                             "display_name": account.get("account_name") or "",
@@ -1149,6 +1433,8 @@ def project_products_to_relational(data=None, product_code_filter="", market_cod
                             "id": automation_id,
                             "product_market_channel_id": product_market_channel_id,
                             "account_id": account_id,
+                            "source": "reelfarm",
+                            "source_automation_id": automation_reelfarm_id,
                             "reelfarm_automation_id": automation_reelfarm_id,
                             "name": automation_title,
                             "status": automation.get("status") or "",
@@ -1211,6 +1497,8 @@ def project_products_to_relational(data=None, product_code_filter="", market_cod
                                 "account_id": account_id,
                                 "concept_id": concept_id,
                                 "format_id": format_id,
+                                "source": "reelfarm",
+                                "source_material_id": reelfarm_video_id,
                                 "reelfarm_video_id": reelfarm_video_id,
                                 "video_type": video.get("video_type") or "",
                                 "hook": video.get("hook") or "",
@@ -1246,6 +1534,8 @@ def project_products_to_relational(data=None, product_code_filter="", market_cod
                                 "id": post_id,
                                 "material_id": material_id,
                                 "account_id": account_id,
+                                "source": "reelfarm",
+                                "source_post_id": reelfarm_post_id,
                                 "reelfarm_post_id": reelfarm_post_id,
                                 "status": post.get("status") or "",
                                 "title": post.get("title") or "",
@@ -2212,6 +2502,7 @@ def configured_product_name_map():
 
 def sync_daily_all_records(days=30):
     started = time.perf_counter()
+    started_at = datetime.now(timezone.utc).isoformat()
     synced_at = datetime.now(timezone.utc).isoformat()
     stages = {}
 
@@ -2221,26 +2512,63 @@ def sync_daily_all_records(days=30):
         ("growth_mixpanel", lambda: sync_all_growth_snapshots(days)),
     ):
         stage_started = time.perf_counter()
+        stage_started_at = datetime.now(timezone.utc).isoformat()
         try:
             payload = runner()
-            payload["duration_total_seconds"] = round(time.perf_counter() - stage_started, 3)
+            duration = round(time.perf_counter() - stage_started, 3)
+            stage_finished_at = datetime.now(timezone.utc).isoformat()
+            payload["duration_total_seconds"] = duration
+            safe_record_sync_run(
+                stage_name,
+                "success" if payload.get("ok") else "error",
+                stage_started_at,
+                stage_finished_at,
+                duration,
+                records_count=sync_run_records_count(payload),
+                error="" if payload.get("ok") else json.dumps(payload.get("errors") or payload.get("error") or "", ensure_ascii=False)[:1000],
+                meta=compact_sync_run_meta(payload),
+            )
             stages[stage_name] = payload
         except RuntimeError as error:
+            duration = round(time.perf_counter() - stage_started, 3)
+            stage_finished_at = datetime.now(timezone.utc).isoformat()
+            safe_record_sync_run(
+                stage_name,
+                "error",
+                stage_started_at,
+                stage_finished_at,
+                duration,
+                error=str(error),
+                meta={"error": str(error)},
+            )
             stages[stage_name] = {
                 "ok": False,
                 "error": str(error),
-                "duration_total_seconds": round(time.perf_counter() - stage_started, 3),
+                "duration_total_seconds": duration,
             }
 
     ok = all(stage.get("ok") for stage in stages.values())
-    return {
+    duration_total = round(time.perf_counter() - started, 3)
+    finished_at = datetime.now(timezone.utc).isoformat()
+    result = {
         "ok": ok,
         "synced_at": synced_at,
         "timezone": "Asia/Shanghai",
         "schedule": "08:30 BJT",
-        "duration_total_seconds": round(time.perf_counter() - started, 3),
+        "duration_total_seconds": duration_total,
         "stages": stages,
     }
+    safe_record_sync_run(
+        "daily_all",
+        "success" if ok else "error",
+        started_at,
+        finished_at,
+        duration_total,
+        records_count=sync_run_records_count(result),
+        error="" if ok else json.dumps({k: v.get("error") for k, v in stages.items() if not v.get("ok")}, ensure_ascii=False)[:1000],
+        meta=compact_sync_run_meta(result),
+    )
+    return result
 
 
 def sync_reelfarm_country(prefix, product_id="", country_id="", product_code="", country_code=""):
@@ -4037,7 +4365,7 @@ def business_material_report_payload(query):
     date_from = query_value(query, "date_from")
     date_to = query_value(query, "date_to")
     days = query_value(query, "days", 7)
-    windows = business_material_report_windows(date_from, date_to, days)
+    windows, onboarding_windows = business_report_windows_with_onboarding(date_from, date_to, days)
     if not windows:
         return {
             "ok": True,
@@ -4051,7 +4379,6 @@ def business_material_report_payload(query):
         }
     overall_utc_start = windows[0]["utc_start"]
     overall_utc_end = windows[-1]["utc_end"]
-    onboarding_windows = {window["report_date"]: onboarding_day_window(window["report_date"]) for window in windows}
     if mode in {"published", "published_materials", "legacy"}:
         material_daily = product_business_material_daily_stats(product_code, overall_utc_start, overall_utc_end)
         material_mode = "published_materials"
@@ -4072,75 +4399,17 @@ def business_material_report_payload(query):
         )
         if onboarding_unique is not None:
             download_daily[report_date] = onboarding_unique
-    rows = []
-    source_tz = mixpanel_timezone()
-    for window in windows:
-        report_date = window["report_date"]
-        onboarding_window = onboarding_windows[report_date]
-        stats = material_daily.get(report_date, {})
-        source_date_from, source_date_to = source_dates_for_utc_window(onboarding_window["utc_start"], onboarding_window["utc_end"], source_tz, clamp_to_today=True)
-        downloads = download_daily.get(report_date)
-        total_views = int(stats.get("total_views") or 0)
-        download_rate = (int(downloads) / total_views * 100) if downloads and total_views else None
-        reelfarm_materials = int(stats.get("reelfarm_materials") or stats.get("reelfarm_posts") or 0)
-        reelfarm_expected_automations = (
-            int(reelfarm_expected_count or 0)
-            if material_mode == "published_materials"
-            else reelfarm_materials
+    rows = [
+        normalize_business_report_row(
+            window,
+            onboarding_windows[window["report_date"]],
+            material_daily.get(window["report_date"], {}),
+            download_daily.get(window["report_date"]),
+            material_mode,
+            reelfarm_expected_count,
         )
-        reelfarm_published_automations = int(stats.get("reelfarm_published_automations") or stats.get("reelfarm_posts") or 0)
-        clone_materials = int(stats.get("clone_materials") or stats.get("clone_posts") or 0)
-        reelfarm_posts = int(stats.get("reelfarm_posts") or 0)
-        clone_posts = int(stats.get("clone_posts") or 0)
-        reelfarm_views = int(stats.get("reelfarm_views") or 0)
-        clone_views = int(stats.get("clone_views") or 0)
-        rows.append({
-            "report_date": report_date,
-            "report_timezone": window["report_timezone"],
-            "business_window_local": {
-                "start": window["start_local"].isoformat(),
-                "end": window["end_local"].isoformat(),
-            },
-            "onboarding_window_local": {
-                "start": onboarding_window["start_local"].isoformat(),
-                "end": onboarding_window["end_local"].isoformat(),
-            },
-            "utc_window": {
-                "start": window["utc_start"].isoformat(),
-                "end": window["utc_end"].isoformat(),
-            },
-            "onboarding_utc_window": {
-                "start": onboarding_window["utc_start"].isoformat(),
-                "end": onboarding_window["utc_end"].isoformat(),
-            },
-            "source_date_from": source_date_from,
-            "source_date_to": source_date_to,
-            "reelfarm_materials": reelfarm_materials,
-            "reelfarm_expected_materials": reelfarm_expected_automations,
-            "reelfarm_published_automations": reelfarm_published_automations,
-            "reelfarm_expected_automations": reelfarm_expected_automations,
-            "reelfarm_posts": reelfarm_posts,
-            "reelfarm_views": reelfarm_views,
-            "reelfarm_avg_views": (reelfarm_views / reelfarm_posts) if reelfarm_posts else None,
-            "clone_materials": clone_materials,
-            "clone_expected_materials": clone_materials,
-            "clone_posts": clone_posts,
-            "clone_views": clone_views,
-            "clone_avg_views": (clone_views / clone_posts) if clone_posts else None,
-            "total_materials": reelfarm_materials + clone_materials,
-            "expected_total_materials": reelfarm_expected_automations + clone_materials,
-            "total_posts": reelfarm_posts + clone_posts,
-            "total_views": total_views,
-            "downloads": downloads,
-            "download_rate": download_rate,
-            "views_per_download": (total_views / int(downloads)) if downloads else None,
-        })
-    total_reelfarm_posts = sum(row["reelfarm_posts"] for row in rows)
-    total_clone_posts = sum(row["clone_posts"] for row in rows)
-    total_reelfarm_views = sum(row["reelfarm_views"] for row in rows)
-    total_clone_views = sum(row["clone_views"] for row in rows)
-    total_views = sum(row["total_views"] for row in rows)
-    total_downloads = sum(int(row["downloads"] or 0) for row in rows if row["downloads"] is not None)
+        for window in windows
+    ]
     return {
         "ok": True,
         "product_code": product_code,
@@ -4164,26 +4433,7 @@ def business_material_report_payload(query):
         "date_from": rows[0]["report_date"],
         "date_to": rows[-1]["report_date"],
         "rows": rows,
-        "totals": {
-            "reelfarm_materials": sum(row["reelfarm_materials"] for row in rows),
-            "reelfarm_expected_materials": sum(row["reelfarm_expected_materials"] for row in rows),
-            "reelfarm_published_automations": sum(row["reelfarm_published_automations"] for row in rows),
-            "reelfarm_expected_automations": sum(row["reelfarm_expected_automations"] for row in rows),
-            "reelfarm_posts": total_reelfarm_posts,
-            "reelfarm_views": total_reelfarm_views,
-            "reelfarm_avg_views": (total_reelfarm_views / total_reelfarm_posts) if total_reelfarm_posts else None,
-            "clone_materials": sum(row["clone_materials"] for row in rows),
-            "clone_expected_materials": sum(row["clone_expected_materials"] for row in rows),
-            "clone_posts": total_clone_posts,
-            "clone_views": total_clone_views,
-            "clone_avg_views": (total_clone_views / total_clone_posts) if total_clone_posts else None,
-            "total_materials": sum(row["total_materials"] for row in rows),
-            "expected_total_materials": sum(row["expected_total_materials"] for row in rows),
-            "total_posts": sum(row["total_posts"] for row in rows),
-            "total_views": total_views,
-            "downloads": total_downloads,
-            "download_rate": (total_downloads / total_views * 100) if total_downloads and total_views else None,
-        },
+        "totals": summarize_business_report_rows(rows),
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -4876,6 +5126,8 @@ def sync_museon_clone_country(product_id="", country_id="", product_code="", cou
                 {
                     "id": account_id,
                     "product_market_channel_id": product_market_channel_id,
+                    "source": "museon_clone",
+                    "source_account_id": account_source_id,
                     "reelfarm_account_id": account_source_id,
                     "username": account.get("username") or username,
                     "display_name": account.get("display_name") or account.get("username") or username,
@@ -4891,6 +5143,8 @@ def sync_museon_clone_country(product_id="", country_id="", product_code="", cou
                     "id": automation_id,
                     "product_market_channel_id": product_market_channel_id,
                     "account_id": account_id,
+                    "source": "museon_clone",
+                    "source_automation_id": automation_source_id,
                     "reelfarm_automation_id": automation_source_id,
                     "name": campaign_name,
                     "status": "active",
@@ -4913,6 +5167,8 @@ def sync_museon_clone_country(product_id="", country_id="", product_code="", cou
                     "account_id": account_id,
                     "concept_id": None,
                     "format_id": None,
+                    "source": "museon_clone",
+                    "source_material_id": reelfarm_video_id,
                     "reelfarm_video_id": reelfarm_video_id,
                     "video_type": post.get("content_type") or "slideshow",
                     "hook": post.get("title") or post.get("description") or "",
@@ -4933,6 +5189,8 @@ def sync_museon_clone_country(product_id="", country_id="", product_code="", cou
                     "id": post_id,
                     "material_id": material_id,
                     "account_id": account_id,
+                    "source": "museon_clone",
+                    "source_post_id": reelfarm_post_id,
                     "reelfarm_post_id": reelfarm_post_id,
                     "status": post.get("status") or "",
                     "title": post.get("title") or post.get("description") or "",
@@ -5529,8 +5787,9 @@ def daily_feishu_report_payload(report_date=""):
         "zero_play_account_count": 0,
     }
     errors = []
-    window = business_material_day_window(report_date)
-    onboarding_window = onboarding_day_window(report_date)
+    windows_for_day = daily_metric_windows(report_date)
+    window = windows_for_day["content"]
+    onboarding_window = windows_for_day["onboarding"]
 
     for product_code in configured_product_codes():
         try:
@@ -5612,6 +5871,7 @@ def daily_feishu_report_payload(report_date=""):
         "products": products,
         "totals": totals,
         "errors": errors,
+        "sync_status": sync_status_payload(),
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -5673,70 +5933,6 @@ def append_daily_account_alert_lines(lines, alerts, limit=6):
     zero_left = zero_count - min(len(zero_play_accounts), limit)
     if zero_left > 0:
         lines.append(f"  - 还有 {zero_left} 个未展示")
-
-
-def daily_feishu_report_text(report):
-    totals = report.get("totals") or {}
-    window = report.get("business_window_local") or {}
-    onboarding_window = report.get("onboarding_window_local") or {}
-    lines = [
-        "Deca Growth 每日业务数据",
-        f"业务日：{report.get('report_date')}",
-        f"内容窗口：{window.get('start', '')} → {window.get('end', '')} BJT",
-        f"Onboarding窗口：{onboarding_window.get('start', '')} → {onboarding_window.get('end', '')} BJT",
-        "",
-        "总览",
-        f"- 总播放：{int(totals.get('total_views') or 0):,}",
-        f"- ReelFarm：{int(totals.get('reelfarm_views') or 0):,}",
-        f"- Clone：{int(totals.get('clone_views') or 0):,}",
-        f"- RF发布账号/应发账号：{int(totals.get('reelfarm_published_automations') or 0):,} / {int(totals.get('reelfarm_expected_automations') or 0):,}",
-        f"- ReelFarm均播：{format_number_compact(totals.get('reelfarm_avg_views'))}",
-        f"- Clone均播：{format_number_compact(totals.get('clone_avg_views'))}",
-        f"- Onboarding Unique：{int(totals.get('downloads') or 0):,}",
-        f"- 下载/播放：{format_percent(totals.get('download_rate'))}",
-        f"- 未发送账号：{int(totals.get('missing_account_count') or 0):,}",
-        f"- 0播警告账号：{int(totals.get('zero_play_account_count') or 0):,}",
-        "",
-    ]
-
-    for item in report.get("products") or []:
-        downloads = item.get("downloads")
-        countries = item.get("countries") if isinstance(item.get("countries"), list) else []
-        lines.extend([
-            f"{item.get('product_name')} ({item.get('product_code')})",
-            "总览",
-            f"- 播放：{int(item.get('total_views') or 0):,} = RF {int(item.get('reelfarm_views') or 0):,} + Clone {int(item.get('clone_views') or 0):,}",
-            f"- RF发布账号/应发账号：{int(item.get('reelfarm_published_automations') or 0):,} / {int(item.get('reelfarm_expected_automations') or 0):,}",
-            f"- RF总均播：{format_number_compact(item.get('reelfarm_avg_views'))}（Posts {int(item.get('reelfarm_posts') or 0):,}，Views {int(item.get('reelfarm_views') or 0):,}）",
-            f"- Clone均播：{format_number_compact(item.get('clone_avg_views'))}（Posts {int(item.get('clone_posts') or 0):,}，Views {int(item.get('clone_views') or 0):,}）",
-        ])
-        append_daily_account_alert_lines(lines, item.get("account_alerts"))
-        lines.append("国家 RF 均播")
-        if countries:
-            for country in countries:
-                lines.append(
-                    f"- {country.get('country_name') or country.get('country_code')}："
-                    f"{format_number_compact(country.get('reelfarm_avg_views'))}"
-                    f"（Posts {int(country.get('reelfarm_posts') or 0):,}，Views {int(country.get('reelfarm_views') or 0):,}）"
-                )
-        else:
-            lines.append("- 暂无 RF 发布数据")
-        lines.extend([
-            "下载",
-            f"- Onboarding Unique：{int(downloads):,}" if downloads is not None else "- Onboarding Unique：未配置/未返回",
-            f"- 下载/播放：{format_percent(item.get('download_rate'))}",
-            "",
-        ])
-
-    errors = report.get("errors") or []
-    if errors:
-        lines.append("注意")
-        for error in errors[:6]:
-            lines.append(f"- {error.get('product_code')}: {error.get('error')}")
-        if len(errors) > 6:
-            lines.append(f"- 还有 {len(errors) - 6} 个错误未展示")
-
-    return "\n".join(lines).strip()
 
 
 def daily_feishu_llm_api_key():
@@ -6074,6 +6270,7 @@ def daily_feishu_report_text(report, analysis=""):
         f"业务日：{report.get('report_date')}",
         f"内容窗口：{window.get('start', '')} → {window.get('end', '')} BJT",
         f"Onboarding窗口：{onboarding_window.get('start', '')} → {onboarding_window.get('end', '')} BJT",
+        format_sync_status_line(report.get("sync_status")),
         "",
         "总览",
         f"- 总播放：{int(totals.get('total_views') or 0):,}",

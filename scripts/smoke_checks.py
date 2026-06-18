@@ -8,12 +8,21 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from server import (  # noqa: E402
+    ZERO_PLAY_VIEW_THRESHOLD,
+    daily_feishu_report_text,
+)
+from server_modules.time_windows import (  # noqa: E402
     business_material_date_for_utc_datetime,
     business_material_day_window,
     onboarding_date_for_utc_datetime,
     onboarding_day_window,
     parse_iso_datetime,
     previous_complete_windows,
+)
+from server_modules.metrics_service import (  # noqa: E402
+    daily_metric_windows,
+    normalize_business_report_row,
+    summarize_business_report_rows,
 )
 
 
@@ -35,6 +44,33 @@ def main():
     assert_equal(onboarding_window["utc_start"].isoformat(), "2026-06-12T00:00:00+00:00", "onboarding start utc")
     assert_equal(onboarding_window["utc_end"].isoformat(), "2026-06-13T00:00:00+00:00", "onboarding end utc")
 
+    metric_windows = daily_metric_windows("2026-06-13")
+    assert_equal(metric_windows["content"]["start_local"].isoformat(), "2026-06-12T23:59:00+08:00", "daily metric content start")
+    assert_equal(metric_windows["onboarding"]["start_local"].isoformat(), "2026-06-12T08:00:00+08:00", "daily metric onboarding start")
+
+    shared_row = normalize_business_report_row(
+        material_window,
+        onboarding_window,
+        {
+            "reelfarm_materials": 2,
+            "reelfarm_published_automations": 1,
+            "reelfarm_posts": 2,
+            "reelfarm_views": 300,
+            "clone_materials": 1,
+            "clone_posts": 1,
+            "clone_views": 60,
+            "total_views": 360,
+        },
+        18,
+        "published_materials",
+        5,
+    )
+    assert_equal(shared_row["reelfarm_expected_automations"], 5, "shared metrics expected automations")
+    assert_equal(shared_row["download_rate"], 5.0, "shared metrics download rate")
+    shared_totals = summarize_business_report_rows([shared_row])
+    assert_equal(shared_totals["total_views"], 360, "shared metrics total views")
+    assert_equal(shared_totals["download_rate"], 5.0, "shared metrics totals download rate")
+
     before_material_cutoff = parse_iso_datetime("2026-06-13T15:58:59+00:00")
     at_material_cutoff = parse_iso_datetime("2026-06-13T15:59:00+00:00")
     assert_equal(business_material_date_for_utc_datetime(before_material_cutoff), "2026-06-13", "material date before cutoff")
@@ -51,6 +87,24 @@ def main():
     assert_equal(windows["yesterday_end"], "2026-06-13T16:00:00+00:00", "previous complete yesterday end")
     assert_equal(windows["seven_start"], "2026-06-06T16:00:00+00:00", "previous complete seven start")
     assert_equal(windows["seven_end"], "2026-06-13T16:00:00+00:00", "previous complete seven end")
+    assert_equal(ZERO_PLAY_VIEW_THRESHOLD, 150, "zero play warning threshold")
+
+    report_text = daily_feishu_report_text({
+        "report_date": "2026-06-13",
+        "business_window_local": {"start": "2026-06-12T23:59:00+08:00", "end": "2026-06-13T23:59:00+08:00"},
+        "onboarding_window_local": {"start": "2026-06-12T08:00:00+08:00", "end": "2026-06-13T08:00:00+08:00"},
+        "sync_status": {
+            "sources": {
+                "reelfarm": {"label": "RF", "status": "success", "finished_at": "2026-06-14T00:30:00+00:00"},
+                "museon_clone": {"label": "Clone", "status": "success", "finished_at": "2026-06-14T00:31:00+00:00"},
+                "growth_mixpanel": {"label": "Mixpanel", "status": "success", "finished_at": "2026-06-14T00:32:00+00:00"},
+            }
+        },
+        "totals": {},
+        "products": [],
+    })
+    if "数据同步：RF 2026-06-14T00:30:00+00:00 (success)" not in report_text:
+        raise AssertionError("daily report sync status line is missing")
 
     print("smoke checks passed")
 

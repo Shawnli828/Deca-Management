@@ -3,6 +3,18 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '@/lib/api';
+import {
+  DATE_PRESETS,
+  addDays,
+  addMonths,
+  dateInputValue,
+  defaultDateRange,
+  displayDateRange,
+  parseInputDate,
+  rangeForPreset,
+  sameDate,
+  type DatePresetKey
+} from '@/lib/dateRange';
 import type { AccountSummary, Country, DetailedPostRow, Product, ProductKpis } from '@/lib/types';
 import { countryFlag, formatNumber, formatUtcReadable, getCountryReelFarmCode, getProductReelFarmCode } from '@/lib/utils';
 import { composeTag, formatTagLabel, getTagCategory, getTagName } from './ReelFarmAccountCard';
@@ -20,62 +32,6 @@ type TagFilterRow = { id: string; category: string; tags: string[] };
 type ViewSortDirection = 'none' | 'desc' | 'asc';
 
 const ACCOUNT_POST_PAGE_SIZE = 4;
-const DATE_PRESETS = [
-  { key: 'today', label: 'Today' },
-  { key: 'yesterday', label: 'Yesterday' },
-  { key: '7d', label: 'Last 7 days' },
-  { key: '30d', label: 'Last 30 days' },
-  { key: '3m', label: 'Last 3 months' },
-  { key: '6m', label: 'Last 6 months' }
-] as const;
-
-type DatePresetKey = typeof DATE_PRESETS[number]['key'];
-
-function dateInputValue(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
-
-function parseInputDate(value: string) {
-  const [year, month, day] = value.split('-').map(Number);
-  return new Date(year, (month || 1) - 1, day || 1);
-}
-
-function addDays(date: Date, days: number) {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-}
-
-function addMonths(date: Date, months: number) {
-  const next = new Date(date);
-  next.setMonth(next.getMonth() + months);
-  return next;
-}
-
-function rangeForPreset(preset: DatePresetKey) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  if (preset === 'today') return { from: dateInputValue(today), to: dateInputValue(today) };
-  const yesterday = addDays(today, -1);
-  if (preset === 'yesterday') {
-    return { from: dateInputValue(yesterday), to: dateInputValue(yesterday) };
-  }
-  if (preset === '30d') return { from: dateInputValue(addDays(today, -30)), to: dateInputValue(yesterday) };
-  if (preset === '3m') return { from: dateInputValue(addMonths(today, -3)), to: dateInputValue(yesterday) };
-  if (preset === '6m') return { from: dateInputValue(addMonths(today, -6)), to: dateInputValue(yesterday) };
-  return { from: dateInputValue(addDays(today, -7)), to: dateInputValue(yesterday) };
-}
-
-function displayDateRange(from: string, to: string) {
-  const formatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  return `${formatter.format(parseInputDate(from))} - ${formatter.format(parseInputDate(to))}`;
-}
-
-function sameDate(left: string, right: string) {
-  return left === right;
-}
-
-const defaultDateRange = rangeForPreset('7d');
 
 function getAccountAvgViews(row: AccountPoolRow) {
   const posts = Number(row.post_count) || 0;
