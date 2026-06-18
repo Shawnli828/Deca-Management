@@ -15,18 +15,17 @@ import { ProductList } from '@/components/ProductList';
 import { ProductSettingsModal } from '@/components/ProductSettingsModal';
 import { PublishCheckBoard } from '@/components/PublishCheckBoard';
 import { SideMenu } from '@/components/SideMenu';
+import { useDatabaseAccess } from '@/hooks/useDatabaseAccess';
+import { useProductCatalog } from '@/hooks/useProductCatalog';
 import { accountSummaryToCard, api, mergePostRowsIntoCard } from '@/lib/api';
-import type { Country, DatabaseSnapshot, ExternalApiKey, Product, ProductKpis, ProductRollup, PublishCheckState, ReelFarmCard, ReelFarmResult } from '@/lib/types';
-import { buildCountryAutomationPrefix, cardStateKey, codeFromName, getCountryReelFarmCode, getProductReelFarmCode } from '@/lib/utils';
+import type { Country, Product, ProductKpis, ProductRollup, PublishCheckState, ReelFarmCard, ReelFarmResult } from '@/lib/types';
+import { buildCountryAutomationPrefix, cardStateKey, getCountryReelFarmCode, getProductReelFarmCode } from '@/lib/utils';
 
 export default function DashboardPage() {
   const [authenticated, setAuthenticated] = useState(false);
-  const [products, setProducts] = useState<Product[]>([]);
   const [tool, setTool] = useState<'growth' | 'businessReport' | 'feishuReport' | 'slideshow' | 'cloneSlideshow' | 'cloudPhones' | 'publishCheck' | 'apiKeys'>('growth');
   const [sideCollapsed, setSideCollapsed] = useState(false);
   const [page, setPage] = useState<'products' | 'product' | 'country'>('products');
-  const [selectedProductId, setSelectedProductId] = useState('');
-  const [selectedCountryId, setSelectedCountryId] = useState('');
   const [status, setStatus] = useState('正在连接数据库...');
   const [statusError, setStatusError] = useState(false);
   const [days, setDays] = useState(30);
@@ -42,21 +41,60 @@ export default function DashboardPage() {
   const [publishCheck, setPublishCheck] = useState<PublishCheckState>({ assignments: [], last_result: null });
   const [publishCheckRunning, setPublishCheckRunning] = useState(false);
   const [publishReminderSending, setPublishReminderSending] = useState(false);
-  const [databaseOpen, setDatabaseOpen] = useState(false);
-  const [editingProductId, setEditingProductId] = useState('');
-  const [countrySettingsOpen, setCountrySettingsOpen] = useState(false);
-  const [snapshot, setSnapshot] = useState<DatabaseSnapshot | null>(null);
-  const [apiKeys, setApiKeys] = useState<ExternalApiKey[]>([]);
-  const [generatedKey, setGeneratedKey] = useState('');
   const [productKpis, setProductKpis] = useState<Record<string, ProductKpis | null>>({});
   const [cloneProducts, setCloneProducts] = useState<Product[]>([]);
   const [cloneProductKpis, setCloneProductKpis] = useState<Record<string, ProductKpis | null>>({});
   const [countryKpis, setCountryKpis] = useState<Record<string, ProductKpis | null>>({});
   const [productTags, setProductTags] = useState<Record<string, string[]>>({});
 
-  const selectedProduct = useMemo(() => products.find(product => product.id === selectedProductId) || products[0] || null, [products, selectedProductId]);
-  const selectedCountry = useMemo(() => selectedProduct?.countries?.find(country => country.id === selectedCountryId) || selectedProduct?.countries?.[0] || null, [selectedProduct, selectedCountryId]);
-  const editingProduct = useMemo(() => products.find(product => product.id === editingProductId) || null, [products, editingProductId]);
+  function reportStatus(message: string, isError = false) {
+    setStatus(message);
+    setStatusError(isError);
+  }
+
+  const {
+    products,
+    setProducts,
+    selectedProduct,
+    selectedCountry,
+    editingProduct,
+    selectedProductId,
+    selectedCountryId,
+    editingProductId,
+    countrySettingsOpen,
+    setSelectedProductId,
+    setSelectedCountryId,
+    setEditingProductId,
+    setCountrySettingsOpen,
+    replaceProducts,
+    addProduct,
+    readProductLogo,
+    saveProductSettings,
+    saveCountrySettings
+  } = useProductCatalog({
+    onStatus: reportStatus,
+    onProductAdded: () => setPage('products'),
+    onCountrySettingsSaved: () => {
+      setReelFarmResults({});
+      setPostCache({});
+      setExpandedCards({});
+      setSlideIndexes({});
+    }
+  });
+
+  const {
+    databaseOpen,
+    snapshot,
+    apiKeys,
+    generatedKey,
+    setDatabaseOpen,
+    loadApiKeys,
+    refreshDatabase,
+    createKey,
+    revokeKey,
+    copy
+  } = useDatabaseAccess({ onStatus: reportStatus });
+
   const currentPrefix = selectedProduct && selectedCountry ? buildCountryAutomationPrefix(selectedProduct, selectedCountry) : '';
   const cloneDisplayProducts = useMemo(() => (
     cloneProducts.length ? cloneProducts : products.map(product => ({
@@ -88,12 +126,9 @@ export default function DashboardPage() {
   async function loadApp() {
     const payload = await api.data();
     const data = Array.isArray(payload.data) ? payload.data : [];
-    setProducts(data);
-    setSelectedProductId(data[0]?.id || '');
-    setSelectedCountryId(data[0]?.countries?.[0]?.id || '');
+    replaceProducts(data);
     void Promise.all(data.map(product => loadProductKpis(product)));
-    setStatus('已连接数据库');
-    setStatusError(false);
+    reportStatus('已连接数据库');
     try {
       const publishPayload = await api.publishCheck();
       setPublishCheck(publishPayload.state || { assignments: [], last_result: null });
@@ -106,108 +141,6 @@ export default function DashboardPage() {
     await api.login(username, password);
     setAuthenticated(true);
     await loadApp();
-  }
-
-  async function saveProducts(nextProducts: Product[]) {
-    setProducts(nextProducts);
-    try {
-      const payload = await api.saveData(nextProducts);
-      setProducts(payload.data || nextProducts);
-      setStatus('已保存到数据库');
-      setStatusError(false);
-      return true;
-    } catch {
-      setStatus('保存失败');
-      setStatusError(true);
-      return false;
-    }
-  }
-
-  function readFileAsDataUrl(file: File) {
-    return new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result || ''));
-      reader.onerror = () => reject(reader.error || new Error('Logo 读取失败'));
-      reader.readAsDataURL(file);
-    });
-  }
-
-  async function readProductLogo(file: File) {
-    if (!file.type.startsWith('image/')) {
-      setStatus('请选择图片文件');
-      setStatusError(true);
-      throw new Error('请选择图片文件');
-    }
-
-    return readFileAsDataUrl(file);
-  }
-
-  async function addProduct() {
-    const name = window.prompt('输入产品名称');
-    if (!name?.trim()) return;
-    const newProduct: Product = {
-      id: crypto.randomUUID(),
-      name: name.trim(),
-      folder: '甲方',
-      owner_type: '甲方',
-      logo: '',
-      reelFarmCode: codeFromName(name),
-      countries: [],
-      creatorCount: 0,
-      materialCount: 0,
-      postCount: 0
-    };
-    const saved = await saveProducts([...products, newProduct]);
-    if (saved) {
-      setSelectedProductId(newProduct.id);
-      setEditingProductId(newProduct.id);
-      setPage('products');
-      setStatus(`${newProduct.name} 已添加`);
-      setStatusError(false);
-    }
-  }
-
-  async function saveProductSettings(value: { name: string; folder: string; reelFarmCode: string; logo?: string }) {
-    const product = editingProduct;
-    if (!product) return;
-    const nextProducts = products.map(item => (
-      item.id === product.id
-        ? {
-            ...item,
-            name: value.name,
-            folder: value.folder,
-            owner_type: value.folder,
-            reelFarmCode: value.reelFarmCode || item.reelFarmCode || codeFromName(value.name),
-            logo: value.logo || ''
-          }
-        : item
-    ));
-    const saved = await saveProducts(nextProducts);
-    if (saved) {
-      setStatus(`${value.name} 设置已保存`);
-      setStatusError(false);
-    }
-  }
-
-  async function saveCountrySettings(countries: Country[]) {
-    const product = selectedProduct;
-    if (!product) return;
-    const nextProducts = products.map(item => (
-      item.id === product.id
-        ? { ...item, countries }
-        : item
-    ));
-    const saved = await saveProducts(nextProducts);
-    if (saved) {
-      const stillSelected = countries.some(country => country.id === selectedCountryId);
-      setSelectedCountryId(stillSelected ? selectedCountryId : (countries[0]?.id || ''));
-      setReelFarmResults({});
-      setPostCache({});
-      setExpandedCards({});
-      setSlideIndexes({});
-      setStatus(`${product.name} 国家/地区设置已保存`);
-      setStatusError(false);
-    }
   }
 
   async function loadAccounts(product = selectedProduct, country = selectedCountry, force = false, daysOverride = days) {
@@ -246,12 +179,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (authenticated && tool === 'apiKeys') {
-      api.apiKeys()
-        .then(payload => setApiKeys(payload.keys || []))
-        .catch((error: any) => {
-          setStatus(error?.message || 'API Key 读取失败');
-          setStatusError(true);
-        });
+      loadApiKeys().catch(() => {});
     }
   }, [authenticated, tool]);
 
@@ -711,40 +639,9 @@ export default function DashboardPage() {
     }
   }
 
-  async function openDatabase() {
-    setDatabaseOpen(true);
-    setGeneratedKey('');
-    const payload = await api.apiKeys();
-    setApiKeys(payload.keys || []);
-  }
-
-  async function refreshDatabase() {
-    setSnapshot(await api.database());
-  }
-
-  async function createKey(name: string) {
-    const payload = await api.createApiKey(name);
-    setGeneratedKey(payload.key);
-    const keys = await api.apiKeys();
-    setApiKeys(keys.keys || []);
-  }
-
-  async function revokeKey(id: string) {
-    if (!confirm('确定要停用这个 API Key 吗？停用后外部 AI 将无法继续使用它。')) return;
-    await api.revokeApiKey(id);
-    const keys = await api.apiKeys();
-    setApiKeys(keys.keys || []);
-  }
-
-  async function copy(value: string) {
-    await navigator.clipboard.writeText(value);
-    setStatus('已复制');
-    setStatusError(false);
-  }
-
   async function resetDemo() {
     const payload = await api.reset();
-    setProducts(payload.data || []);
+    replaceProducts(payload.data || []);
     setPage('products');
   }
 
