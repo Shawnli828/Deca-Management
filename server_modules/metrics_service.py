@@ -2,6 +2,7 @@ from server_modules.time_windows import (
     business_material_report_windows,
     mixpanel_timezone,
     onboarding_day_window,
+    parse_iso_datetime,
     source_dates_for_utc_window,
     business_material_day_window,
 )
@@ -135,4 +136,48 @@ def summarize_business_report_rows(rows):
         "total_views": total_views,
         "downloads": total_downloads,
         "download_rate": (total_downloads / total_views * 100) if total_downloads and total_views else None,
+    }
+
+
+def evaluate_sync_readiness(sync_status, required_sources=None, min_finished_at=None):
+    required_sources = list(required_sources or ("reelfarm", "museon_clone", "growth_mixpanel"))
+    sources = (sync_status or {}).get("sources") if isinstance(sync_status, dict) else {}
+    if not isinstance(sources, dict):
+        sources = {}
+    min_finished = parse_iso_datetime(min_finished_at)
+    warnings = []
+    source_status = {}
+    for source in required_sources:
+        item = sources.get(source) or {}
+        status = str(item.get("status") or "").strip().lower()
+        finished_at = item.get("finished_at")
+        finished = parse_iso_datetime(finished_at)
+        ok = status == "success" and bool(finished)
+        if ok and min_finished and finished < min_finished:
+            ok = False
+            warnings.append(
+                f"{item.get('label') or source} 同步时间早于统计窗口结束：{finished_at or '暂无'}"
+            )
+        elif not ok:
+            label = item.get("label") or source
+            if not item:
+                warnings.append(f"{label} 暂无同步记录")
+            elif status != "success":
+                error = item.get("error") or ""
+                suffix = f"：{error}" if error else ""
+                warnings.append(f"{label} 最近同步状态不是 success（{status or 'unknown'}）{suffix}")
+            else:
+                warnings.append(f"{label} 最近同步缺少完成时间")
+        source_status[source] = {
+            "ok": ok,
+            "status": item.get("status"),
+            "finished_at": finished_at,
+            "label": item.get("label") or source,
+        }
+    return {
+        "ok": not warnings,
+        "required_sources": required_sources,
+        "min_finished_at": min_finished.isoformat() if min_finished else None,
+        "warnings": warnings,
+        "sources": source_status,
     }

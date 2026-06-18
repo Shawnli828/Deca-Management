@@ -10,6 +10,7 @@ if str(ROOT) not in sys.path:
 from server import (  # noqa: E402
     ZERO_PLAY_VIEW_THRESHOLD,
     daily_feishu_report_text,
+    format_sync_readiness_line,
 )
 from server_modules.time_windows import (  # noqa: E402
     business_material_date_for_utc_datetime,
@@ -21,6 +22,7 @@ from server_modules.time_windows import (  # noqa: E402
 )
 from server_modules.metrics_service import (  # noqa: E402
     daily_metric_windows,
+    evaluate_sync_readiness,
     normalize_business_report_row,
     summarize_business_report_rows,
 )
@@ -105,6 +107,36 @@ def main():
     })
     if "数据同步：RF 2026-06-14T00:30:00+00:00 (success)" not in report_text:
         raise AssertionError("daily report sync status line is missing")
+    if "同步校验：" not in report_text:
+        raise AssertionError("daily report sync readiness line is missing")
+
+    readiness_ok = evaluate_sync_readiness(
+        {
+            "sources": {
+                "reelfarm": {"label": "RF", "status": "success", "finished_at": "2026-06-14T00:30:00+00:00"},
+                "museon_clone": {"label": "Clone", "status": "success", "finished_at": "2026-06-14T00:31:00+00:00"},
+                "growth_mixpanel": {"label": "Mixpanel", "status": "success", "finished_at": "2026-06-14T00:32:00+00:00"},
+            }
+        },
+        min_finished_at="2026-06-13T15:59:00+00:00",
+    )
+    assert_equal(readiness_ok["ok"], True, "sync readiness success")
+    assert_equal(format_sync_readiness_line(readiness_ok), "同步校验：RF / Clone / Mixpanel 已完成", "sync readiness success line")
+
+    readiness_stale = evaluate_sync_readiness(
+        {
+            "sources": {
+                "reelfarm": {"label": "RF", "status": "success", "finished_at": "2026-06-13T00:30:00+00:00"},
+                "museon_clone": {"label": "Clone", "status": "error", "finished_at": "2026-06-14T00:31:00+00:00", "error": "timeout"},
+                "growth_mixpanel": {"label": "Mixpanel", "status": "success", "finished_at": "2026-06-14T00:32:00+00:00"},
+            }
+        },
+        min_finished_at="2026-06-13T15:59:00+00:00",
+    )
+    assert_equal(readiness_stale["ok"], False, "sync readiness stale")
+    stale_line = format_sync_readiness_line(readiness_stale)
+    if "RF 同步时间早于统计窗口结束" not in stale_line or "Clone 最近同步状态不是 success" not in stale_line:
+        raise AssertionError("sync readiness warning line is incomplete")
 
     print("smoke checks passed")
 

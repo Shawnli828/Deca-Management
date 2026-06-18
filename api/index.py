@@ -462,11 +462,22 @@ def truthy_query_value(value: str) -> bool:
 
 
 @app.api_route("/api/reports/daily-feishu", methods=["GET", "POST"])
-def post_reports_daily_feishu(request: Request, date: str = "", include_ai: str = "", model: str = ""):
+def post_reports_daily_feishu(
+    request: Request,
+    date: str = "",
+    include_ai: str = "",
+    model: str = "",
+    require_synced: str = "",
+):
     if not cron_authorized(request.headers):
         require_dashboard_auth(request)
     try:
-        result = send_daily_feishu_report(date, include_ai=truthy_query_value(include_ai), model=model)
+        result = send_daily_feishu_report(
+            date,
+            include_ai=truthy_query_value(include_ai),
+            model=model,
+            require_synced=truthy_query_value(require_synced),
+        )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     if not result.get("ok"):

@@ -41,6 +41,7 @@ from server_modules.time_windows import (
 from server_modules.metrics_service import (
     business_report_windows_with_onboarding,
     daily_metric_windows,
+    evaluate_sync_readiness,
     normalize_business_report_row,
     summarize_business_report_rows,
 )
@@ -1096,6 +1097,25 @@ def format_sync_status_line(sync_status):
         else:
             parts.append(f"{label} 暂无记录")
     return "数据同步：" + "；".join(parts)
+
+
+def sync_readiness_payload(sync_status, min_finished_at):
+    return evaluate_sync_readiness(
+        sync_status,
+        required_sources=("reelfarm", "museon_clone", "growth_mixpanel"),
+        min_finished_at=min_finished_at,
+    )
+
+
+def format_sync_readiness_line(sync_ready):
+    if not isinstance(sync_ready, dict):
+        return "同步校验：暂无校验结果"
+    if sync_ready.get("ok"):
+        return "同步校验：RF / Clone / Mixpanel 已完成"
+    warnings = sync_ready.get("warnings") or []
+    if not warnings:
+        return "同步校验：未通过"
+    return "同步校验：" + "；".join(str(item) for item in warnings[:4])
 
 
 def parse_concept_format_from_automation(title, country_code, product_code):
@@ -5848,6 +5868,11 @@ def daily_feishu_report_payload(report_date=""):
     totals["download_rate"] = (totals["downloads"] / totals["total_views"] * 100) if totals["total_views"] else None
     totals["reelfarm_avg_views"] = (totals["reelfarm_views"] / totals["reelfarm_posts"]) if totals["reelfarm_posts"] else None
     totals["clone_avg_views"] = (totals["clone_views"] / totals["clone_posts"]) if totals["clone_posts"] else None
+    sync_status = sync_status_payload()
+    sync_ready = sync_readiness_payload(
+        sync_status,
+        max(window["utc_end"], onboarding_window["utc_end"]).isoformat(),
+    )
     return {
         "ok": True,
         "report_date": report_date,
@@ -5871,7 +5896,8 @@ def daily_feishu_report_payload(report_date=""):
         "products": products,
         "totals": totals,
         "errors": errors,
-        "sync_status": sync_status_payload(),
+        "sync_status": sync_status,
+        "sync_ready": sync_ready,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -6271,6 +6297,7 @@ def daily_feishu_report_text(report, analysis=""):
         f"内容窗口：{window.get('start', '')} → {window.get('end', '')} BJT",
         f"Onboarding窗口：{onboarding_window.get('start', '')} → {onboarding_window.get('end', '')} BJT",
         format_sync_status_line(report.get("sync_status")),
+        format_sync_readiness_line(report.get("sync_ready")),
         "",
         "总览",
         f"- 总播放：{int(totals.get('total_views') or 0):,}",
@@ -6329,8 +6356,14 @@ def daily_feishu_report_text(report, analysis=""):
     return "\n".join(lines).strip()
 
 
-def send_daily_feishu_report(report_date="", include_ai=False, model=""):
+def send_daily_feishu_report(report_date="", include_ai=False, model="", require_synced=False):
     report = daily_feishu_report_payload(report_date)
+    if require_synced and not (report.get("sync_ready") or {}).get("ok"):
+        return {
+            "ok": False,
+            "error": format_sync_readiness_line(report.get("sync_ready")),
+            "report": report,
+        }
     analysis = ""
     analysis_payload = None
     if include_ai:
@@ -6914,7 +6947,13 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             query = parse_qs(urlparse(self.path).query)
             try:
                 include_ai = str(query.get("include_ai", [""])[0]).strip().lower() in {"1", "true", "yes", "y", "on"}
-                result = send_daily_feishu_report(query.get("date", [""])[0], include_ai=include_ai, model=query.get("model", [""])[0])
+                require_synced = str(query.get("require_synced", [""])[0]).strip().lower() in {"1", "true", "yes", "y", "on"}
+                result = send_daily_feishu_report(
+                    query.get("date", [""])[0],
+                    include_ai=include_ai,
+                    model=query.get("model", [""])[0],
+                    require_synced=require_synced,
+                )
                 status = 200 if result.get("ok") else 400
                 self.send_json(status, result)
             except ValueError as error:
