@@ -1,19 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ApiKeyPage } from '@/components/ApiKeyPage';
 import { AuthGate } from '@/components/AuthGate';
-import { BusinessMaterialReport } from '@/components/BusinessMaterialReport';
-import { CloudPhoneMap } from '@/components/CloudPhoneMap';
-import { CountryList } from '@/components/CountryList';
 import { CountrySettingsModal } from '@/components/CountrySettingsModal';
-import { CountryWorkspace } from '@/components/CountryWorkspace';
+import type { DashboardPageState, DashboardTool } from '@/components/DashboardRoutes';
+import { DashboardRoutes } from '@/components/DashboardRoutes';
 import { DatabaseModal } from '@/components/DatabaseModal';
-import { FeishuReportPage } from '@/components/FeishuReportPage';
-import { GrowthDashboard } from '@/components/GrowthDashboard';
-import { ProductList } from '@/components/ProductList';
 import { ProductSettingsModal } from '@/components/ProductSettingsModal';
-import { PublishCheckBoard } from '@/components/PublishCheckBoard';
 import { SideMenu } from '@/components/SideMenu';
 import { useDatabaseAccess } from '@/hooks/useDatabaseAccess';
 import { useProductCatalog } from '@/hooks/useProductCatalog';
@@ -23,13 +16,13 @@ import { useReelFarmDashboard } from '@/hooks/useReelFarmDashboard';
 import { useReelFarmSync } from '@/hooks/useReelFarmSync';
 import { api } from '@/lib/api';
 import type { Country, Product } from '@/lib/types';
-import { buildCountryAutomationPrefix, getProductReelFarmCode } from '@/lib/utils';
+import { buildCountryAutomationPrefix } from '@/lib/utils';
 
 export default function DashboardPage() {
   const [authenticated, setAuthenticated] = useState(false);
-  const [tool, setTool] = useState<'growth' | 'businessReport' | 'feishuReport' | 'slideshow' | 'cloneSlideshow' | 'cloudPhones' | 'publishCheck' | 'apiKeys'>('growth');
+  const [tool, setTool] = useState<DashboardTool>('growth');
   const [sideCollapsed, setSideCollapsed] = useState(false);
-  const [page, setPage] = useState<'products' | 'product' | 'country'>('products');
+  const [page, setPage] = useState<DashboardPageState>('products');
   const [status, setStatus] = useState('正在连接数据库...');
   const [statusError, setStatusError] = useState(false);
   const reelFarmResetRef = useRef<(() => void) | null>(null);
@@ -214,118 +207,53 @@ export default function DashboardPage() {
     <div className="app">
       <div className={`app-layout ${sideCollapsed ? 'side-collapsed' : ''}`}>
         <SideMenu tool={tool} setTool={setTool} collapsed={sideCollapsed} onToggle={() => setSideCollapsed(value => !value)} />
-        <main className="shell">
-          <section className={`tool-page ${tool === 'growth' ? 'active' : ''}`}>
-            <GrowthDashboard products={products} />
-          </section>
-          <section className={`tool-page ${tool === 'businessReport' ? 'active' : ''}`}>
-            <BusinessMaterialReport products={products} />
-          </section>
-          <section className={`tool-page ${tool === 'feishuReport' ? 'active' : ''}`}>
-            <FeishuReportPage />
-          </section>
-          <section className={`tool-page ${tool === 'slideshow' ? 'active' : ''}`}>
-            <section className="page-shell slideshow-shell">
-              {page === 'products' ? (
-                <ProductList
-                  products={products}
-                  productKpis={productKpis}
-                  onSelect={selectProduct}
-                  onAddProduct={addProduct}
-                  onEditProduct={product => setEditingProductId(product.id)}
-                />
-              ) : null}
-              {page === 'product' && selectedProduct ? (
-                <CountryList
-                  product={selectedProduct}
-                  kpis={productKpis[selectedProduct.id]}
-                  syncing={syncProductId === selectedProduct.id}
-                  onBack={() => setPage('products')}
-                  onSelect={selectCountry}
-                  onOpenSettings={() => setCountrySettingsOpen(true)}
-                  onSyncProduct={syncProductCountries}
-                />
-              ) : null}
-              {page === 'country' && selectedProduct && selectedCountry ? (
-                <CountryWorkspace
-                  product={selectedProduct}
-                  country={selectedCountry}
-                  kpis={countryKpis[`${selectedProduct.id}:${selectedCountry.id}`]}
-                  result={reelFarmResults[currentPrefix]}
-                  days={days}
-                  loadingPrefix={syncPrefix}
-                  expandedCards={expandedCards}
-                  postLoading={postLoading}
-                  slideIndexes={slideIndexes}
-                  onBack={() => setPage('product')}
-                  onDays={changeDays}
-                  onSync={syncCountry}
-                  onToggleCard={toggleCard}
-                  onPage={pagePosts}
-                  onMoveSlide={moveSlide}
-                  onAddTag={addCardTag}
-                  onRemoveTag={removeCardTag}
-                  productTags={productTags[getProductReelFarmCode(selectedProduct)] || []}
-                />
-              ) : null}
-            </section>
-          </section>
-          <section className={`tool-page ${tool === 'cloneSlideshow' ? 'active' : ''}`}>
-            <section className="page-shell slideshow-shell">
-              {page === 'products' ? (
-                <ProductList
-                  products={cloneDisplayProducts}
-                  productKpis={cloneProductKpis}
-                  onSelect={selectProduct}
-                  onAddProduct={addProduct}
-                  onEditProduct={product => setEditingProductId(product.id)}
-                />
-              ) : null}
-              {page !== 'products' && selectedProduct ? (
-                <CountryList
-                  product={selectedCloneProduct || selectedProduct}
-                  kpis={cloneProductKpis[selectedProduct.id]}
-                  dataSource="museon_clone"
-                  syncing={syncProductId === selectedProduct.id}
-                  onBack={() => setPage('products')}
-                  onSelect={selectCountry}
-                  onOpenSettings={() => setCountrySettingsOpen(true)}
-                  onSyncProduct={syncCloneProductCountries}
-                />
-              ) : null}
-            </section>
-          </section>
-          <section className={`tool-page ${tool === 'cloudPhones' ? 'active' : ''}`}>
-            <CloudPhoneMap products={products} />
-          </section>
-          <section className={`tool-page ${tool === 'apiKeys' ? 'active' : ''}`}>
-            <ApiKeyPage
-              keys={apiKeys}
-              generatedKey={generatedKey}
-              onCreateKey={createKey}
-              onRevokeKey={revokeKey}
-              onCopy={copy}
-            />
-          </section>
-          <section className={`tool-page ${tool === 'publishCheck' ? 'active' : ''}`}>
-            <header className="topbar">
-              <div>
-                <h1>发布检查</h1>
-                <p className="subtitle">按负责人检查产品国家下的 TikTok account 今日是否发布。</p>
-              </div>
-              <div className="top-actions"><span className="status-pill">北京时间 23:00 自动检查</span></div>
-            </header>
-            <PublishCheckBoard
-              products={products}
-              state={publishCheck}
-              running={publishCheckRunning}
-              sendingReminder={publishReminderSending}
-              onSave={savePublishCheck}
-              onRun={runPublishCheckNow}
-              onSendReminder={sendPublishReminderNow}
-            />
-          </section>
-        </main>
+        <DashboardRoutes
+          tool={tool}
+          page={page}
+          products={products}
+          productKpis={productKpis}
+          cloneDisplayProducts={cloneDisplayProducts}
+          cloneProductKpis={cloneProductKpis}
+          selectedProduct={selectedProduct}
+          selectedCloneProduct={selectedCloneProduct}
+          selectedCountry={selectedCountry}
+          countryKpis={countryKpis}
+          currentPrefix={currentPrefix}
+          syncProductId={syncProductId}
+          syncPrefix={syncPrefix}
+          days={days}
+          reelFarmResults={reelFarmResults}
+          expandedCards={expandedCards}
+          postLoading={postLoading}
+          slideIndexes={slideIndexes}
+          productTags={productTags}
+          publishCheck={publishCheck}
+          publishCheckRunning={publishCheckRunning}
+          publishReminderSending={publishReminderSending}
+          apiKeys={apiKeys}
+          generatedKey={generatedKey}
+          setPage={setPage}
+          setEditingProductId={setEditingProductId}
+          setCountrySettingsOpen={setCountrySettingsOpen}
+          selectProduct={selectProduct}
+          selectCountry={selectCountry}
+          addProduct={addProduct}
+          syncProductCountries={syncProductCountries}
+          syncCloneProductCountries={syncCloneProductCountries}
+          changeDays={changeDays}
+          syncCountry={syncCountry}
+          toggleCard={toggleCard}
+          pagePosts={pagePosts}
+          moveSlide={moveSlide}
+          addCardTag={addCardTag}
+          removeCardTag={removeCardTag}
+          savePublishCheck={savePublishCheck}
+          runPublishCheckNow={runPublishCheckNow}
+          sendPublishReminderNow={sendPublishReminderNow}
+          createKey={createKey}
+          revokeKey={revokeKey}
+          copy={copy}
+        />
       </div>
       <DatabaseModal
         open={databaseOpen}
