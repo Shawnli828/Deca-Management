@@ -17,8 +17,9 @@ import { PublishCheckBoard } from '@/components/PublishCheckBoard';
 import { SideMenu } from '@/components/SideMenu';
 import { useDatabaseAccess } from '@/hooks/useDatabaseAccess';
 import { useProductCatalog } from '@/hooks/useProductCatalog';
+import { usePublishCheck } from '@/hooks/usePublishCheck';
 import { accountSummaryToCard, api, mergePostRowsIntoCard } from '@/lib/api';
-import type { Country, Product, ProductKpis, ProductRollup, PublishCheckState, ReelFarmCard, ReelFarmResult } from '@/lib/types';
+import type { Country, Product, ProductKpis, ProductRollup, ReelFarmCard, ReelFarmResult } from '@/lib/types';
 import { buildCountryAutomationPrefix, cardStateKey, getCountryReelFarmCode, getProductReelFarmCode } from '@/lib/utils';
 
 export default function DashboardPage() {
@@ -38,9 +39,6 @@ export default function DashboardPage() {
   const [syncProductId, setSyncProductId] = useState('');
   const [syncAllRunning, setSyncAllRunning] = useState(false);
   const [syncAllProgress, setSyncAllProgress] = useState('');
-  const [publishCheck, setPublishCheck] = useState<PublishCheckState>({ assignments: [], last_result: null });
-  const [publishCheckRunning, setPublishCheckRunning] = useState(false);
-  const [publishReminderSending, setPublishReminderSending] = useState(false);
   const [productKpis, setProductKpis] = useState<Record<string, ProductKpis | null>>({});
   const [cloneProducts, setCloneProducts] = useState<Product[]>([]);
   const [cloneProductKpis, setCloneProductKpis] = useState<Record<string, ProductKpis | null>>({});
@@ -95,6 +93,16 @@ export default function DashboardPage() {
     copy
   } = useDatabaseAccess({ onStatus: reportStatus });
 
+  const {
+    publishCheck,
+    publishCheckRunning,
+    publishReminderSending,
+    loadPublishCheck,
+    savePublishCheck,
+    runPublishCheckNow,
+    sendPublishReminderNow
+  } = usePublishCheck({ onStatus: reportStatus });
+
   const currentPrefix = selectedProduct && selectedCountry ? buildCountryAutomationPrefix(selectedProduct, selectedCountry) : '';
   const cloneDisplayProducts = useMemo(() => (
     cloneProducts.length ? cloneProducts : products.map(product => ({
@@ -129,12 +137,7 @@ export default function DashboardPage() {
     replaceProducts(data);
     void Promise.all(data.map(product => loadProductKpis(product)));
     reportStatus('已连接数据库');
-    try {
-      const publishPayload = await api.publishCheck();
-      setPublishCheck(publishPayload.state || { assignments: [], last_result: null });
-    } catch {
-      setPublishCheck({ assignments: [], last_result: null });
-    }
+    await loadPublishCheck();
   }
 
   async function login(username: string, password: string) {
@@ -594,48 +597,6 @@ export default function DashboardPage() {
       setSyncPrefix('');
       setSyncAllProgress('');
       setSyncAllRunning(false);
-    }
-  }
-
-  async function savePublishCheck(next: PublishCheckState) {
-    setPublishCheck(next);
-    try {
-      const payload = await api.savePublishCheck(next);
-      setPublishCheck(payload.state);
-      setStatus('发布检查配置已保存');
-      setStatusError(false);
-    } catch {
-      setStatus('发布检查配置保存失败');
-      setStatusError(true);
-    }
-  }
-
-  async function runPublishCheckNow() {
-    setPublishCheckRunning(true);
-    try {
-      const result = await api.runPublishCheck();
-      setPublishCheck(prev => ({ ...prev, last_result: result }));
-      setStatus(`发布检查完成：${result.totals?.missing_accounts || 0} 个账号未发布`);
-      setStatusError(false);
-    } catch (error: any) {
-      setStatus(error?.message || '发布检查失败');
-      setStatusError(true);
-    } finally {
-      setPublishCheckRunning(false);
-    }
-  }
-
-  async function sendPublishReminderNow() {
-    setPublishReminderSending(true);
-    try {
-      const result = await api.sendPublishCheckReminder();
-      setStatus(`飞书提醒已发送：${result.missing_accounts || 0} 个账号未发布`);
-      setStatusError(false);
-    } catch (error: any) {
-      setStatus(error?.message || '飞书提醒发送失败');
-      setStatusError(true);
-    } finally {
-      setPublishReminderSending(false);
     }
   }
 
