@@ -61,6 +61,22 @@ from server_modules.sync_status import (
     sync_run_records_count,
     sync_status_from_runs,
 )
+from server_modules.reelfarm_utils import (
+    reelfarm_post_as_draft_value,
+    reelfarm_post_mode,
+    reelfarm_publish_method,
+    reelfarm_schedule_slot_count,
+)
+from server_modules.museon_utils import (
+    museon_account_from_post,
+    museon_content_id_from_material_source,
+    museon_list_payload,
+    museon_pagination_total,
+    museon_post_images,
+    museon_post_metrics,
+    normalize_image_entries,
+)
+from server_modules.mixpanel_utils import mixpanel_segmentation_unique_from_payload
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -850,97 +866,6 @@ def int_or_none(value):
         return int(value)
     except (TypeError, ValueError):
         return None
-
-
-def bool_from_api(value):
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return value != 0
-    text = str(value or "").strip().lower()
-    if text in {"1", "true", "yes", "y", "on", "enabled"}:
-        return True
-    if text in {"0", "false", "no", "n", "off", "disabled"}:
-        return False
-    return False
-
-
-def nested_value(payload, keys):
-    if not isinstance(payload, dict):
-        return None
-    for key in keys:
-        if key in payload:
-            return payload.get(key)
-    for value in payload.values():
-        if isinstance(value, dict):
-            found = nested_value(value, keys)
-            if found is not None:
-                return found
-    return None
-
-
-REELFARM_POST_AS_DRAFT_KEYS = {
-    "post_as_draft",
-    "postAsDraft",
-    "post_as_draft_enabled",
-    "postAsDraftEnabled",
-}
-
-
-def reelfarm_tiktok_post_settings(automation):
-    if not isinstance(automation, dict):
-        return {}
-    settings = automation.get("tiktok_post_settings")
-    if isinstance(settings, dict):
-        return settings
-    settings = automation.get("tiktokPostSettings")
-    if isinstance(settings, dict):
-        return settings
-    return {}
-
-
-def reelfarm_post_mode(automation):
-    settings = reelfarm_tiktok_post_settings(automation)
-    post_mode = str(settings.get("post_mode") or settings.get("postMode") or "").strip().upper()
-    if post_mode:
-        return post_mode
-    auto_post = settings.get("auto_post", settings.get("autoPost"))
-    if auto_post is not None:
-        return "DIRECT_POST" if bool_from_api(auto_post) else "MEDIA_UPLOAD"
-    return ""
-
-
-def reelfarm_post_as_draft_value(automation):
-    post_mode = reelfarm_post_mode(automation)
-    if post_mode:
-        return post_mode == "MEDIA_UPLOAD"
-
-    exact = nested_value(automation, REELFARM_POST_AS_DRAFT_KEYS)
-    if exact is not None:
-        return exact
-
-    def walk(payload):
-        if isinstance(payload, dict):
-            for key, value in payload.items():
-                normalized = re.sub(r"[^a-z0-9]+", "", str(key).lower())
-                if "draft" in normalized and ("post" in normalized or "publish" in normalized):
-                    return value
-                found = walk(value)
-                if found is not None:
-                    return found
-        elif isinstance(payload, list):
-            for value in payload:
-                found = walk(value)
-                if found is not None:
-                    return found
-        return None
-
-    return walk(automation)
-
-
-def reelfarm_publish_method(automation):
-    post_as_draft = reelfarm_post_as_draft_value(automation)
-    return "manual" if bool_from_api(post_as_draft) else "api"
 
 
 def data_source_channel_code(source):
@@ -3753,29 +3678,6 @@ def daily_reelfarm_account_alerts(product_code, utc_start, utc_end, limit=120):
     }
 
 
-def reelfarm_schedule_slot_count(schedule_value):
-    if isinstance(schedule_value, str):
-        raw = schedule_value.strip()
-        if not raw:
-            return 1
-        try:
-            schedule_value = json.loads(raw)
-        except json.JSONDecodeError:
-            return 1
-
-    if isinstance(schedule_value, list):
-        return max(len([item for item in schedule_value if item not in (None, "")]), 1)
-
-    if isinstance(schedule_value, dict):
-        for key in ("schedule", "schedules", "times", "cron", "crons"):
-            value = schedule_value.get(key)
-            if value not in (None, "", [], {}):
-                return reelfarm_schedule_slot_count(value)
-        return 1
-
-    return 1
-
-
 def product_active_reelfarm_expected_schedule_count(product_code):
     placeholder = db_placeholder()
     with connect_db() as conn:
@@ -4041,41 +3943,6 @@ def mixpanel_event_business_material_counts(config, event_name, utc_start, utc_e
     if value_type == "unique":
         return {report_date: len(ids) for report_date, ids in unique_ids.items()}
     return totals
-
-
-def collect_numeric_values(value):
-    if isinstance(value, bool) or value is None:
-        return []
-    if isinstance(value, (int, float)):
-        return [float(value)]
-    if isinstance(value, dict):
-        values = []
-        for child in value.values():
-            values.extend(collect_numeric_values(child))
-        return values
-    if isinstance(value, list):
-        values = []
-        for child in value:
-            values.extend(collect_numeric_values(child))
-        return values
-    return []
-
-
-def mixpanel_segmentation_unique_from_payload(payload, event_name):
-    if not isinstance(payload, dict):
-        return 0
-    data = payload.get("data")
-    if isinstance(data, dict):
-        values = data.get("values")
-        if isinstance(values, dict):
-            candidate = values.get(event_name)
-            if candidate is None and len(values) == 1:
-                candidate = next(iter(values.values()))
-            return int(round(sum(collect_numeric_values(candidate))))
-    results = payload.get("results")
-    if isinstance(results, dict):
-        return int(round(sum(collect_numeric_values(results))))
-    return 0
 
 
 def mixpanel_source_day_span(source_date_from, source_date_to):
@@ -4650,16 +4517,6 @@ def museon_request(path, params=None):
     return payload
 
 
-def museon_list_payload(payload):
-    if isinstance(payload, dict):
-        data = payload.get("data")
-        if isinstance(data, list):
-            return data
-        if isinstance(payload.get("items"), list):
-            return payload["items"]
-    return payload if isinstance(payload, list) else []
-
-
 def museon_campaigns(force=False):
     now = time.time()
     if not force and _MUSEON_CAMPAIGN_CACHE["campaigns"] and now - _MUSEON_CAMPAIGN_CACHE["loaded_at"] < 300:
@@ -4732,18 +4589,6 @@ def museon_clone_campaigns_for_product(product_code, country_code=""):
     return contexts
 
 
-def museon_pagination_total(payload, fallback_count=0):
-    if isinstance(payload, dict):
-        pagination = payload.get("pagination") or payload.get("meta") or {}
-        for key in ("total", "total_count", "count"):
-            if isinstance(pagination, dict) and pagination.get(key) is not None:
-                try:
-                    return int(pagination.get(key) or 0)
-                except (TypeError, ValueError):
-                    pass
-    return fallback_count
-
-
 def museon_posts(campaign_id, date_from="", date_to="", username="", page=1, page_size=100, sort=""):
     params = {"page": page, "page_size": page_size}
     if sort:
@@ -4801,75 +4646,6 @@ def reelfarm_account_lookup(product_code, country_code):
     return lookup
 
 
-def museon_account_from_post(post):
-    account = post.get("account") if isinstance(post.get("account"), dict) else {}
-    username = account.get("username") or post.get("username") or post.get("account_username")
-    return {
-        "id": account.get("id") or post.get("creator_id") or post.get("account_id") or username,
-        "username": username,
-        "display_name": account.get("display_name") or account.get("name") or username,
-        "avatar_url": account.get("avatar_url") or account.get("image_url") or account.get("profile_image_url"),
-        "status": account.get("status") or post.get("status") or "active",
-        "category_tags": account.get("category_tags") or [],
-    }
-
-
-def museon_post_metrics(post):
-    metrics = post.get("metrics") if isinstance(post.get("metrics"), dict) else {}
-    return {
-        "view_count": int(metrics.get("views") or metrics.get("view_count") or post.get("views") or 0),
-        "like_count": int(metrics.get("likes") or metrics.get("like_count") or post.get("likes") or 0),
-        "comment_count": int(metrics.get("comments") or metrics.get("comment_count") or post.get("comments") or 0),
-        "share_count": int(metrics.get("shares") or metrics.get("share_count") or post.get("shares") or 0),
-        "bookmark_count": int(metrics.get("saves") or metrics.get("bookmark_count") or metrics.get("bookmarks") or 0),
-    }
-
-
-def normalize_image_entries(values):
-    images = []
-    for item in values or []:
-        if isinstance(item, str):
-            url = item
-        elif isinstance(item, dict):
-            url = item.get("image_url") or item.get("url") or item.get("src") or item.get("download_url")
-        else:
-            url = ""
-        if url:
-            images.append({"image_url": url})
-
-    seen = set()
-    deduped = []
-    for image in images:
-        url = image.get("image_url")
-        if not url or url in seen:
-            continue
-        seen.add(url)
-        deduped.append(image)
-    return deduped
-
-
-def museon_post_images(post):
-    candidates = [
-        post.get("slideshow_images"),
-        post.get("images"),
-        post.get("media_urls"),
-        post.get("image_urls"),
-    ]
-    content = post.get("content") if isinstance(post.get("content"), dict) else {}
-    candidates.extend([
-        content.get("slideshow_images"),
-        content.get("images"),
-        content.get("media_urls"),
-        content.get("image_urls"),
-    ])
-
-    images = []
-    for candidate in candidates:
-        if isinstance(candidate, list):
-            images.extend(candidate)
-    return normalize_image_entries(images)
-
-
 def museon_content_download_images(content_id):
     if not content_id:
         return []
@@ -4887,14 +4663,6 @@ def museon_content_download_images(content_id):
     if data.get("thumbnail_url"):
         values.append(data.get("thumbnail_url"))
     return normalize_image_entries(values)
-
-
-def museon_content_id_from_material_source(value):
-    text = str(value or "")
-    if not text.startswith("museon:"):
-        return ""
-    parts = text.split(":")
-    return parts[-1] if len(parts) >= 3 else ""
 
 
 def hydrate_museon_images_for_rows(conn, row_data_list):
