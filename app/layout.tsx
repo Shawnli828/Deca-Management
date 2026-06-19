@@ -1,4 +1,5 @@
 import './globals.css';
+import './dark-theme.css';
 import './light-theme.css';
 import './cloud-phone.css';
 import type { Metadata } from 'next';
