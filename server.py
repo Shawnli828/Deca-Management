@@ -4,8 +4,6 @@ import hmac
 import mimetypes
 import os
 import re
-import ssl
-import sqlite3
 import socket
 import time
 import webbrowser
@@ -188,6 +186,17 @@ from server_modules.product_config import (
     configured_product_name_map as configured_product_name_map_impl,
     product_country_lookup as product_country_lookup_impl,
 )
+from server_modules.db_core import (
+    connect_db as connect_db_impl,
+    db_placeholder as db_placeholder_impl,
+    delete_app_value as delete_app_value_impl,
+    init_app_state_db,
+    load_app_value as load_app_value_impl,
+    make_ssl_context as make_ssl_context_impl,
+    save_app_value as save_app_value_impl,
+    upsert_row as upsert_row_impl,
+    using_postgres as using_postgres_impl,
+)
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -239,28 +248,15 @@ AI_API_KEY = os.environ.get("AI_API_KEY", "").strip()
 
 
 def using_postgres():
-    return bool(DATABASE_URL)
+    return using_postgres_impl(DATABASE_URL)
 
 
 def db_placeholder():
-    return "%s" if using_postgres() else "?"
+    return db_placeholder_impl(DATABASE_URL)
 
 
 def make_ssl_context():
-    try:
-        import certifi
-
-        return ssl.create_default_context(cafile=certifi.where())
-    except Exception:
-        for candidate in (
-            "/etc/ssl/cert.pem",
-            "/opt/homebrew/etc/openssl@3/cert.pem",
-            "/usr/local/etc/openssl@3/cert.pem",
-        ):
-            if Path(candidate).is_file():
-                return ssl.create_default_context(cafile=candidate)
-
-    return ssl.create_default_context()
+    return make_ssl_context_impl()
 
 
 def default_data():
@@ -319,21 +315,7 @@ def initial_data():
 
 
 def connect_db():
-    if using_postgres():
-        try:
-            import psycopg
-            from psycopg.rows import dict_row
-        except ImportError as error:
-            raise RuntimeError(
-                "DATABASE_URL is set, but psycopg is not installed. "
-                "Run: pip install -r requirements.txt"
-            ) from error
-
-        return psycopg.connect(DATABASE_URL, row_factory=dict_row)
-
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return connect_db_impl(DATABASE_URL, DB_PATH)
 
 
 def init_relational_schema(conn):
@@ -341,68 +323,19 @@ def init_relational_schema(conn):
 
 
 def init_db():
-    with connect_db() as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS app_state (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )
-            """
-        )
-        init_relational_schema(conn)
-        placeholder = db_placeholder()
-        row = conn.execute(
-            f"SELECT key FROM app_state WHERE key = {placeholder}",
-            (STATE_KEY,),
-        ).fetchone()
-        if row is None:
-            save_data(initial_data(), conn)
-        conn.commit()
+    init_app_state_db(connect_db, init_relational_schema, db_placeholder(), STATE_KEY, initial_data, save_data)
 
 
 def save_app_value(key, value, conn=None):
-    payload = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
-    now = datetime.now(timezone.utc).isoformat()
-    owns_connection = conn is None
-    if owns_connection:
-        conn = connect_db()
-    try:
-        placeholder = db_placeholder()
-        conn.execute(
-            f"""
-            INSERT INTO app_state (key, value, updated_at)
-            VALUES ({placeholder}, {placeholder}, {placeholder})
-            ON CONFLICT(key) DO UPDATE SET
-                value = excluded.value,
-                updated_at = excluded.updated_at
-            """,
-            (key, payload, now),
-        )
-        conn.commit()
-    finally:
-        if owns_connection:
-            conn.close()
+    save_app_value_impl(key, value, connect_db, db_placeholder(), conn)
 
 
 def load_app_value(key):
-    init_db()
-    with connect_db() as conn:
-        placeholder = db_placeholder()
-        row = conn.execute(
-            f"SELECT value FROM app_state WHERE key = {placeholder}",
-            (key,),
-        ).fetchone()
-    return row["value"] if row else ""
+    return load_app_value_impl(key, init_db, connect_db, db_placeholder())
 
 
 def delete_app_value(key):
-    init_db()
-    with connect_db() as conn:
-        placeholder = db_placeholder()
-        conn.execute(f"DELETE FROM app_state WHERE key = {placeholder}", (key,))
-        conn.commit()
+    delete_app_value_impl(key, init_db, connect_db, db_placeholder())
 
 
 def save_data(data, conn=None):
@@ -473,26 +406,7 @@ def data_source_channel_code(source):
 
 
 def upsert_row(conn, table, values, conflict_cols, update_cols=None):
-    placeholder = db_placeholder()
-    columns = list(values.keys())
-    placeholders = ", ".join([placeholder] * len(columns))
-    column_sql = ", ".join(columns)
-    conflict_sql = ", ".join(conflict_cols)
-    if update_cols is None:
-        update_cols = [column for column in columns if column not in conflict_cols]
-    if update_cols:
-        update_sql = ", ".join(f"{column} = excluded.{column}" for column in update_cols)
-        conflict_action = f"DO UPDATE SET {update_sql}"
-    else:
-        conflict_action = "DO NOTHING"
-    conn.execute(
-        f"""
-        INSERT INTO {table} ({column_sql})
-        VALUES ({placeholders})
-        ON CONFLICT({conflict_sql}) {conflict_action}
-        """,
-        tuple(values[column] for column in columns),
-    )
+    upsert_row_impl(conn, table, values, conflict_cols, db_placeholder(), update_cols)
 
 
 def record_sync_run(source, status, started_at, finished_at=None, duration_seconds=None, product_code="", country_code="", records_count=0, error="", meta=None):
