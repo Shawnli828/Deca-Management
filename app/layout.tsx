@@ -2,6 +2,7 @@ import './globals.css';
 import './side-menu.css';
 import './auth.css';
 import './database-api.css';
+import './account-pool.css';
 import './dark-theme.css';
 import './light-theme.css';
 import './cloud-phone.css';
