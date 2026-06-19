@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import parse_qs, quote, unquote, urlencode, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
 from server_modules.time_windows import (
@@ -101,11 +101,14 @@ from server_modules.museon_client import (
     museon_request as museon_request_impl,
 )
 from server_modules.mixpanel_utils import (
-    mixpanel_distinct_id,
-    mixpanel_export_base_url,
     mixpanel_segmentation_unique_from_payload,
     product_mixpanel_config,
     product_mixpanel_event_name,
+)
+from server_modules.mixpanel_client import (
+    mixpanel_event_business_material_counts as mixpanel_event_business_material_counts_impl,
+    mixpanel_event_daily_counts as mixpanel_event_daily_counts_impl,
+    mixpanel_event_user_unique_query_count as mixpanel_event_user_unique_query_count_impl,
 )
 from server_modules.api_keys import (
     create_external_api_key_record,
@@ -2750,205 +2753,47 @@ def product_business_growth_daily_stats(product_code, windows):
 
 
 def mixpanel_event_daily_counts(config, event_name, utc_start, utc_end, value_type="general"):
-    project_id = (config or {}).get("project_id", "")
-    username = (config or {}).get("username", "")
-    secret = (config or {}).get("secret", "")
-    region = (config or {}).get("region", MIXPANEL_REGION)
-    if not project_id or not username or not secret or not event_name:
-        return {}
-    start_epoch = int(utc_start.timestamp())
-    end_epoch = int(utc_end.timestamp())
-    source_date_from, source_date_to = source_dates_for_utc_window(utc_start, utc_end, mixpanel_timezone(), clamp_to_today=True)
-    if not source_date_from or source_date_from > source_date_to:
-        return {}
-    params = urlencode({
-        "project_id": project_id,
-        "event": json.dumps([event_name], ensure_ascii=False),
-        "from_date": source_date_from,
-        "to_date": source_date_to,
-    })
-    credentials = f"{username}:{secret}".encode("utf-8")
-    request = Request(
-        f"{mixpanel_export_base_url(region)}?{params}",
-        headers={
-            "Authorization": "Basic " + base64.b64encode(credentials).decode("ascii"),
-            "Accept": "text/plain",
-        },
+    return mixpanel_event_daily_counts_impl(
+        config,
+        event_name,
+        utc_start,
+        utc_end,
+        value_type,
+        default_region=MIXPANEL_REGION,
+        mixpanel_timezone=mixpanel_timezone,
+        source_dates_for_utc_window=source_dates_for_utc_window,
+        report_date_for_utc_datetime=report_date_for_utc_datetime,
+        make_ssl_context=make_ssl_context,
     )
-    try:
-        with urlopen(request, timeout=60, context=make_ssl_context()) as response:
-            payload = response.read().decode("utf-8")
-    except HTTPError as error:
-        detail = error.read().decode("utf-8", errors="ignore")[:240]
-        raise RuntimeError(f"Mixpanel query failed: {error.code} {detail}") from error
-    except (URLError, TimeoutError) as error:
-        raise RuntimeError(f"Mixpanel query failed: {error}") from error
-    totals = {}
-    unique_ids = {}
-    for line in payload.splitlines():
-        if not line.strip():
-            continue
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(event, dict) and event.get("event") != event_name:
-            continue
-        properties = event.get("properties") if isinstance(event, dict) else {}
-        if not isinstance(properties, dict):
-            properties = {}
-        raw_time = properties.get("time", event.get("time") if isinstance(event, dict) else None)
-        try:
-            timestamp = float(raw_time)
-        except (TypeError, ValueError):
-            continue
-        if timestamp > 10_000_000_000:
-            timestamp = timestamp / 1000
-        if timestamp < start_epoch or timestamp >= end_epoch:
-            continue
-        report_date = report_date_for_utc_datetime(datetime.fromtimestamp(timestamp, timezone.utc))
-        if not report_date:
-            continue
-        totals[report_date] = totals.get(report_date, 0) + 1
-        distinct_id = mixpanel_distinct_id(event, properties)
-        if distinct_id:
-            unique_ids.setdefault(report_date, set()).add(distinct_id)
-    if value_type == "unique":
-        return {report_date: len(ids) for report_date, ids in unique_ids.items()}
-    return totals
 
 
 def mixpanel_event_business_material_counts(config, event_name, utc_start, utc_end, value_type="general", date_mapper=None):
-    project_id = (config or {}).get("project_id", "")
-    username = (config or {}).get("username", "")
-    secret = (config or {}).get("secret", "")
-    region = (config or {}).get("region", MIXPANEL_REGION)
-    if not project_id or not username or not secret or not event_name:
-        return {}
-    start_epoch = int(utc_start.timestamp())
-    end_epoch = int(utc_end.timestamp())
-    source_date_from, source_date_to = source_dates_for_utc_window(utc_start, utc_end, mixpanel_timezone(), clamp_to_today=True)
-    if not source_date_from or source_date_from > source_date_to:
-        return {}
-    params = urlencode({
-        "project_id": project_id,
-        "event": json.dumps([event_name], ensure_ascii=False),
-        "from_date": source_date_from,
-        "to_date": source_date_to,
-    })
-    credentials = f"{username}:{secret}".encode("utf-8")
-    request = Request(
-        f"{mixpanel_export_base_url(region)}?{params}",
-        headers={
-            "Authorization": "Basic " + base64.b64encode(credentials).decode("ascii"),
-            "Accept": "text/plain",
-        },
+    return mixpanel_event_business_material_counts_impl(
+        config,
+        event_name,
+        utc_start,
+        utc_end,
+        value_type,
+        date_mapper,
+        default_region=MIXPANEL_REGION,
+        mixpanel_timezone=mixpanel_timezone,
+        source_dates_for_utc_window=source_dates_for_utc_window,
+        business_material_date_for_utc_datetime=business_material_date_for_utc_datetime,
+        make_ssl_context=make_ssl_context,
     )
-    try:
-        with urlopen(request, timeout=60, context=make_ssl_context()) as response:
-            payload = response.read().decode("utf-8")
-    except HTTPError as error:
-        detail = error.read().decode("utf-8", errors="ignore")[:240]
-        raise RuntimeError(f"Mixpanel query failed: {error.code} {detail}") from error
-    except (URLError, TimeoutError) as error:
-        raise RuntimeError(f"Mixpanel query failed: {error}") from error
-    totals = {}
-    unique_ids = {}
-    for line in payload.splitlines():
-        if not line.strip():
-            continue
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(event, dict) and event.get("event") != event_name:
-            continue
-        properties = event.get("properties") if isinstance(event, dict) else {}
-        if not isinstance(properties, dict):
-            properties = {}
-        raw_time = properties.get("time", event.get("time") if isinstance(event, dict) else None)
-        try:
-            timestamp = float(raw_time)
-        except (TypeError, ValueError):
-            continue
-        if timestamp > 10_000_000_000:
-            timestamp = timestamp / 1000
-        if timestamp < start_epoch or timestamp >= end_epoch:
-            continue
-        mapper = date_mapper or business_material_date_for_utc_datetime
-        report_date = mapper(datetime.fromtimestamp(timestamp, timezone.utc))
-        if not report_date:
-            continue
-        totals[report_date] = totals.get(report_date, 0) + 1
-        distinct_id = mixpanel_distinct_id(event, properties)
-        if distinct_id:
-            unique_ids.setdefault(report_date, set()).add(distinct_id)
-    if value_type == "unique":
-        return {report_date: len(ids) for report_date, ids in unique_ids.items()}
-    return totals
 
 
 def mixpanel_event_user_unique_query_count(config, event_name, utc_start, utc_end):
-    project_id = (config or {}).get("project_id", "")
-    username = (config or {}).get("username", "")
-    secret = (config or {}).get("secret", "")
-    region = (config or {}).get("region", MIXPANEL_REGION)
-    if not project_id or not username or not secret or not event_name:
-        return None
-    start_epoch = int(utc_start.timestamp())
-    end_epoch = int(utc_end.timestamp())
-    source_date_from, source_date_to = source_dates_for_utc_window(utc_start, utc_end, mixpanel_timezone(), clamp_to_today=True)
-    if not source_date_from or source_date_from > source_date_to:
-        return None
-    params = urlencode({
-        "project_id": project_id,
-        "event": json.dumps([event_name], ensure_ascii=False),
-        "from_date": source_date_from,
-        "to_date": source_date_to,
-    })
-    credentials = f"{username}:{secret}".encode("utf-8")
-    request = Request(
-        f"{mixpanel_export_base_url(region)}?{params}",
-        headers={
-            "Authorization": "Basic " + base64.b64encode(credentials).decode("ascii"),
-            "Accept": "text/plain",
-        },
+    return mixpanel_event_user_unique_query_count_impl(
+        config,
+        event_name,
+        utc_start,
+        utc_end,
+        default_region=MIXPANEL_REGION,
+        mixpanel_timezone=mixpanel_timezone,
+        source_dates_for_utc_window=source_dates_for_utc_window,
+        make_ssl_context=make_ssl_context,
     )
-    try:
-        with urlopen(request, timeout=60, context=make_ssl_context()) as response:
-            payload = response.read().decode("utf-8")
-    except HTTPError as error:
-        detail = error.read().decode("utf-8", errors="ignore")[:240]
-        raise RuntimeError(f"Mixpanel Export API failed: {error.code} {detail}") from error
-    except (URLError, TimeoutError) as error:
-        raise RuntimeError(f"Mixpanel Export API failed: {error}") from error
-
-    unique_ids = set()
-    for line in payload.splitlines():
-        if not line.strip():
-            continue
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(event, dict) and event.get("event") != event_name:
-            continue
-        properties = event.get("properties") if isinstance(event, dict) else {}
-        if not isinstance(properties, dict):
-            properties = {}
-        raw_time = properties.get("time", event.get("time") if isinstance(event, dict) else None)
-        try:
-            timestamp = float(raw_time)
-        except (TypeError, ValueError):
-            continue
-        if timestamp > 10_000_000_000:
-            timestamp = timestamp / 1000
-        if timestamp < start_epoch or timestamp >= end_epoch:
-            continue
-        distinct_id = mixpanel_distinct_id(event, properties)
-        if distinct_id:
-            unique_ids.add(distinct_id)
-    return len(unique_ids)
 
 
 def mixpanel_event_total(config, event_name, utc_start, utc_end, value_type="general"):
