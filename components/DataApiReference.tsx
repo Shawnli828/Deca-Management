@@ -1,27 +1,11 @@
 'use client';
 
-const baseUrl = 'https://deca-management.vercel.app';
-
-const authCurl = `curl -X GET ${baseUrl}/api/data/query?resource=summary \\
-  -H "Authorization: Bearer YOUR_DECA_API_KEY"`;
-
-const accountsCurl = `curl "${baseUrl}/api/data/query?resource=accounts&product_code=DB&country_code=GE&days=7" \\
-  -H "Authorization: Bearer YOUR_DECA_API_KEY"`;
-
-const postsCurl = `curl "${baseUrl}/api/data/query?resource=posts&product_code=DB&country_code=GE&date_from=2026-04-30&limit=50" \\
-  -H "Authorization: Bearer YOUR_DECA_API_KEY"`;
-
-const resourceCatalog = [
-  ['summary', '中台总览数据'],
-  ['countries', '产品 × 国家汇总'],
-  ['accounts', '账号摘要列表'],
-  ['account_posts', '单账号分页 posts'],
-  ['posts', '详细 post rows'],
-  ['materials', '素材/video rows'],
-  ['daily_metrics', '每日快照趋势'],
-  ['top_posts', '高表现内容'],
-  ['country_cards', '兼容旧卡片结构']
-];
+import {
+  dataApiBaseUrl,
+  dataApiExamples,
+  dataApiResourceCatalog,
+  dataApiResponseExamples
+} from '../lib/dataApiReferenceContent';
 
 export function DataApiReference({ onCopy }: { onCopy: (value: string) => void }) {
   return (
@@ -50,13 +34,13 @@ export function DataApiReference({ onCopy }: { onCopy: (value: string) => void }
         </div>
         <div className="api-base-card">
           <span>Base URL</span>
-          <code>{baseUrl}</code>
+          <code>{dataApiBaseUrl}</code>
           <small>所有 `/api/data/query` 请求只读本地数据库，不会调用 ReelFarm。</small>
         </div>
       </section>
 
       <section className="api-resource-catalog" aria-label="Supported resources">
-        {resourceCatalog.map(([resource, description]) => (
+        {dataApiResourceCatalog.map(([resource, description]) => (
           <div className="api-resource-card" key={resource}>
             <code>{resource}</code>
             <span>{description}</span>
@@ -76,8 +60,8 @@ export function DataApiReference({ onCopy }: { onCopy: (value: string) => void }
         </div>
         <div className="api-code-card">
           <div className="api-code-head">Example Request</div>
-          <pre>{authCurl}</pre>
-          <button className="btn ghost" type="button" onClick={() => onCopy(authCurl)}>复制</button>
+          <pre>{dataApiExamples.authCurl}</pre>
+          <button className="btn ghost" type="button" onClick={() => onCopy(dataApiExamples.authCurl)}>复制</button>
         </div>
       </section>
 
@@ -90,16 +74,7 @@ export function DataApiReference({ onCopy }: { onCopy: (value: string) => void }
         </div>
         <div className="api-code-card">
           <div className="api-code-head">Response · 200</div>
-          <pre>{`{
-  "ok": true,
-  "resource": "summary",
-  "data": {
-    "products": 3,
-    "accounts": 234,
-    "posts": 8026,
-    "total_views": 123456
-  }
-}`}</pre>
+          <pre>{dataApiResponseExamples.summary}</pre>
         </div>
       </section>
 
@@ -117,8 +92,8 @@ export function DataApiReference({ onCopy }: { onCopy: (value: string) => void }
         </div>
         <div className="api-code-card">
           <div className="api-code-head">Example Request</div>
-          <pre>{accountsCurl}</pre>
-          <button className="btn ghost" type="button" onClick={() => onCopy(accountsCurl)}>复制</button>
+          <pre>{dataApiExamples.accountsCurl}</pre>
+          <button className="btn ghost" type="button" onClick={() => onCopy(dataApiExamples.accountsCurl)}>复制</button>
         </div>
       </section>
 
@@ -136,8 +111,8 @@ export function DataApiReference({ onCopy }: { onCopy: (value: string) => void }
         </div>
         <div className="api-code-card">
           <div className="api-code-head">Example Request</div>
-          <pre>{postsCurl}</pre>
-          <button className="btn ghost" type="button" onClick={() => onCopy(postsCurl)}>复制</button>
+          <pre>{dataApiExamples.postsCurl}</pre>
+          <button className="btn ghost" type="button" onClick={() => onCopy(dataApiExamples.postsCurl)}>复制</button>
         </div>
       </section>
 
@@ -150,8 +125,7 @@ export function DataApiReference({ onCopy }: { onCopy: (value: string) => void }
         </div>
         <div className="api-code-card">
           <div className="api-code-head">Example Request</div>
-          <pre>{`curl "${baseUrl}/api/data/query?resource=account_posts&product_code=DB&country_code=GE&account_id=user123&limit=4&offset=0" \\
-  -H "Authorization: Bearer YOUR_DECA_API_KEY"`}</pre>
+          <pre>{dataApiExamples.accountPostsCurl}</pre>
         </div>
       </section>
 
@@ -164,8 +138,7 @@ export function DataApiReference({ onCopy }: { onCopy: (value: string) => void }
         </div>
         <div className="api-code-card">
           <div className="api-code-head">Example Request</div>
-          <pre>{`curl "${baseUrl}/api/data/query?resource=materials&product_code=DB&country_code=GE&limit=50" \\
-  -H "Authorization: Bearer YOUR_DECA_API_KEY"`}</pre>
+          <pre>{dataApiExamples.materialsCurl}</pre>
         </div>
       </section>
 
@@ -178,8 +151,7 @@ export function DataApiReference({ onCopy }: { onCopy: (value: string) => void }
         </div>
         <div className="api-code-card">
           <div className="api-code-head">Example Request</div>
-          <pre>{`curl "${baseUrl}/api/data/query?resource=daily_metrics&product_code=DB&country_code=GE&days=7" \\
-  -H "Authorization: Bearer YOUR_DECA_API_KEY"`}</pre>
+          <pre>{dataApiExamples.dailyMetricsCurl}</pre>
         </div>
       </section>
 
@@ -192,8 +164,7 @@ export function DataApiReference({ onCopy }: { onCopy: (value: string) => void }
         </div>
         <div className="api-code-card">
           <div className="api-code-head">Example Request</div>
-          <pre>{`curl "${baseUrl}/api/data/query?resource=top_posts&product_code=DB&country_code=GE&metric=view_count&limit=20" \\
-  -H "Authorization: Bearer YOUR_DECA_API_KEY"`}</pre>
+          <pre>{dataApiExamples.topPostsCurl}</pre>
         </div>
       </section>
 
@@ -209,10 +180,7 @@ export function DataApiReference({ onCopy }: { onCopy: (value: string) => void }
         </div>
         <div className="api-code-card">
           <div className="api-code-head">Error Response</div>
-          <pre>{`{
-  "ok": false,
-  "error": "Unauthorized"
-}`}</pre>
+          <pre>{dataApiResponseExamples.error}</pre>
         </div>
       </section>
 
