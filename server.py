@@ -81,8 +81,10 @@ from server_modules.reelfarm_client import (
     compact_post as compact_post_impl,
     compact_video as compact_video_impl,
     list_payload as list_payload_impl,
+    reelfarm_creator_count as reelfarm_creator_count_impl,
     reelfarm_fetch_automations as reelfarm_fetch_automations_impl,
     reelfarm_matches as reelfarm_matches_impl,
+    reelfarm_material_count as reelfarm_material_count_impl,
     reelfarm_product_automation_ids as reelfarm_product_automation_ids_impl,
     reelfarm_request as reelfarm_request_impl,
     video_identifier as video_identifier_impl,
@@ -1119,37 +1121,11 @@ def reelfarm_matches(prefix, automations=None):
 
 
 def reelfarm_creator_count(result):
-    cards = result.get("cards", []) if isinstance(result, dict) else []
-    creator_keys = set()
-    for card in cards:
-        if not isinstance(card, dict):
-            continue
-
-        account = card.get("account") if isinstance(card.get("account"), dict) else {}
-        automation = card.get("automation") if isinstance(card.get("automation"), dict) else {}
-        creator_key = str(
-            account.get("tiktok_account_id")
-            or automation.get("tiktok_account_id")
-            or account.get("account_username")
-            or account.get("username")
-            or account.get("account_name")
-            or automation.get("automation_id")
-            or automation.get("title")
-            or ""
-        ).strip()
-        if creator_key:
-            creator_keys.add(creator_key)
-
-    return len(creator_keys)
+    return reelfarm_creator_count_impl(result)
 
 
 def reelfarm_material_count(result):
-    cards = result.get("cards", []) if isinstance(result, dict) else []
-    return sum(
-        len(card.get("videos", []) or [])
-        for card in cards
-        if isinstance(card, dict)
-    )
+    return reelfarm_material_count_impl(result)
 
 
 def sync_all_reelfarm_records():

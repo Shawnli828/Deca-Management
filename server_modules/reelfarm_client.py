@@ -273,3 +273,37 @@ def reelfarm_matches(prefix, automations=None, *, fetch_automations_fn, request_
         cards = list(executor.map(build_card, matched))
 
     return {"prefix": clean_prefix, "matched_prefixes": candidates, "count": len(cards), "cards": cards}
+
+
+def reelfarm_creator_count(result):
+    cards = result.get("cards", []) if isinstance(result, dict) else []
+    creator_keys = set()
+    for card in cards:
+        if not isinstance(card, dict):
+            continue
+
+        account = card.get("account") if isinstance(card.get("account"), dict) else {}
+        automation = card.get("automation") if isinstance(card.get("automation"), dict) else {}
+        creator_key = str(
+            account.get("tiktok_account_id")
+            or automation.get("tiktok_account_id")
+            or account.get("account_username")
+            or account.get("username")
+            or account.get("account_name")
+            or automation.get("automation_id")
+            or automation.get("title")
+            or ""
+        ).strip()
+        if creator_key:
+            creator_keys.add(creator_key)
+
+    return len(creator_keys)
+
+
+def reelfarm_material_count(result):
+    cards = result.get("cards", []) if isinstance(result, dict) else []
+    return sum(
+        len(card.get("videos", []) or [])
+        for card in cards
+        if isinstance(card, dict)
+    )
