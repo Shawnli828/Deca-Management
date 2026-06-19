@@ -2,11 +2,20 @@
 
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import { accountSummaryToCard, mergePostRowsIntoCard } from '@/lib/reelfarmCardAdapters';
+import { accountSummaryToCard } from '@/lib/reelfarmCardAdapters';
+import {
+  buildAccountPostCacheKey,
+  findReelFarmCard,
+  getCardAccountId,
+  getCardPostAccountId,
+  mergeAccountPostRowsIntoResults,
+  setReelFarmCardPostError,
+  updateReelFarmCardTags,
+  type ReelFarmPostPagination
+} from '@/lib/reelFarmDashboardState';
 import type { Country, Product, ReelFarmCard, ReelFarmResult } from '@/lib/types';
 import {
   buildCountryAutomationPrefix,
-  cardStateKey,
   getCountryReelFarmCode,
   getProductReelFarmCode
 } from '@/lib/utils';
@@ -15,12 +24,7 @@ type PageState = 'products' | 'product' | 'country';
 
 type PostCacheEntry = {
   data: any[];
-  pagination: {
-    limit: number;
-    offset: number;
-    has_more: boolean;
-    total?: number;
-  };
+  pagination: ReelFarmPostPagination;
 };
 
 type UseReelFarmDashboardOptions = {
@@ -57,11 +61,6 @@ export function useReelFarmDashboard({
     setSlideIndexes({});
   }
 
-  function getCardAccountId(card: ReelFarmCard) {
-    const account = card.account || {};
-    return String(account.id || account.account_id || '').trim();
-  }
-
   async function loadProductTags(product = selectedProduct) {
     if (!product) return [];
     const productCode = getProductReelFarmCode(product);
@@ -92,16 +91,7 @@ export function useReelFarmDashboard({
   }
 
   function updateCardTags(accountId: string, updater: (tags: string[]) => string[]) {
-    setReelFarmResults(prev => {
-      const next = { ...prev };
-      for (const [prefix, result] of Object.entries(next)) {
-        next[prefix] = {
-          ...result,
-          cards: result.cards.map(card => getCardAccountId(card) === accountId ? { ...card, tags: updater(card.tags || []) } : card)
-        };
-      }
-      return next;
-    });
+    setReelFarmResults(prev => updateReelFarmCardTags(prev, accountId, updater));
   }
 
   async function addCardTag(card: ReelFarmCard, tag: string) {
@@ -126,11 +116,7 @@ export function useReelFarmDashboard({
   }
 
   function findCard(cardKey: string) {
-    for (const result of Object.values(reelFarmResults)) {
-      const card = result.cards.find(item => cardStateKey(item) === cardKey);
-      if (card) return card;
-    }
-    return null;
+    return findReelFarmCard(reelFarmResults, cardKey);
   }
 
   async function loadPosts(cardKey: string, offset = 0) {
@@ -138,25 +124,12 @@ export function useReelFarmDashboard({
     const country = selectedCountry;
     const card = findCard(cardKey);
     if (!product || !country || !card) return;
-    const account = card.account || {};
-    const accountId = account.id || account.account_id || account.reelfarm_account_id || account.tiktok_account_id || account.username || account.account_username || '';
-    const cacheKey = [getProductReelFarmCode(product), getCountryReelFarmCode(country), accountId, days, offset].join('|');
+    const accountId = getCardPostAccountId(card);
+    const cacheKey = buildAccountPostCacheKey(product, country, String(accountId), days, offset);
     const cached = postCache[cacheKey];
 
-    function updateCard(data: any[], pagination: PostCacheEntry['pagination']) {
-      const prefix = buildCountryAutomationPrefix(product, country);
-      setReelFarmResults(prev => {
-        const result = prev[prefix];
-        if (!result) return prev;
-        const cards = result.cards.map(item => {
-          if (cardStateKey(item) !== cardKey) return item;
-          const clone = structuredClone(item);
-          mergePostRowsIntoCard(clone, data);
-          clone.pagination = pagination;
-          return clone;
-        });
-        return { ...prev, [prefix]: { ...result, cards } };
-      });
+    function updateCard(data: any[], pagination: ReelFarmPostPagination) {
+      setReelFarmResults(prev => mergeAccountPostRowsIntoResults({ results: prev, product, country, cardKey, data, pagination }));
     }
 
     if (cached) {
@@ -171,13 +144,13 @@ export function useReelFarmDashboard({
       setPostCache(prev => ({ ...prev, [cacheKey]: { data: payload.data || [], pagination } }));
       updateCard(payload.data || [], pagination);
     } catch (error: any) {
-      setReelFarmResults(prev => {
-        const prefix = buildCountryAutomationPrefix(product, country);
-        const result = prev[prefix];
-        if (!result) return prev;
-        const cards = result.cards.map(item => cardStateKey(item) === cardKey ? { ...item, errors: { videos: null, posts: error?.message || 'Posts loading failed.' } } : item);
-        return { ...prev, [prefix]: { ...result, cards } };
-      });
+      setReelFarmResults(prev => setReelFarmCardPostError({
+        results: prev,
+        product,
+        country,
+        cardKey,
+        message: error?.message || 'Posts loading failed.'
+      }));
     } finally {
       setPostLoading(prev => {
         const next = { ...prev };
