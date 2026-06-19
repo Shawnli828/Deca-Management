@@ -1,57 +1,27 @@
 'use client';
 
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
 import { defaultDateRange } from '@/lib/dateRange';
 import type { AccountSummary, Country, DetailedPostRow, Product, ProductKpis } from '@/lib/types';
-import { countryFlag, formatNumber, formatUtcReadable, getCountryReelFarmCode, getProductReelFarmCode } from '@/lib/utils';
-import { ACCOUNT_POST_PAGE_SIZE, AccountPostPanel, type AccountPostState } from './CountryAccountPosts';
+import { countryFlag, formatNumber, getCountryReelFarmCode, getProductReelFarmCode } from '@/lib/utils';
+import {
+  type AccountPoolRow,
+  type ViewSortDirection,
+  getAccountAvgViews,
+  getAccountPoolPerformanceMetrics,
+  getAccountRowKey,
+  getPublishMethod
+} from './AccountPoolHelpers';
+import { AccountPoolTable } from './AccountPoolTable';
+import { ACCOUNT_POST_PAGE_SIZE, type AccountPostState } from './CountryAccountPosts';
 import {
   AccountTagEditorModal,
   CategoryTagFilter,
-  accountTagStyle,
-  nonIssueTags,
-  type AccountTagRow,
   type TagFilterRow
 } from './CountryAccountTags';
 import { DateRangeFilter } from './DateRangeFilter';
 import { formatTagLabel, getTagCategory } from './ReelFarmAccountCard';
-
-type AccountPoolRow = AccountTagRow;
-type ViewSortDirection = 'none' | 'desc' | 'asc';
-
-function getAccountAvgViews(row: AccountPoolRow) {
-  const posts = Number(row.post_count) || 0;
-  if (!posts) return 0;
-  return Math.round((Number(row.total_views) || 0) / posts);
-}
-
-function getAutomationDisplay(row: AccountPoolRow, dataSource: 'reelfarm' | 'museon_clone') {
-  const names = String(row.automation_names || row.automation_name || '').trim();
-  if (names) return names;
-  return dataSource === 'museon_clone' ? 'api' : 'rpa';
-}
-
-function getPublishMethod(row: AccountPoolRow, dataSource: 'reelfarm' | 'museon_clone') {
-  const storedMethod = String(row.publish_method || '').trim().toLowerCase();
-  if (['manual', 'api', 'rpa'].includes(storedMethod)) return storedMethod;
-
-  const postMode = String(row.post_mode || '').trim().toUpperCase();
-  if (postMode === 'MEDIA_UPLOAD') return 'manual';
-  if (postMode === 'DIRECT_POST') return 'api';
-  if (postMode === 'RPA') return 'rpa';
-
-  const sourceText = [
-    row.data_source,
-    row.automation_names,
-    row.automation_name,
-    row.campaign_name
-  ].filter(Boolean).join(' ').toLowerCase();
-  if (sourceText.includes('manual')) return 'manual';
-  if (sourceText.includes('api') || sourceText.includes('museon')) return 'api';
-  if (sourceText.includes('rpa') || sourceText.includes('reelfarm')) return 'rpa';
-  return dataSource === 'museon_clone' ? 'api' : 'rpa';
-}
 
 export function CountryList({
   product,
@@ -150,7 +120,7 @@ export function CountryList({
   }, [product.id, dataSource, dateFrom, dateTo]);
 
   function accountRowKey(row: AccountPoolRow) {
-    return `${row.country.id}:${row.account_id}:${dateFrom || 'start'}:${dateTo || 'end'}`;
+    return getAccountRowKey(row, dateFrom, dateTo);
   }
 
   async function loadAccountPosts(row: AccountPoolRow, offset = 0) {
@@ -313,35 +283,7 @@ export function CountryList({
   }
 
   const statusOptions = Array.from(new Set(rows.map(row => String(row.status || 'unknown').toLowerCase()))).sort();
-  const performanceMetrics = useMemo(() => {
-    const hasAccountCoverageFields = filteredRows.some(
-      row => row.posted_account_count !== undefined || row.expected_account_count !== undefined
-    );
-    const postedAccounts = hasAccountCoverageFields
-      ? filteredRows.reduce((sum, row) => sum + (Number(row.posted_account_count) || 0), 0)
-      : filteredRows.filter(row => (Number(row.post_count) || 0) > 0).length;
-    const expectedAccounts = hasAccountCoverageFields
-      ? filteredRows.reduce((sum, row) => sum + (Number(row.expected_account_count) || 0), 0)
-      : filteredRows.length;
-    const posts = filteredRows.reduce((sum, row) => sum + (Number(row.post_count) || 0), 0);
-    const views = filteredRows.reduce((sum, row) => sum + (Number(row.total_views) || 0), 0);
-    const likes = filteredRows.reduce((sum, row) => sum + (Number(row.total_likes) || 0), 0);
-    const comments = filteredRows.reduce((sum, row) => sum + (Number(row.total_comments) || 0), 0);
-    const shares = filteredRows.reduce((sum, row) => sum + (Number(row.total_shares) || 0), 0);
-    const avgViews = posts ? Math.round(views / posts) : 0;
-    const engagement = views ? ((likes + comments + shares) / views) * 100 : 0;
-
-    return [
-      { label: 'POSTED', value: `${formatNumber(postedAccounts)}/${formatNumber(expectedAccounts)}`, note: 'Posted accounts / expected active accounts' },
-      { label: 'POSTS', value: formatNumber(posts) },
-      { label: 'VIEWS', value: formatNumber(views) },
-      { label: 'AVG VIEWS', value: formatNumber(avgViews), note: 'Filtered total views / filtered posts' },
-      { label: 'LIKES', value: formatNumber(likes) },
-      { label: 'COMMENTS', value: formatNumber(comments) },
-      { label: 'SHARES', value: formatNumber(shares) },
-      { label: 'ENGAGEMENT', value: `${engagement.toFixed(2)}%`, note: '(Likes + comments + shares) / views' }
-    ];
-  }, [filteredRows]);
+  const performanceMetrics = useMemo(() => getAccountPoolPerformanceMetrics(filteredRows), [filteredRows]);
 
   return (
     <section className="page active">
@@ -420,109 +362,20 @@ export function CountryList({
         </div>
       </section>
 
-      <div className="account-pool-table-wrap">
-        <table className="account-pool-table">
-          <thead>
-            <tr>
-              <th><input type="checkbox" aria-label="Select all accounts" /></th>
-              <th>Account</th>
-              <th>
-                <button className="pool-sort-head" type="button" onClick={toggleViewSort} aria-label="Sort by average views">
-                  Avg Views <span>{viewSort === 'asc' ? '↑' : viewSort === 'desc' ? '↓' : '↕'}</span>
-                </button>
-              </th>
-              <th>Automation</th>
-              <th>Publish Method</th>
-              <th>Country</th>
-              <th>Status</th>
-              <th>Posts</th>
-              <th>Tags</th>
-              <th>Issues</th>
-              <th>Synced</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={11} className="pool-empty">Loading accounts...</td></tr>
-            ) : sortedRows.length ? sortedRows.map(row => {
-              const avgViews = getAccountAvgViews(row);
-              const rowKey = accountRowKey(row);
-              const isExpanded = Boolean(expandedAccounts[rowKey]);
-              const automationDisplay = getAutomationDisplay(row, dataSource);
-              const publishMethod = getPublishMethod(row, dataSource);
-              return (
-                <Fragment key={rowKey}>
-                  <tr key={rowKey}>
-                    <td><input type="checkbox" aria-label={`Select ${row.username || row.account_id}`} /></td>
-                    <td>
-                      <div className="pool-account-cell">
-                        <button
-                          className={isExpanded ? 'pool-expand-btn open' : 'pool-expand-btn'}
-                          type="button"
-                          onClick={() => toggleAccount(row)}
-                          aria-label={isExpanded ? 'Close posts' : 'Open posts'}
-                          aria-expanded={isExpanded}
-                        />
-                        <span className="pool-avatar">{row.avatar_url ? <img src={row.avatar_url} alt="" /> : (row.username || '?').slice(0, 2).toUpperCase()}</span>
-                        <span>
-                          <strong>{row.display_name || row.username || 'Unknown'}</strong>
-                          <small>@{String(row.username || row.account_id).replace(/^@/, '')}</small>
-                        </span>
-                      </div>
-                    </td>
-                    <td>{avgViews ? formatNumber(avgViews) : '—'}</td>
-                    <td>
-                      <span className="pool-automation-list" title={automationDisplay}>{automationDisplay}</span>
-                    </td>
-                    <td><span className={`pool-method-pill ${publishMethod}`}>{publishMethod}</span></td>
-                    <td>{countryFlag(row.country)} {row.country.name}</td>
-                    <td><span className="pool-pill">{row.status || 'N/A'}</span></td>
-                    <td>{formatNumber(row.post_count || 0)}</td>
-                    <td>
-                      <div className="pool-tags">
-                        {nonIssueTags(row.tags).map(tag => (
-                          <button
-                            className="pool-tag-chip"
-                            style={accountTagStyle(tag)}
-                            type="button"
-                            key={tag}
-                            onClick={() => removeAccountTag(row, tag)}
-                            title="点击删除这个 Tag"
-                          >
-                            {formatTagLabel(tag)} <span>×</span>
-                          </button>
-                        ))}
-                        <button className="pool-tag-add" type="button" onClick={() => setEditingTagAccountId(row.account_id)} title="添加 Tag">+</button>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="pool-issues">
-                        {(row.issues || []).length ? (row.issues || []).map(issue => (
-                          <span className="pool-issue-badge" key={issue}>{issue}</span>
-                        )) : <span className="pool-issue-empty">—</span>}
-                      </div>
-                    </td>
-                    <td>{row.last_synced_at ? formatUtcReadable(row.last_synced_at) : '—'}</td>
-                  </tr>
-                  {isExpanded ? (
-                    <tr className="account-posts-row" key={`${rowKey}:posts`}>
-                      <td colSpan={11}>
-                        <AccountPostPanel
-                          row={row}
-                          state={postCache[rowKey]}
-                          onPage={offset => loadAccountPosts(row, offset)}
-                        />
-                      </td>
-                    </tr>
-                  ) : null}
-                </Fragment>
-              );
-            }) : (
-              <tr><td colSpan={11} className="pool-empty">No accounts match the current filters.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <AccountPoolTable
+        rows={sortedRows}
+        loading={loading}
+        viewSort={viewSort}
+        dataSource={dataSource}
+        expandedAccounts={expandedAccounts}
+        postCache={postCache}
+        accountRowKey={accountRowKey}
+        onToggleViewSort={toggleViewSort}
+        onToggleAccount={toggleAccount}
+        onPagePosts={loadAccountPosts}
+        onRemoveTag={removeAccountTag}
+        onEditTags={setEditingTagAccountId}
+      />
       {editingTagRow ? (
         <AccountTagEditorModal
           row={editingTagRow}
