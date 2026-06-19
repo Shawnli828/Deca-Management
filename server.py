@@ -88,11 +88,17 @@ from server_modules.automation_naming import (
 from server_modules.museon_utils import (
     museon_account_from_post,
     museon_content_id_from_material_source,
-    museon_list_payload,
-    museon_pagination_total,
     museon_post_images,
     museon_post_metrics,
-    normalize_image_entries,
+)
+from server_modules.museon_client import (
+    museon_all_posts as museon_all_posts_impl,
+    museon_campaigns as museon_campaigns_impl,
+    museon_clone_campaign as museon_clone_campaign_impl,
+    museon_clone_campaigns_for_product as museon_clone_campaigns_for_product_impl,
+    museon_content_download_images as museon_content_download_images_impl,
+    museon_posts as museon_posts_impl,
+    museon_request as museon_request_impl,
 )
 from server_modules.mixpanel_utils import (
     mixpanel_distinct_id,
@@ -3284,138 +3290,66 @@ def delete_account_tag(account_id, tag):
     )
 
 
-_MUSEON_CAMPAIGN_CACHE = {"loaded_at": 0, "campaigns": []}
-
-
 def museon_request(path, params=None):
-    if not MUSEON_API_KEY:
-        raise RuntimeError("MUSEON_API_KEY is not configured.")
-    clean_path = "/" + str(path or "").lstrip("/")
-    query = urlencode(params or {}, doseq=True)
-    url = f"{MUSEON_BASE_URL}{clean_path}" + (f"?{query}" if query else "")
-    request = Request(url, headers={
-        "X-API-KEY": MUSEON_API_KEY,
-        "Accept": "application/json",
-        "User-Agent": MUSEON_USER_AGENT,
-    })
-    try:
-        with urlopen(request, timeout=20, context=make_ssl_context()) as response:
-            raw = response.read().decode("utf-8", errors="replace")
-    except HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"Museon returned HTTP {exc.code}: {detail[:300]}") from exc
-    except URLError as exc:
-        raise RuntimeError(f"Could not reach Museon API: {exc.reason}") from exc
-
-    try:
-        payload = json.loads(raw) if raw else {}
-    except json.JSONDecodeError as exc:
-        raise RuntimeError("Museon returned a non-JSON response.") from exc
-    if isinstance(payload, dict) and payload.get("error"):
-        error = payload.get("error") or {}
-        raise RuntimeError(error.get("message") or error.get("code") or "Museon API error")
-    return payload
+    return museon_request_impl(
+        path,
+        params,
+        api_key=MUSEON_API_KEY,
+        base_url=MUSEON_BASE_URL,
+        user_agent=MUSEON_USER_AGENT,
+        make_ssl_context=make_ssl_context,
+    )
 
 
 def museon_campaigns(force=False):
-    now = time.time()
-    if not force and _MUSEON_CAMPAIGN_CACHE["campaigns"] and now - _MUSEON_CAMPAIGN_CACHE["loaded_at"] < 300:
-        return _MUSEON_CAMPAIGN_CACHE["campaigns"]
-
-    campaigns = []
-    page = 1
-    while page <= 20:
-        payload = museon_request(
-            "/campaigns",
-            {"workspace_id": MUSEON_WORKSPACE_ID, "page": page, "page_size": 100},
-        )
-        items = museon_list_payload(payload)
-        campaigns.extend([item for item in items if isinstance(item, dict)])
-        pagination = payload.get("pagination") if isinstance(payload, dict) else {}
-        total = int((pagination or {}).get("total") or 0)
-        if not items or (total and len(campaigns) >= total):
-            break
-        page += 1
-
-    _MUSEON_CAMPAIGN_CACHE["campaigns"] = campaigns
-    _MUSEON_CAMPAIGN_CACHE["loaded_at"] = now
-    return campaigns
+    return museon_campaigns_impl(
+        request_fn=museon_request,
+        workspace_id=MUSEON_WORKSPACE_ID,
+        force=force,
+    )
 
 
 def museon_clone_campaign(product_code, country_code):
-    product_code = str(product_code or "").strip().upper()
-    country_code = str(country_code or "").strip().upper()
-    if not product_code or not country_code:
-        return None
-    exact_names = {
-        f"{country_code}-{product_code}-CLONE",
-        f"{product_code}-{country_code}-CLONE",
-        f"{country_code}_{product_code}_CLONE",
-        f"{product_code}_{country_code}_CLONE",
-    }
-    fallback = None
-    for campaign in museon_campaigns():
-        name = str(campaign.get("name") or campaign.get("title") or "").strip()
-        upper_name = name.upper()
-        tokens = {token for token in re.split(r"[^A-Z0-9]+", upper_name) if token}
-        if upper_name in exact_names:
-            return campaign
-        if "CLONE" in tokens and product_code in tokens and country_code in tokens:
-            fallback = fallback or campaign
-    return fallback
+    return museon_clone_campaign_impl(
+        product_code,
+        country_code,
+        campaigns_fn=museon_campaigns,
+    )
 
 
 def museon_clone_campaigns_for_product(product_code, country_code=""):
-    product_code = str(product_code or "").strip().upper()
-    country_code = str(country_code or "").strip().upper()
-    if not product_code:
-        return []
-    if country_code:
-        campaign = museon_clone_campaign(product_code, country_code)
-        return [{"country_code": country_code, "campaign": campaign}] if campaign else []
-
-    contexts = []
-    products = load_data()
-    for product in products if isinstance(products, list) else []:
-        code = str(product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
-        if code != product_code:
-            continue
-        for country in product.get("countries") or []:
-            ccode = str(country.get("reelFarmCode") or COUNTRY_CODES.get(country.get("name"), "") or code_from_name(country.get("name"))).upper()
-            campaign = museon_clone_campaign(product_code, ccode)
-            if campaign:
-                contexts.append({"country_code": ccode, "campaign": campaign})
-        break
-    return contexts
+    return museon_clone_campaigns_for_product_impl(
+        product_code,
+        country_code,
+        products=load_data(),
+        country_codes=COUNTRY_CODES,
+        code_from_name=code_from_name,
+        clone_campaign_fn=museon_clone_campaign,
+    )
 
 
 def museon_posts(campaign_id, date_from="", date_to="", username="", page=1, page_size=100, sort=""):
-    params = {"page": page, "page_size": page_size}
-    if sort:
-        params["sort"] = sort
-    if username:
-        params["username"] = username
-    if date_from:
-        params["published_after"] = post_datetime_bound(date_from)
-    if date_to:
-        params["published_before"] = post_datetime_bound(date_to, end=True)
-    payload = museon_request(f"/campaigns/{quote(str(campaign_id), safe='')}/posts", params)
-    return museon_list_payload(payload), museon_pagination_total(payload)
+    return museon_posts_impl(
+        campaign_id,
+        date_from,
+        date_to,
+        username,
+        page,
+        page_size,
+        sort,
+        request_fn=museon_request,
+        post_datetime_bound=post_datetime_bound,
+    )
 
 
 def museon_all_posts(campaign_id, date_from="", date_to="", max_pages=40):
-    posts = []
-    page = 1
-    total = 0
-    while True:
-        if max_pages and page > max_pages:
-            break
-        items, total = museon_posts(campaign_id, date_from, date_to, page=page, page_size=100)
-        posts.extend([item for item in items if isinstance(item, dict)])
-        if not items or (total and len(posts) >= total):
-            break
-        page += 1
-    return posts
+    return museon_all_posts_impl(
+        campaign_id,
+        date_from,
+        date_to,
+        max_pages,
+        posts_fn=museon_posts,
+    )
 
 
 def local_product_country_context(product_code, country_code):
@@ -3447,22 +3381,7 @@ def reelfarm_account_lookup(product_code, country_code):
 
 
 def museon_content_download_images(content_id):
-    if not content_id:
-        return []
-    try:
-        payload = museon_request(f"/content/{quote(str(content_id), safe='')}/download-urls")
-    except RuntimeError:
-        return []
-    data = payload.get("data") if isinstance(payload, dict) else {}
-    if not isinstance(data, dict):
-        return []
-    values = []
-    for key in ("download_urls", "image_urls", "media_urls"):
-        if isinstance(data.get(key), list):
-            values.extend(data.get(key) or [])
-    if data.get("thumbnail_url"):
-        values.append(data.get("thumbnail_url"))
-    return normalize_image_entries(values)
+    return museon_content_download_images_impl(content_id, request_fn=museon_request)
 
 
 def hydrate_museon_images_for_rows(conn, row_data_list):
