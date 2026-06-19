@@ -201,6 +201,8 @@ from server_modules.product_config import (
     COUNTRY_CODES,
     configured_product_codes as configured_product_codes_impl,
     configured_product_name_map as configured_product_name_map_impl,
+    country_code_for,
+    product_code_for,
     product_country_lookup as product_country_lookup_impl,
 )
 from server_modules.db_core import (
@@ -446,7 +448,7 @@ def project_products_to_relational(data=None, product_code_filter="", market_cod
                 continue
 
             product_id = str(product.get("id") or stable_id("product", product.get("name")))
-            product_code = (product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
+            product_code = product_code_for(product)
             if product_code_filter and product_code != product_code_filter:
                 continue
 
@@ -469,11 +471,7 @@ def project_products_to_relational(data=None, product_code_filter="", market_cod
                 if not isinstance(country, dict):
                     continue
 
-                market_code = (
-                    country.get("reelFarmCode")
-                    or COUNTRY_CODES.get(country.get("name"))
-                    or code_from_name(country.get("name"))
-                ).upper()
+                market_code = country_code_for(country)
                 if market_code_filter and market_code != market_code_filter:
                     continue
 
@@ -740,12 +738,8 @@ def project_synced_country_to_relational(product, country):
     scoped_product = dict(product)
     scoped_country = dict(country)
     scoped_product["countries"] = [scoped_country]
-    product_code = (scoped_product.get("reelFarmCode") or code_from_name(scoped_product.get("name"))).upper()
-    market_code = (
-        scoped_country.get("reelFarmCode")
-        or COUNTRY_CODES.get(scoped_country.get("name"))
-        or code_from_name(scoped_country.get("name"))
-    ).upper()
+    product_code = product_code_for(scoped_product)
+    market_code = country_code_for(scoped_country)
     return project_products_to_relational(
         data=[scoped_product],
         product_code_filter=product_code,
@@ -980,7 +974,7 @@ def enrich_data_with_relational_rollups(data):
     for product in enriched:
         if not isinstance(product, dict):
             continue
-        product_code = (product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
+        product_code = product_code_for(product)
         product.update(product_rollups.get(product_code, {
             "creatorCount": 0,
             "automationCount": 0,
@@ -991,11 +985,7 @@ def enrich_data_with_relational_rollups(data):
         for country in product.get("countries", []) or []:
             if not isinstance(country, dict):
                 continue
-            market_code = (
-                country.get("reelFarmCode")
-                or COUNTRY_CODES.get(country.get("name"))
-                or code_from_name(country.get("name"))
-            ).upper()
+            market_code = country_code_for(country)
             country.update(rollups.get((product_code, market_code), {
                 "creatorCount": 0,
                 "automationCount": 0,
@@ -1151,7 +1141,7 @@ def sync_all_reelfarm_records():
     product_cleanups = []
 
     for product in data:
-        product_code = str(product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
+        product_code = product_code_for(product)
         for country in product.get("countries", []) or []:
             prefix = build_country_automation_prefix(product, country)
             try:
@@ -1198,15 +1188,11 @@ def sync_all_museon_clone_records():
     for product in data:
         if not isinstance(product, dict):
             continue
-        product_code = str(product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
+        product_code = product_code_for(product)
         for country in product.get("countries", []) or []:
             if not isinstance(country, dict):
                 continue
-            country_code = str(
-                country.get("reelFarmCode")
-                or COUNTRY_CODES.get(country.get("name"), "")
-                or code_from_name(country.get("name"))
-            ).upper()
+            country_code = country_code_for(country)
             try:
                 result = sync_museon_clone_country(
                     str(product.get("id") or ""),
@@ -1375,7 +1361,7 @@ def sync_reelfarm_country(prefix, product_id="", country_id="", product_code="",
             scoped_country = dict(country)
             scoped_country["reelFarmResult"] = result
             relational_projection = project_synced_country_to_relational(product, scoped_country)
-            effective_product_code = str(product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
+            effective_product_code = product_code_for(product)
             product_cleanup = cleanup_reelfarm_product_from_latest_automations(
                 effective_product_code,
                 automations,
@@ -1863,7 +1849,7 @@ def query_museon_clone_product_rollups(query):
     results = []
 
     for product in products if isinstance(products, list) else []:
-        product_code = str(product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
+        product_code = product_code_for(product)
         if product_filter and product_code != product_filter:
             continue
         product_row = {
@@ -1878,7 +1864,7 @@ def query_museon_clone_product_rollups(query):
             "countries": [],
         }
         for country in product.get("countries") or []:
-            country_code = str(country.get("reelFarmCode") or COUNTRY_CODES.get(country.get("name"), "") or code_from_name(country.get("name"))).upper()
+            country_code = country_code_for(country)
             if country_filter and country_code != country_filter:
                 continue
             campaign = museon_clone_campaign(product_code, country_code)
@@ -2737,12 +2723,12 @@ def local_product_country_context(product_code, country_code):
     product_context = {"id": None, "code": product_code, "name": product_code}
     country_context = {"id": None, "code": country_code, "name": country_code}
     for product in products if isinstance(products, list) else []:
-        code = str(product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
+        code = product_code_for(product)
         if code != product_code:
             continue
         product_context = {"id": product.get("id"), "code": code, "name": product.get("name") or product_code}
         for country in product.get("countries") or []:
-            ccode = str(country.get("reelFarmCode") or COUNTRY_CODES.get(country.get("name"), "") or code_from_name(country.get("name"))).upper()
+            ccode = country_code_for(country)
             if ccode == country_code:
                 country_context = {"id": country.get("id"), "code": ccode, "name": country.get("name") or country_code}
                 break
@@ -2808,7 +2794,7 @@ def local_product_country_record(product_id="", country_id="", product_code="", 
     for product in load_data():
         if not isinstance(product, dict):
             continue
-        pcode = str(product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
+        pcode = product_code_for(product)
         if product_id and str(product.get("id") or "") != str(product_id):
             continue
         if product_code and pcode != product_code:
@@ -2816,7 +2802,7 @@ def local_product_country_record(product_id="", country_id="", product_code="", 
         for country in product.get("countries") or []:
             if not isinstance(country, dict):
                 continue
-            ccode = str(country.get("reelFarmCode") or COUNTRY_CODES.get(country.get("name"), "") or code_from_name(country.get("name"))).upper()
+            ccode = country_code_for(country)
             if country_id and str(country.get("id") or "") != str(country_id):
                 continue
             if country_code and ccode != country_code:
