@@ -4,11 +4,15 @@ import { publishCheckPeople, sortPublishCheckAssignments, type PublishAssignment
 import type { Product, PublishCheckAssignment, PublishCheckState } from '@/lib/types';
 import {
   AssignmentForm,
-  AssignmentTable,
+  AssignmentTable
+} from './PublishCheckAssignments';
+import {
   PublishCheckHero,
-  PublishCheckWindow,
-  PublishResultPanel
+  PublishCheckWindow
 } from './PublishCheckParts';
+import {
+  PublishResultPanel
+} from './PublishCheckResults';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 
 export function PublishCheckBoard({
