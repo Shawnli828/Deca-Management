@@ -9,7 +9,7 @@ import {
   getPublishMethod
 } from './AccountPoolHelpers';
 import { AccountPostPanel, type AccountPostState } from './CountryAccountPosts';
-import { accountTagStyle, nonIssueTags } from './CountryAccountTags';
+import { accountTagStyle, nonIssueTags } from './CountryAccountTagHelpers';
 import { formatTagLabel } from './ReelFarmAccountCard';
 
 export function AccountPoolTable({

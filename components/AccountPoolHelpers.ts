@@ -1,5 +1,5 @@
 import { formatNumber } from '@/lib/utils';
-import type { AccountTagRow } from './CountryAccountTags';
+import type { AccountTagRow } from './CountryAccountTagHelpers';
 
 export type AccountPoolRow = AccountTagRow;
 export type ViewSortDirection = 'none' | 'desc' | 'asc';

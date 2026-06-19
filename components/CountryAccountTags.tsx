@@ -2,33 +2,25 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { AccountSummary, Country } from '@/lib/types';
 import { composeTag, formatTagLabel, getTagCategory, getTagName } from './ReelFarmAccountCard';
+import {
+  accountTagStyle,
+  categorySuggestions as getCategorySuggestions,
+  generateUiId,
+  nonIssueTags,
+  tagCategories,
+  tagNameSuggestions,
+  tagsForCategory as getTagsForCategory,
+  type AccountTagRow,
+  type TagFilterRow
+} from './CountryAccountTagHelpers';
 
-export type AccountTagRow = AccountSummary & { country: Country; tags?: string[]; issues?: string[] };
-export type TagFilterRow = { id: string; category: string; tags: string[] };
-
-export function nonIssueTags(tags: string[] = []) {
-  return tags.filter(tag => getTagCategory(tag).toLowerCase() !== 'issue');
-}
-
-export function accountTagStyle(value: string) {
-  const palette = [
-    { background: '#dbeafe', borderColor: '#93c5fd', color: '#1d4ed8' },
-    { background: '#dcfce7', borderColor: '#86efac', color: '#15803d' },
-    { background: '#fef3c7', borderColor: '#fbbf24', color: '#92400e' },
-    { background: '#fce7f3', borderColor: '#f9a8d4', color: '#be185d' },
-    { background: '#ede9fe', borderColor: '#c4b5fd', color: '#6d28d9' },
-    { background: '#cffafe', borderColor: '#67e8f9', color: '#0e7490' }
-  ];
-  let hash = 0;
-  for (const char of getTagCategory(value)) hash = char.charCodeAt(0) + ((hash << 5) - hash);
-  return palette[Math.abs(hash) % palette.length];
-}
-
-function generateUiId() {
-  return Math.random().toString(36).slice(2, 10);
-}
+export {
+  accountTagStyle,
+  nonIssueTags,
+  type AccountTagRow,
+  type TagFilterRow
+} from './CountryAccountTagHelpers';
 
 export function CategoryTagFilter({
   tagOptions,
@@ -42,7 +34,7 @@ export function CategoryTagFilter({
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<TagFilterRow[]>(filters);
   const containerRef = useRef<HTMLDivElement>(null);
-  const categories = useMemo(() => Array.from(new Set(tagOptions.map(getTagCategory))).filter(Boolean).sort(), [tagOptions]);
+  const categories = useMemo(() => tagCategories(tagOptions), [tagOptions]);
 
   function openFilter() {
     if (open) {
@@ -74,10 +66,6 @@ export function CategoryTagFilter({
     };
   }, [open]);
 
-  function tagsForCategory(category: string) {
-    return tagOptions.filter(tag => getTagCategory(tag) === category);
-  }
-
   function updateRow(id: string, updater: (row: TagFilterRow) => TagFilterRow) {
     setDraft(previous => previous.map(row => row.id === id ? updater(row) : row));
   }
@@ -105,7 +93,7 @@ export function CategoryTagFilter({
           </div>
           <div className="tag-filter-rows">
             {draft.map(row => {
-              const options = tagsForCategory(row.category);
+              const options = getTagsForCategory(tagOptions, row.category);
               return (
                 <div className="tag-filter-row" key={row.id}>
                   <select
@@ -201,14 +189,10 @@ export function AccountTagEditorModal({
   const tags = fixedCategory
     ? (row.tags || []).filter(tag => getTagCategory(tag).toLowerCase() === fixedCategory.toLowerCase())
     : nonIssueTags(row.tags);
-  const categories = Array.from(new Set(availableTags.map(getTagCategory).filter(Boolean))).sort((a, b) => a.localeCompare(b));
   const normalizedCategory = categoryInput.trim().toLowerCase();
   const tagOptions = availableTags.filter(tag => !normalizedCategory || getTagCategory(tag).toLowerCase() === normalizedCategory);
-  const categorySuggestions = categories.filter(category => !normalizedCategory || category.toLowerCase().includes(normalizedCategory));
-  const normalizedTag = tagInput.trim().toLowerCase();
-  const tagSuggestions = Array.from(new Set(tagOptions.map(getTagName)))
-    .filter(tag => !normalizedTag || tag.toLowerCase().includes(normalizedTag))
-    .sort((a, b) => a.localeCompare(b));
+  const categorySuggestions = getCategorySuggestions(availableTags, categoryInput);
+  const tagSuggestions = tagNameSuggestions(tagOptions, tagInput);
   const canAddTag = Boolean(categoryInput.trim() && tagInput.trim());
 
   function commitTag() {
