@@ -1,4 +1,5 @@
 import './globals.css';
+import './auth.css';
 import './dark-theme.css';
 import './light-theme.css';
 import './cloud-phone.css';
