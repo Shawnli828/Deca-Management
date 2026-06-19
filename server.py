@@ -82,7 +82,13 @@ from server_modules.museon_utils import (
     museon_post_metrics,
     normalize_image_entries,
 )
-from server_modules.mixpanel_utils import mixpanel_segmentation_unique_from_payload
+from server_modules.mixpanel_utils import (
+    mixpanel_distinct_id,
+    mixpanel_export_base_url,
+    mixpanel_segmentation_unique_from_payload,
+    product_mixpanel_config,
+    product_mixpanel_event_name,
+)
 from server_modules.api_keys import (
     create_external_api_key_record,
     external_api_key_authorized as external_api_key_record_authorized,
@@ -132,12 +138,7 @@ MUSEON_BASE_URL = os.environ.get("MUSEON_BASE_URL", "https://api.museon.ai/exter
 MUSEON_API_KEY = os.environ.get("MUSEON_API_KEY", "").strip()
 MUSEON_WORKSPACE_ID = os.environ.get("MUSEON_WORKSPACE_ID", "b5e25f84-b3ed-484b-b467-901a4afcd9c6").strip()
 MUSEON_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/124 Safari/537.36"
-MIXPANEL_SERVICE_ACCOUNT_USERNAME = os.environ.get("MIXPANEL_SERVICE_ACCOUNT_USERNAME", "").strip()
-MIXPANEL_SERVICE_ACCOUNT_SECRET = os.environ.get("MIXPANEL_SERVICE_ACCOUNT_SECRET", "").strip()
-MIXPANEL_PROJECT_ID = os.environ.get("MIXPANEL_PROJECT_ID", "").strip()
 MIXPANEL_REGION = os.environ.get("MIXPANEL_REGION", "standard").strip().lower()
-MIXPANEL_DOWNLOAD_EVENT = os.environ.get("MIXPANEL_DOWNLOAD_EVENT", "Download").strip()
-MIXPANEL_ONBOARDING_EVENT = os.environ.get("MIXPANEL_ONBOARDING_EVENT", "Onboarding Step Viewed").strip()
 REPORT_TIMEZONE_NAME = os.environ.get("REPORT_TIMEZONE", "Asia/Shanghai").strip()
 MIXPANEL_TIMEZONE_NAME = os.environ.get("MIXPANEL_TIMEZONE", "America/Los_Angeles").strip()
 FEISHU_WEBHOOK_URL = os.environ.get("FEISHU_WEBHOOK_URL", "").strip()
@@ -2950,89 +2951,6 @@ def query_museon_clone_product_rollups(query):
     return results
 
 
-def product_mixpanel_config(product_code):
-    code = str(product_code or "").strip().upper()
-    project_id = (
-        os.environ.get(f"MIXPANEL_PROJECT_ID_{code}", "").strip()
-        or os.environ.get(f"{code}_MIXPANEL_PROJECT_ID", "").strip()
-    )
-    username = (
-        os.environ.get(f"MIXPANEL_SERVICE_ACCOUNT_USERNAME_{code}", "").strip()
-        or os.environ.get(f"{code}_MIXPANEL_SERVICE_ACCOUNT_USERNAME", "").strip()
-    )
-    secret = (
-        os.environ.get(f"MIXPANEL_SERVICE_ACCOUNT_SECRET_{code}", "").strip()
-        or os.environ.get(f"{code}_MIXPANEL_SERVICE_ACCOUNT_SECRET", "").strip()
-    )
-    region = (
-        os.environ.get(f"MIXPANEL_REGION_{code}", "").strip().lower()
-        or os.environ.get(f"{code}_MIXPANEL_REGION", "").strip().lower()
-    )
-    has_product_credentials = bool(project_id or username or secret)
-    if has_product_credentials:
-        return {
-            "project_id": project_id,
-            "username": username,
-            "secret": secret,
-            "region": region or MIXPANEL_REGION,
-            "scope": "product",
-        }
-    return {
-        "project_id": MIXPANEL_PROJECT_ID,
-        "username": MIXPANEL_SERVICE_ACCOUNT_USERNAME,
-        "secret": MIXPANEL_SERVICE_ACCOUNT_SECRET,
-        "region": region or MIXPANEL_REGION,
-        "scope": "global",
-    }
-
-
-def product_mixpanel_project_id(product_code):
-    return product_mixpanel_config(product_code)["project_id"]
-
-
-def product_mixpanel_event_name(product_code, event_kind):
-    code = str(product_code or "").strip().upper()
-    kind = str(event_kind or "").strip().upper()
-    default_value = MIXPANEL_ONBOARDING_EVENT if kind == "ONBOARDING" else MIXPANEL_DOWNLOAD_EVENT
-    return (
-        os.environ.get(f"MIXPANEL_{kind}_EVENT_{code}", "").strip()
-        or os.environ.get(f"{code}_MIXPANEL_{kind}_EVENT", "").strip()
-        or os.environ.get(f"MIXPANEL_EVENT_{kind}_{code}", "").strip()
-        or default_value
-    )
-
-
-def mixpanel_query_base_url(region=None):
-    region = (region or MIXPANEL_REGION).strip().lower()
-    if region == "eu":
-        return "https://eu.mixpanel.com/api/query"
-    if region in {"in", "india"}:
-        return "https://in.mixpanel.com/api/query"
-    return "https://mixpanel.com/api/query"
-
-
-def mixpanel_export_base_url(region=None):
-    region = (region or MIXPANEL_REGION).strip().lower()
-    if region == "eu":
-        return "https://data-eu.mixpanel.com/api/2.0/export"
-    if region in {"in", "india"}:
-        return "https://data-in.mixpanel.com/api/2.0/export"
-    return "https://data.mixpanel.com/api/2.0/export"
-
-
-def mixpanel_distinct_id(event, properties):
-    if not isinstance(properties, dict):
-        properties = {}
-    if not isinstance(event, dict):
-        event = {}
-    for key in ("distinct_id", "$distinct_id", "user_id", "$user_id", "$device_id", "device_id"):
-        value = properties.get(key)
-        if value:
-            return str(value)
-    value = event.get("distinct_id")
-    return str(value) if value else ""
-
-
 def product_channel_views_for_window(product_code, channel_code, utc_start, utc_end):
     placeholder = db_placeholder()
     with connect_db() as conn:
@@ -3712,15 +3630,6 @@ def mixpanel_event_business_material_counts(config, event_name, utc_start, utc_e
     if value_type == "unique":
         return {report_date: len(ids) for report_date, ids in unique_ids.items()}
     return totals
-
-
-def mixpanel_source_day_span(source_date_from, source_date_to):
-    try:
-        start = datetime.strptime(source_date_from, "%Y-%m-%d").date()
-        end = datetime.strptime(source_date_to, "%Y-%m-%d").date()
-    except (TypeError, ValueError):
-        return 1
-    return max(1, (end - start).days + 1)
 
 
 def mixpanel_event_user_unique_query_count(config, event_name, utc_start, utc_end):
