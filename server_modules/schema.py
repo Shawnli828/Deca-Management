@@ -127,6 +127,30 @@ SCHEMA_MIGRATIONS = (
     ("2026_06_18_correct_museon_source_fields", correct_museon_source_fields_migration),
 )
 
+RELATIONAL_COUNT_TABLES = (
+    "products",
+    "markets",
+    "channels",
+    "product_markets",
+    "product_market_channels",
+    "accounts",
+    "automations",
+    "concepts",
+    "formats",
+    "materials",
+    "posts",
+    "post_daily_snapshots",
+    "product_daily_growth_snapshots",
+)
+
+
+def relational_table_counts(conn):
+    counts = {}
+    for table in RELATIONAL_COUNT_TABLES:
+        row = conn.execute(f"SELECT COUNT(*) AS count FROM {table}").fetchone()
+        counts[table] = int(row["count"] if row else 0)
+    return counts
+
 
 def run_schema_migrations(conn, is_postgres=False, placeholder="?"):
     for version, handler in SCHEMA_MIGRATIONS:

@@ -184,7 +184,10 @@ from server_modules.common import (
     stable_id,
     utc_snapshot_date,
 )
-from server_modules.schema import init_relational_schema as init_relational_schema_impl
+from server_modules.schema import (
+    init_relational_schema as init_relational_schema_impl,
+    relational_table_counts as relational_table_counts_impl,
+)
 from server_modules.product_config import (
     COUNTRY_CODES,
     configured_product_codes as configured_product_codes_impl,
@@ -506,25 +509,7 @@ def cleanup_reelfarm_product_from_latest_automations(product_code, automations, 
 
 
 def relational_table_counts(conn):
-    counts = {}
-    for table in (
-        "products",
-        "markets",
-        "channels",
-        "product_markets",
-        "product_market_channels",
-        "accounts",
-        "automations",
-        "concepts",
-        "formats",
-        "materials",
-        "posts",
-        "post_daily_snapshots",
-        "product_daily_growth_snapshots",
-    ):
-        row = conn.execute(f"SELECT COUNT(*) AS count FROM {table}").fetchone()
-        counts[table] = int(row["count"] if row else 0)
-    return counts
+    return relational_table_counts_impl(conn)
 
 
 def project_products_to_relational(data=None, product_code_filter="", market_code_filter=""):
