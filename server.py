@@ -4036,6 +4036,14 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
         raw_body = self.rfile.read(length)
         return json.loads(raw_body.decode("utf-8"))
 
+    def read_json_payload(self, default=None):
+        try:
+            payload = self.read_json_body()
+        except json.JSONDecodeError:
+            self.send_json(400, {"error": "Invalid JSON"})
+            return None, False
+        return (default if payload is None else payload), True
+
     def query_params(self):
         return parse_qs(urlparse(self.path).query)
 
@@ -4273,10 +4281,8 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
 
         if path == "/api/auth/login":
-            try:
-                payload = self.read_json_body()
-            except json.JSONDecodeError:
-                self.send_json(400, {"error": "Invalid JSON"})
+            payload, ok = self.read_json_payload()
+            if not ok:
                 return
 
             username = str(payload.get("username", "") if isinstance(payload, dict) else "").strip()
@@ -4306,10 +4312,8 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/data":
-            try:
-                payload = self.read_json_body()
-            except json.JSONDecodeError:
-                self.send_json(400, {"error": "Invalid JSON"})
+            payload, ok = self.read_json_payload()
+            if not ok:
                 return
 
             data = payload.get("data") if isinstance(payload, dict) else None
@@ -4328,10 +4332,8 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/reelfarm/config":
-            try:
-                payload = self.read_json_body()
-            except json.JSONDecodeError:
-                self.send_json(400, {"error": "Invalid JSON"})
+            payload, ok = self.read_json_payload()
+            if not ok:
                 return
 
             api_key = str(payload.get("api_key", "") if isinstance(payload, dict) else "").strip()
@@ -4351,10 +4353,8 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/api-keys":
-            try:
-                payload = self.read_json_body() or {}
-            except json.JSONDecodeError:
-                self.send_json(400, {"error": "Invalid JSON"})
+            payload, ok = self.read_json_payload({})
+            if not ok:
                 return
 
             name = str(payload.get("name", "") if isinstance(payload, dict) else "").strip()
@@ -4363,10 +4363,8 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/api-keys/revoke":
-            try:
-                payload = self.read_json_body() or {}
-            except json.JSONDecodeError:
-                self.send_json(400, {"error": "Invalid JSON"})
+            payload, ok = self.read_json_payload({})
+            if not ok:
                 return
 
             key_id = str(payload.get("id", "") if isinstance(payload, dict) else "").strip()
@@ -4377,10 +4375,8 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/reelfarm/sync-prefix":
-            try:
-                payload = self.read_json_body()
-            except json.JSONDecodeError:
-                self.send_json(400, {"error": "Invalid JSON"})
+            payload, ok = self.read_json_payload()
+            if not ok:
                 return
 
             prefix = str(payload.get("prefix", "") if isinstance(payload, dict) else "").strip()
@@ -4403,10 +4399,8 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/reelfarm/sync-country":
-            try:
-                payload = self.read_json_body()
-            except json.JSONDecodeError:
-                self.send_json(400, {"error": "Invalid JSON"})
+            payload, ok = self.read_json_payload()
+            if not ok:
                 return
 
             prefix = str(payload.get("prefix", "") if isinstance(payload, dict) else "").strip()
@@ -4428,10 +4422,8 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/museon/sync-country":
-            try:
-                payload = self.read_json_body()
-            except json.JSONDecodeError:
-                self.send_json(400, {"error": "Invalid JSON"})
+            payload, ok = self.read_json_payload()
+            if not ok:
                 return
 
             try:
@@ -4451,10 +4443,8 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/growth/sync-product":
-            try:
-                payload = self.read_json_body() or {}
-            except json.JSONDecodeError:
-                self.send_json(400, {"error": "Invalid JSON"})
+            payload, ok = self.read_json_payload({})
+            if not ok:
                 return
             try:
                 records = sync_product_growth_snapshots(
