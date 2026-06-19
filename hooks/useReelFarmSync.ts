@@ -3,6 +3,14 @@
 import { useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { api } from '@/lib/api';
+import {
+  applyCountrySyncPayload,
+  SYNC_ALL_COUNTRY_DELAY_MS,
+  SYNC_CLONE_COUNTRY_DELAY_MS,
+  SYNC_PRODUCT_COUNTRY_DELAY_MS,
+  type CountrySyncResult,
+  wait
+} from '@/lib/reelFarmSyncHelpers';
 import type { Country, Product } from '@/lib/types';
 import {
   buildCountryAutomationPrefix,
@@ -11,12 +19,6 @@ import {
 } from '@/lib/utils';
 
 type PageState = 'products' | 'product' | 'country';
-
-type SyncResult = {
-  creator_count?: number;
-  material_count?: number;
-  synced_at?: string;
-};
 
 type ResetReelFarmState = (options?: { includeResults?: boolean }) => void;
 
@@ -34,10 +36,6 @@ type UseReelFarmSyncOptions = {
   loadCountryKpis: (product?: Product | null, country?: Country | null) => Promise<void>;
   loadCloneProductData: (sourceProducts?: Product[]) => Promise<void>;
 };
-
-function wait(ms: number) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
 
 export function useReelFarmSync({
   products,
@@ -58,26 +56,8 @@ export function useReelFarmSync({
   const [syncAllRunning, setSyncAllRunning] = useState(false);
   const [syncAllProgress, setSyncAllProgress] = useState('');
 
-  function applySyncResult(productId: string, countryId: string, payload: SyncResult) {
-    setProducts(prev => prev.map(product => {
-      if (product.id !== productId) return product;
-      const countries = (product.countries || []).map(country => (
-        country.id === countryId
-          ? {
-              ...country,
-              creatorCount: Number(payload.creator_count) || 0,
-              materialCount: Number(payload.material_count) || 0,
-              reelFarmSyncedAt: payload.synced_at || country.reelFarmSyncedAt
-            }
-          : country
-      ));
-      return {
-        ...product,
-        countries,
-        creatorCount: countries.reduce((sum, country) => sum + (Number(country.creatorCount) || 0), 0),
-        materialCount: countries.reduce((sum, country) => sum + (Number(country.materialCount) || 0), 0)
-      };
-    }));
+  function applySyncResult(productId: string, countryId: string, payload: CountrySyncResult) {
+    setProducts(prev => applyCountrySyncPayload(prev, productId, countryId, payload));
   }
 
   async function syncCountry() {
@@ -129,7 +109,7 @@ export function useReelFarmSync({
           failed += 1;
           onStatus(`${product.name} · ${country.name} 同步失败：${error?.message || '未知错误'}`, true);
         }
-        if (index < countries.length - 1) await wait(1400);
+        if (index < countries.length - 1) await wait(SYNC_PRODUCT_COUNTRY_DELAY_MS);
       }
       await loadProductKpis(product);
       if (selectedProductId === product.id && page === 'country') {
@@ -164,7 +144,7 @@ export function useReelFarmSync({
           failed += 1;
           onStatus(`Clone ${product.name} · ${country.name} 同步失败：${error?.message || '未知错误'}`, true);
         }
-        if (index < countries.length - 1) await wait(900);
+        if (index < countries.length - 1) await wait(SYNC_CLONE_COUNTRY_DELAY_MS);
       }
       await loadCloneProductData(products);
       onStatus(failed ? `Clone ${product.name} 同步完成：${failed} 个地区失败` : `Clone ${product.name} 已同步完成`, Boolean(failed));
@@ -201,7 +181,7 @@ export function useReelFarmSync({
           failed += 1;
           onStatus(`${product.name} · ${country.name} 同步失败：${error?.message || '未知错误'}`, true);
         }
-        if (index < jobs.length - 1) await wait(1800);
+        if (index < jobs.length - 1) await wait(SYNC_ALL_COUNTRY_DELAY_MS);
       }
       onStatus(failed ? `同步全部完成：${failed} 个地区失败，可单独重试` : '同步全部完成', Boolean(failed));
       await Promise.all(products.map(product => loadProductKpis(product)));
