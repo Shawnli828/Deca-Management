@@ -1,0 +1,97 @@
+from server_modules.common import parse_json_list
+
+
+def detailed_select():
+    return """
+        p.id AS product_id,
+        p.code AS product_code,
+        p.name AS product_name,
+        m.id AS market_id,
+        m.code AS market_code,
+        m.name AS market_name,
+        acc.id AS account_id,
+        acc.reelfarm_account_id,
+        acc.username AS account_username,
+        acc.display_name AS account_display_name,
+        acc.avatar_url AS account_avatar_url,
+        acc.status AS account_status,
+        a.id AS automation_id,
+        a.reelfarm_automation_id,
+        a.name AS automation_name,
+        a.status AS automation_status,
+        a.schedule AS automation_schedule,
+        mat.id AS material_id,
+        mat.reelfarm_video_id,
+        mat.video_type,
+        mat.hook,
+        mat.prompt,
+        mat.images_json,
+        mat.slide_count,
+        mat.status AS material_status,
+        mat.created_at AS material_created_at,
+        mat.finished_at AS material_finished_at,
+        post.id AS post_id,
+        post.reelfarm_post_id,
+        post.status AS post_status,
+        post.title AS post_title,
+        post.published_at,
+        post.published_at_readable,
+        post.view_count,
+        post.like_count,
+        post.comment_count,
+        post.share_count,
+        post.bookmark_count,
+        post.synced_at AS post_synced_at
+    """
+
+
+def detailed_row(row):
+    data = dict(row) if row else {}
+    return {
+        "product": {"id": data.get("product_id"), "code": data.get("product_code"), "name": data.get("product_name")},
+        "country": {"id": data.get("market_id"), "code": data.get("market_code"), "name": data.get("market_name")},
+        "market": {"id": data.get("market_id"), "code": data.get("market_code"), "name": data.get("market_name")},
+        "account": {
+            "id": data.get("account_id"),
+            "reelfarm_account_id": data.get("reelfarm_account_id"),
+            "username": data.get("account_username"),
+            "display_name": data.get("account_display_name"),
+            "avatar_url": data.get("account_avatar_url"),
+            "status": data.get("account_status"),
+        },
+        "automation": {
+            "id": data.get("automation_id"),
+            "reelfarm_automation_id": data.get("reelfarm_automation_id"),
+            "name": data.get("automation_name"),
+            "status": data.get("automation_status"),
+            "schedule": parse_json_list(data.get("automation_schedule")),
+        },
+        "material": {
+            "id": data.get("material_id"),
+            "reelfarm_video_id": data.get("reelfarm_video_id"),
+            "video_type": data.get("video_type"),
+            "hook": data.get("hook"),
+            "prompt": data.get("prompt"),
+            "slideshow_images": parse_json_list(data.get("images_json")),
+            "slide_count": data.get("slide_count"),
+            "status": data.get("material_status"),
+            "created_at": data.get("material_created_at"),
+            "finished_at": data.get("material_finished_at"),
+        },
+        "post": {
+            "id": data.get("post_id"),
+            "reelfarm_post_id": data.get("reelfarm_post_id"),
+            "status": data.get("post_status"),
+            "title": data.get("post_title"),
+            "published_at": data.get("published_at"),
+            "published_at_readable": data.get("published_at_readable"),
+            "synced_at": data.get("post_synced_at"),
+        },
+        "metrics": {
+            "view_count": data.get("view_count"),
+            "like_count": data.get("like_count"),
+            "comment_count": data.get("comment_count"),
+            "share_count": data.get("share_count"),
+            "bookmark_count": data.get("bookmark_count"),
+        },
+    }
