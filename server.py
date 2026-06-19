@@ -60,9 +60,11 @@ from server_modules.sync_status import (
     SYNC_RUN_SOURCE_LABELS,
     compact_sync_run_meta,
     format_sync_readiness_line,
+    latest_sync_runs_from_db,
+    record_sync_run_in_db,
     sync_readiness_payload,
     sync_run_records_count,
-    sync_status_from_runs,
+    sync_status_payload_from_runs,
 )
 from server_modules.reelfarm_utils import (
     reelfarm_post_as_draft_value,
@@ -332,33 +334,23 @@ def upsert_row(conn, table, values, conflict_cols, update_cols=None):
 
 
 def record_sync_run(source, status, started_at, finished_at=None, duration_seconds=None, product_code="", country_code="", records_count=0, error="", meta=None):
-    source = str(source or "").strip()
-    if not source:
-        return None
-    started_at = str(started_at or datetime.now(timezone.utc).isoformat())
-    finished_at = str(finished_at or datetime.now(timezone.utc).isoformat())
-    try:
-        records_count = int(records_count or 0)
-    except (TypeError, ValueError):
-        records_count = 0
-    values = {
-        "id": stable_id("sync_run", source, product_code or "", country_code or "", started_at),
-        "source": source,
-        "product_code": str(product_code or "").strip().upper() or None,
-        "country_code": str(country_code or "").strip().upper() or None,
-        "status": str(status or "unknown"),
-        "started_at": started_at,
-        "finished_at": finished_at,
-        "duration_seconds": duration_seconds,
-        "records_count": records_count,
-        "error": str(error or "")[:1000],
-        "meta_json": json.dumps(meta or {}, ensure_ascii=False),
-    }
-    with connect_db() as conn:
-        init_relational_schema(conn)
-        upsert_row(conn, "sync_runs", values, ["id"])
-        conn.commit()
-    return values
+    return record_sync_run_in_db(
+        source,
+        status,
+        started_at,
+        finished_at=finished_at,
+        duration_seconds=duration_seconds,
+        product_code=product_code,
+        country_code=country_code,
+        records_count=records_count,
+        error=error,
+        meta=meta,
+        stable_id_fn=stable_id,
+        connect_db_fn=connect_db,
+        init_schema_fn=init_relational_schema,
+        upsert_row_fn=upsert_row,
+        now_fn=datetime.now,
+    )
 
 
 def safe_record_sync_run(*args, **kwargs):
@@ -369,33 +361,19 @@ def safe_record_sync_run(*args, **kwargs):
 
 
 def latest_sync_runs(sources=None):
-    sources = list(sources or SYNC_RUN_SOURCE_LABELS.keys())
-    if not sources:
-        return {}
-    placeholder = db_placeholder()
-    with connect_db() as conn:
-        init_relational_schema(conn)
-        result = {}
-        for source in sources:
-            row = conn.execute(
-                f"""
-                SELECT *
-                FROM sync_runs
-                WHERE source = {placeholder}
-                ORDER BY COALESCE(finished_at, started_at) DESC
-                LIMIT 1
-                """,
-                (source,),
-            ).fetchone()
-            result[source] = row_dict(row) if row else None
-        return result
+    return latest_sync_runs_from_db(
+        sources=sources,
+        default_sources=SYNC_RUN_SOURCE_LABELS.keys(),
+        placeholder=db_placeholder(),
+        connect_db_fn=connect_db,
+        init_schema_fn=init_relational_schema,
+        row_dict_fn=row_dict,
+    )
 
 
 def sync_status_payload():
     runs = latest_sync_runs()
-    payload = sync_status_from_runs(runs)
-    payload["generated_at"] = datetime.now(timezone.utc).isoformat()
-    return payload
+    return sync_status_payload_from_runs(runs, datetime.now(timezone.utc).isoformat())
 
 
 def reelfarm_dashboard_automation_condition(alias="a"):
