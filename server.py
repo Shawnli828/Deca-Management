@@ -4015,6 +4015,10 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def send_error_json(self, status, error, include_ok=False):
+        payload = {"ok": False, "error": str(error)} if include_ok else {"error": str(error)}
+        self.send_json(status, payload)
+
     def read_json_body(self):
         length = int(self.headers.get("Content-Length", "0"))
         if length <= 0:
@@ -4026,7 +4030,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
         try:
             payload = self.read_json_body()
         except json.JSONDecodeError:
-            self.send_json(400, {"error": "Invalid JSON"})
+            self.send_error_json(400, "Invalid JSON")
             return None, False
         return (default if payload is None else payload), True
 
@@ -4071,7 +4075,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
         if self.auth_required(path) and not self.is_authenticated():
-            self.send_json(401, {"error": "Unauthorized"})
+            self.send_error_json(401, "Unauthorized")
             return
 
         if path == "/api/health":
@@ -4123,7 +4127,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             try:
                 self.send_json(200, data_query_payload(query))
             except ValueError as error:
-                self.send_json(400, {"ok": False, "error": str(error)})
+                self.send_error_json(400, error, include_ok=True)
             return
 
         if path == "/api/growth":
@@ -4131,7 +4135,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             try:
                 self.send_json(200, growth_dashboard_payload(query))
             except ValueError as error:
-                self.send_json(400, {"ok": False, "error": str(error)})
+                self.send_error_json(400, error, include_ok=True)
             return
 
         if path == "/api/business-material-report":
@@ -4139,9 +4143,9 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             try:
                 self.send_json(200, business_material_report_payload(query))
             except ValueError as error:
-                self.send_json(400, {"ok": False, "error": str(error)})
+                self.send_error_json(400, error, include_ok=True)
             except RuntimeError as error:
-                self.send_json(502, {"ok": False, "error": str(error)})
+                self.send_error_json(502, error, include_ok=True)
             return
 
         if path == "/api/reports/daily-feishu":
@@ -4158,7 +4162,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
                 status = 200 if result.get("ok") else 400
                 self.send_json(status, result)
             except ValueError as error:
-                self.send_json(400, {"ok": False, "error": str(error)})
+                self.send_error_json(400, error, include_ok=True)
             return
 
         if path == "/api/reports/daily-feishu-analysis":
@@ -4168,9 +4172,9 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
                 status = 200 if result.get("ok") else 400
                 self.send_json(status, result)
             except ValueError as error:
-                self.send_json(400, {"ok": False, "error": str(error)})
+                self.send_error_json(400, error, include_ok=True)
             except RuntimeError as error:
-                self.send_json(502, {"ok": False, "error": str(error)})
+                self.send_error_json(502, error, include_ok=True)
             return
 
         if path == "/api/reports/llm-models":
@@ -4192,9 +4196,9 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
                     },
                 )
             except ValueError as error:
-                self.send_json(400, {"ok": False, "error": str(error)})
+                self.send_error_json(400, error, include_ok=True)
             except RuntimeError as error:
-                self.send_json(502, {"ok": False, "error": str(error)})
+                self.send_error_json(502, error, include_ok=True)
             return
 
         if path == "/api/reelfarm/config":
@@ -4209,12 +4213,12 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
 
         if path == "/api/reelfarm/sync-all":
             if not cron_authorized(self.headers):
-                self.send_json(401, {"error": "Unauthorized"})
+                self.send_error_json(401, "Unauthorized")
                 return
             try:
                 self.send_json(200, sync_all_reelfarm_records())
             except RuntimeError as error:
-                self.send_json(502, {"error": str(error)})
+                self.send_error_json(502, error)
             return
 
         if path == "/api/reelfarm/matches":
@@ -4223,9 +4227,9 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             try:
                 self.send_json(200, reelfarm_matches(automation_prefix))
             except ValueError as error:
-                self.send_json(400, {"error": str(error)})
+                self.send_error_json(400, error)
             except RuntimeError as error:
-                self.send_json(502, {"error": str(error)})
+                self.send_error_json(502, error)
             return
 
         if path == "/api/reelfarm/stored-country":
@@ -4239,7 +4243,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
                     ),
                 )
             except ValueError as error:
-                self.send_json(400, {"error": str(error)})
+                self.send_error_json(400, error)
             return
 
         if path == "/":
@@ -4247,11 +4251,11 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
 
         requested = (BASE_DIR / unquote(path.lstrip("/"))).resolve()
         if BASE_DIR not in requested.parents and requested != BASE_DIR:
-            self.send_json(403, {"error": "Forbidden"})
+            self.send_error_json(403, "Forbidden")
             return
 
         if not requested.is_file():
-            self.send_json(404, {"error": "Not found"})
+            self.send_error_json(404, "Not found")
             return
 
         content_type = mimetypes.guess_type(requested.name)[0] or "application/octet-stream"
@@ -4282,7 +4286,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
                 )
                 return
 
-            self.send_json(401, {"error": "账号或密码不正确"})
+            self.send_error_json(401, "账号或密码不正确")
             return
 
         if path == "/api/auth/logout":
@@ -4294,7 +4298,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             return
 
         if self.auth_required(path) and not self.is_authenticated():
-            self.send_json(401, {"error": "Unauthorized"})
+            self.send_error_json(401, "Unauthorized")
             return
 
         if path == "/api/data":
@@ -4304,7 +4308,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
 
             data = payload.get("data") if isinstance(payload, dict) else None
             if not isinstance(data, list):
-                self.send_json(400, {"error": "Expected { data: [...] }"})
+                self.send_error_json(400, "Expected { data: [...] }")
                 return
 
             save_data(data)
@@ -4357,7 +4361,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             try:
                 self.send_json(200, {"ok": True, "record": revoke_external_api_key(key_id)})
             except ValueError as error:
-                self.send_json(404, {"error": str(error)})
+                self.send_error_json(404, error)
             return
 
         if path == "/api/reelfarm/sync-prefix":
@@ -4379,9 +4383,9 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
                     ),
                 )
             except ValueError as error:
-                self.send_json(400, {"error": str(error)})
+                self.send_error_json(400, error)
             except RuntimeError as error:
-                self.send_json(502, {"error": str(error)})
+                self.send_error_json(502, error)
             return
 
         if path == "/api/reelfarm/sync-country":
@@ -4402,9 +4406,9 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
                     ),
                 )
             except ValueError as error:
-                self.send_json(400, {"error": str(error)})
+                self.send_error_json(400, error)
             except RuntimeError as error:
-                self.send_json(502, {"error": str(error)})
+                self.send_error_json(502, error)
             return
 
         if path == "/api/museon/sync-country":
@@ -4423,9 +4427,9 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
                     ),
                 )
             except ValueError as error:
-                self.send_json(400, {"error": str(error)})
+                self.send_error_json(400, error)
             except RuntimeError as error:
-                self.send_json(502, {"error": str(error)})
+                self.send_error_json(502, error)
             return
 
         if path == "/api/growth/sync-product":
@@ -4439,19 +4443,19 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
                 )
                 self.send_json(200, {"ok": True, "count": len(records), "records": records})
             except ValueError as error:
-                self.send_json(400, {"error": str(error)})
+                self.send_error_json(400, error)
             except RuntimeError as error:
-                self.send_json(502, {"error": str(error)})
+                self.send_error_json(502, error)
             return
 
         if path == "/api/sync/daily-all":
             if not cron_authorized(self.headers):
-                self.send_json(401, {"error": "Unauthorized"})
+                self.send_error_json(401, "Unauthorized")
                 return
             try:
                 self.send_json(200, sync_daily_all_records())
             except RuntimeError as error:
-                self.send_json(502, {"error": str(error)})
+                self.send_error_json(502, error)
             return
 
         if path == "/api/reports/daily-feishu":
@@ -4462,7 +4466,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
                 status = 200 if result.get("ok") else 400
                 self.send_json(status, result)
             except ValueError as error:
-                self.send_json(400, {"ok": False, "error": str(error)})
+                self.send_error_json(400, error, include_ok=True)
             return
 
         if path == "/api/reports/daily-feishu-analysis":
@@ -4470,22 +4474,22 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             try:
                 self.send_json(200, daily_feishu_ai_analysis(query.get("date", [""])[0], query.get("model", [""])[0]))
             except ValueError as error:
-                self.send_json(400, {"ok": False, "error": str(error)})
+                self.send_error_json(400, error, include_ok=True)
             except RuntimeError as error:
-                self.send_json(502, {"ok": False, "error": str(error)})
+                self.send_error_json(502, error, include_ok=True)
             return
 
         if path == "/api/reelfarm/sync-all":
             if not cron_authorized(self.headers):
-                self.send_json(401, {"error": "Unauthorized"})
+                self.send_error_json(401, "Unauthorized")
                 return
             try:
                 self.send_json(200, sync_all_reelfarm_records())
             except RuntimeError as error:
-                self.send_json(502, {"error": str(error)})
+                self.send_error_json(502, error)
             return
 
-        self.send_json(404, {"error": "Not found"})
+        self.send_error_json(404, "Not found")
 
 
 if __name__ == "__main__":
