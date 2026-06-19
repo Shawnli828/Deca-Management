@@ -4036,6 +4036,12 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
         raw_body = self.rfile.read(length)
         return json.loads(raw_body.decode("utf-8"))
 
+    def query_params(self):
+        return parse_qs(urlparse(self.path).query)
+
+    def query_bool(self, query, key):
+        return str(query.get(key, [""])[0]).strip().lower() in {"1", "true", "yes", "y", "on"}
+
     def cookies(self):
         cookies = {}
         raw_cookie = self.headers.get("Cookie", "")
@@ -4114,12 +4120,12 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/ai/materials":
-            query = parse_qs(urlparse(self.path).query)
+            query = self.query_params()
             self.send_json(200, ai_materials_payload(query))
             return
 
         if path == "/api/data/query":
-            query = parse_qs(urlparse(self.path).query)
+            query = self.query_params()
             try:
                 self.send_json(200, data_query_payload(query))
             except ValueError as error:
@@ -4127,7 +4133,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/growth":
-            query = parse_qs(urlparse(self.path).query)
+            query = self.query_params()
             try:
                 self.send_json(200, growth_dashboard_payload(query))
             except ValueError as error:
@@ -4135,7 +4141,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/business-material-report":
-            query = parse_qs(urlparse(self.path).query)
+            query = self.query_params()
             try:
                 self.send_json(200, business_material_report_payload(query))
             except ValueError as error:
@@ -4145,10 +4151,10 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/reports/daily-feishu":
-            query = parse_qs(urlparse(self.path).query)
+            query = self.query_params()
             try:
-                include_ai = str(query.get("include_ai", [""])[0]).strip().lower() in {"1", "true", "yes", "y", "on"}
-                require_synced = str(query.get("require_synced", [""])[0]).strip().lower() in {"1", "true", "yes", "y", "on"}
+                include_ai = self.query_bool(query, "include_ai")
+                require_synced = self.query_bool(query, "require_synced")
                 result = send_daily_feishu_report(
                     query.get("date", [""])[0],
                     include_ai=include_ai,
@@ -4162,7 +4168,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/reports/daily-feishu-analysis":
-            query = parse_qs(urlparse(self.path).query)
+            query = self.query_params()
             try:
                 result = daily_feishu_ai_analysis(query.get("date", [""])[0], query.get("model", [""])[0])
                 status = 200 if result.get("ok") else 400
@@ -4178,7 +4184,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/reports/daily-feishu-preview":
-            query = parse_qs(urlparse(self.path).query)
+            query = self.query_params()
             try:
                 report = daily_feishu_report_payload(query.get("date", [""])[0])
                 message = daily_feishu_report_text(report)
@@ -4218,7 +4224,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/reelfarm/matches":
-            query = parse_qs(urlparse(self.path).query)
+            query = self.query_params()
             automation_prefix = query.get("prefix", [""])[0]
             try:
                 self.send_json(200, reelfarm_matches(automation_prefix))
@@ -4229,7 +4235,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/reelfarm/stored-country":
-            query = parse_qs(urlparse(self.path).query)
+            query = self.query_params()
             try:
                 self.send_json(
                     200,
@@ -4473,9 +4479,9 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/reports/daily-feishu":
-            query = parse_qs(urlparse(self.path).query)
+            query = self.query_params()
             try:
-                include_ai = str(query.get("include_ai", [""])[0]).strip().lower() in {"1", "true", "yes", "y", "on"}
+                include_ai = self.query_bool(query, "include_ai")
                 result = send_daily_feishu_report(query.get("date", [""])[0], include_ai=include_ai, model=query.get("model", [""])[0])
                 status = 200 if result.get("ok") else 400
                 self.send_json(status, result)
@@ -4484,7 +4490,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/reports/daily-feishu-analysis":
-            query = parse_qs(urlparse(self.path).query)
+            query = self.query_params()
             try:
                 self.send_json(200, daily_feishu_ai_analysis(query.get("date", [""])[0], query.get("model", [""])[0]))
             except ValueError as error:
