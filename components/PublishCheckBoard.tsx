@@ -1,8 +1,14 @@
 'use client';
 
-import { formatPublishUtcTime, publishAccountLabel, publishCheckPeople, sortPublishCheckAssignments, type PublishAssignmentSort } from '@/lib/publishCheckFormatters';
+import { publishCheckPeople, sortPublishCheckAssignments, type PublishAssignmentSort } from '@/lib/publishCheckFormatters';
 import type { Product, PublishCheckAssignment, PublishCheckState } from '@/lib/types';
-import { countryFlag } from '@/lib/utils';
+import {
+  AssignmentForm,
+  AssignmentTable,
+  PublishCheckHero,
+  PublishCheckWindow,
+  PublishResultPanel
+} from './PublishCheckParts';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 
 export function PublishCheckBoard({
@@ -79,20 +85,8 @@ export function PublishCheckBoard({
 
   return (
     <section className="publish-check-board">
-      <div className="publish-check-hero">
-        <div>
-          <h2>每日发布检查</h2>
-          <p>每天北京时间 23:00 自动检查，也可以随时手动检查今天各负责人范围内的账号是否发布。</p>
-        </div>
-        <button className="btn primary" type="button" onClick={onRun} disabled={running}>
-          {running ? '检查中...' : '立即检查'}
-        </button>
-      </div>
-
-      <div className="publish-check-window">
-        <span>北京时间日期：{result?.beijing_date || '待检查'}</span>
-        <span>UTC 区间：{result?.utc_window?.start || '--'} → {result?.utc_window?.end || '--'}</span>
-      </div>
+      <PublishCheckHero running={running} onRun={onRun} />
+      <PublishCheckWindow result={result} />
 
       <section className="publish-check-panel">
         <div className="publish-check-panel-head">
@@ -101,110 +95,35 @@ export function PublishCheckBoard({
             <p>配置每个人负责的产品和国家/地区。</p>
           </div>
         </div>
-        <form className="assignment-form" onSubmit={addAssignment}>
-          <input
-            className="text-input"
-            value={personName}
-            list="publish-check-people"
-            onChange={event => setPersonName(event.target.value)}
-            placeholder="负责人"
-          />
-          <datalist id="publish-check-people">
-            {people.map(person => <option value={person.name} key={person.id} />)}
-          </datalist>
-          <select className="text-input" value={productId} onChange={event => changeProduct(event.target.value)}>
-            {products.map(product => <option value={product.id} key={product.id}>{product.name}</option>)}
-          </select>
-          <select className="text-input" value={countryId} onChange={event => setCountryId(event.target.value)}>
-            {(selectedProduct?.countries || []).map(country => <option value={country.id} key={country.id}>{country.name}</option>)}
-          </select>
-          <button className="btn ghost" type="submit">添加范围</button>
-        </form>
-        <div className="assignment-table">
-          <div className="assignment-table-head">
-            <button className={assignmentSort === 'person' ? 'active' : ''} type="button" onClick={() => setAssignmentSort('person')}>负责人 ↕</button>
-            <button className={assignmentSort === 'product' ? 'active' : ''} type="button" onClick={() => setAssignmentSort('product')}>产品 ↕</button>
-            <button className={assignmentSort === 'country' ? 'active' : ''} type="button" onClick={() => setAssignmentSort('country')}>国家/地区 ↕</button>
-            <span>操作</span>
-          </div>
-          <div className="assignment-list">
-          {sortedAssignments.length ? sortedAssignments.map(item => {
-            const product = products.find(entry => entry.id === item.product_id);
-            const country = product?.countries?.find(entry => entry.id === item.country_id);
-            return (
-              <div className="assignment-row" key={item.id}>
-                <div className="assignment-cell">
-                  <strong>{item.person_name || peopleById.get(item.person_id)?.name || '未命名'}</strong>
-                </div>
-                <div className="assignment-cell">
-                  <span className="assignment-product-value">
-                    <span className="assignment-product-logo">
-                      {product?.logo ? <img src={product.logo} alt="" /> : product?.name?.slice(0, 1) || '?'}
-                    </span>
-                    <strong>{product?.name || '未知产品'}</strong>
-                  </span>
-                </div>
-                <div className="assignment-cell">
-                  <strong>{country ? countryFlag(country) : '🌐'} {country?.name || '未知地区'}</strong>
-                </div>
-                <div className="assignment-actions">
-                  <button className="btn danger" type="button" onClick={() => removeAssignment(item.id)}>删除</button>
-                </div>
-              </div>
-            );
-          }) : <div className="empty-state">还没有配置负责范围。</div>}
-          </div>
-        </div>
+        <AssignmentForm
+          people={people}
+          products={products}
+          selectedProduct={selectedProduct}
+          personName={personName}
+          productId={productId}
+          countryId={countryId}
+          onPersonNameChange={setPersonName}
+          onProductChange={changeProduct}
+          onCountryChange={setCountryId}
+          onSubmit={addAssignment}
+        />
+        <AssignmentTable
+          assignments={sortedAssignments}
+          products={products}
+          peopleById={peopleById}
+          assignmentSort={assignmentSort}
+          onSortChange={setAssignmentSort}
+          onRemove={removeAssignment}
+        />
       </section>
 
-      <section className="publish-check-panel">
-        <div className="publish-check-panel-head">
-          <div>
-            <h3>检查结果</h3>
-            <p>只展示没有在北京时间当天发布的账号；全部正常的范围会显示通过。</p>
-          </div>
-          <div className="publish-result-actions">
-            <button className="btn ghost" type="button" onClick={onSendReminder} disabled={sendingReminder || !result}>
-              {sendingReminder ? '发送中...' : '发送飞书提醒'}
-            </button>
-            <div className="publish-check-summary">
-              <strong>{result?.totals?.missing_accounts || 0}</strong>
-              <span>未发布账号</span>
-            </div>
-          </div>
-        </div>
-        <div className="publish-result-grid">
-          {result?.groups?.length ? result.groups.map(group => (
-            <article className={`publish-result-card ${group.missing_account_count ? 'has-missing' : 'is-clear'}`} key={group.assignment_id}>
-              <button
-                className="publish-result-card-head"
-                type="button"
-                onClick={() => setExpandedResultCards(prev => ({ ...prev, [String(group.assignment_id || '')]: !prev[String(group.assignment_id || '')] }))}
-              >
-                <div>
-                  <strong>{group.person_name}</strong>
-                  <span>{group.product?.name} · {group.country?.name}</span>
-                </div>
-                <span className="publish-result-count">{group.missing_account_count ? `${group.missing_account_count} 未发布` : '已发布'}</span>
-              </button>
-              {expandedResultCards[String(group.assignment_id || '')] && group.missing_accounts.length ? (
-                <div className="missing-account-list">
-                  {group.missing_accounts.map(account => (
-                    <div className="missing-account-row" key={`${account.account_id}-${account.automation_id}`}>
-                      <div>
-                        <strong>@{publishAccountLabel(account).replace(/^@/, '')}</strong>
-                        <span>{account.automation_name || account.reelfarm_automation_id || '无 automation 名称'}</span>
-                      </div>
-                      <span>最近发布：{formatPublishUtcTime(account.latest_post_at)}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-              {expandedResultCards[String(group.assignment_id || '')] && !group.missing_accounts.length ? <div className="empty-state">这个范围今天都有发布。</div> : null}
-            </article>
-          )) : <div className="empty-state">还没有检查结果，点击「立即检查」生成今天的巡检。</div>}
-        </div>
-      </section>
+      <PublishResultPanel
+        result={result}
+        sendingReminder={sendingReminder}
+        expandedResultCards={expandedResultCards}
+        onSendReminder={onSendReminder}
+        onToggleResultCard={id => setExpandedResultCards(prev => ({ ...prev, [id]: !prev[id] }))}
+      />
     </section>
   );
 }
