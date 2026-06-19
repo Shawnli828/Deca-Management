@@ -1,5 +1,5 @@
 import type { Country, Product } from '@/lib/types';
-import { getCountryReelFarmCode, getProductReelFarmCode } from '@/lib/utils';
+import { formatNumber, getCountryReelFarmCode, getProductReelFarmCode } from '@/lib/utils';
 import { countryNamesByCode, fallbackCountries } from './CloudPhoneConstants';
 import type { CloudProduct, CountrySection, GeeLarkPayload, GeeLarkPayloadMap, IpGroup, PhoneSlot, PhoneState } from './CloudPhoneTypes';
 
@@ -123,6 +123,68 @@ export function productCountryPairs(products: Product[]) {
     });
   });
   return [...pairs.values()];
+}
+
+export type SelectedCloudPhoneSlot = PhoneSlot & { ipGroup: IpGroup };
+
+export type CloudPhoneTotals = {
+  ipGroups: number;
+  phones: number;
+  active: number;
+  warnings: number;
+};
+
+export type GeeLarkLiveTotals = {
+  pairs: number;
+  groups: number;
+  phones: number;
+};
+
+export const emptyCloudPhoneTotals: CloudPhoneTotals = {
+  ipGroups: 0,
+  phones: 0,
+  active: 0,
+  warnings: 0
+};
+
+export function selectCloudProduct(cloudProducts: CloudProduct[], selectedProductId: string) {
+  const defaultProductId = cloudProducts.find(product => product.code === 'DB')?.id || '';
+  return cloudProducts.find(product => product.id === (selectedProductId || defaultProductId)) || cloudProducts[0];
+}
+
+export function selectCloudPhoneSlot(product: CloudProduct | undefined, selectedSlotId: string): SelectedCloudPhoneSlot | undefined {
+  return product?.ipGroups
+    .flatMap(ipGroup => ipGroup.slots.map(slot => ({ ...slot, ipGroup })))
+    .find(slot => slot.id === selectedSlotId);
+}
+
+export function summarizeIpGroups(ipGroups: IpGroup[] = []): CloudPhoneTotals {
+  return ipGroups.reduce((sum, ipGroup) => ({
+    ipGroups: sum.ipGroups + 1,
+    phones: sum.phones + ipGroup.phoneCount,
+    active: sum.active + ipGroup.activeCount,
+    warnings: sum.warnings + ipGroup.slots.filter(slot => slot.state === 'warming' || slot.state === 'offline').length
+  }), emptyCloudPhoneTotals);
+}
+
+export function summarizeGeeLarkPayloads(geeLarkPayloads: GeeLarkPayloadMap): GeeLarkLiveTotals {
+  return Object.values(geeLarkPayloads).reduce((sum, payload) => ({
+    pairs: sum.pairs + 1,
+    groups: sum.groups + Number(payload.group_count || 0),
+    phones: sum.phones + Number(payload.phone_count || 0)
+  }), { pairs: 0, groups: 0, phones: 0 });
+}
+
+export function formatGeeLarkLiveLabel(liveTotals: GeeLarkLiveTotals) {
+  return liveTotals.groups
+    ? `GeeLark 已接入 · ${liveTotals.pairs} 区 / ${liveTotals.groups} 组 / ${formatNumber(liveTotals.phones)} 台`
+    : 'GeeLark 接入预览';
+}
+
+export function formatSelectedPhoneTitle(selectedSlot: SelectedCloudPhoneSlot | undefined) {
+  return selectedSlot
+    ? (selectedSlot.serialNo ? `No. ${selectedSlot.serialNo}` : selectedSlot.label)
+    : '点击手机查看详情';
 }
 
 export function buildCountrySections(ipGroups: IpGroup[]): CountrySection[] {

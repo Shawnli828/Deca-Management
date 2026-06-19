@@ -2,20 +2,23 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { Product } from '@/lib/types';
-import { formatNumber } from '@/lib/utils';
 import {
   buildCountrySections,
   cloudProductsFrom,
+  formatGeeLarkLiveLabel,
+  formatSelectedPhoneTitle,
   geeLarkKey,
   productCountryPairs,
-  stateLabels,
+  selectCloudPhoneSlot,
+  selectCloudProduct,
+  summarizeGeeLarkPayloads,
+  summarizeIpGroups,
   type GeeLarkMapPayload,
   type GeeLarkPayloadMap,
-  type IpGroup,
-  type PhoneSlot
+  type SelectedCloudPhoneSlot
 } from '@/components/CloudPhoneMapHelpers';
 
-export type SelectedCloudPhoneSlot = PhoneSlot & { ipGroup: IpGroup };
+export type { SelectedCloudPhoneSlot };
 
 export function useCloudPhoneMap(products: Product[]) {
   const [geeLarkPayloads, setGeeLarkPayloads] = useState<GeeLarkPayloadMap>({});
@@ -26,33 +29,15 @@ export function useCloudPhoneMap(products: Product[]) {
 
   const geeLarkPairs = useMemo(() => productCountryPairs(products), [products]);
   const cloudProducts = useMemo(() => cloudProductsFrom(products, geeLarkPayloads), [products, geeLarkPayloads]);
-  const defaultProductId = cloudProducts.find(product => product.code === 'DB')?.id || '';
-  const selectedProduct = cloudProducts.find(product => product.id === (selectedProductId || defaultProductId)) || cloudProducts[0];
-
-  const selectedSlot = selectedProduct?.ipGroups
-    .flatMap(ipGroup => ipGroup.slots.map(slot => ({ ...slot, ipGroup })))
-    .find(slot => slot.id === selectedSlotId) as SelectedCloudPhoneSlot | undefined;
-
-  const totals = selectedProduct?.ipGroups.reduce((sum, ipGroup) => ({
-    ipGroups: sum.ipGroups + 1,
-    phones: sum.phones + ipGroup.phoneCount,
-    active: sum.active + ipGroup.activeCount,
-    warnings: sum.warnings + ipGroup.slots.filter(slot => slot.state === 'warming' || slot.state === 'offline').length
-  }), { ipGroups: 0, phones: 0, active: 0, warnings: 0 }) || { ipGroups: 0, phones: 0, active: 0, warnings: 0 };
+  const selectedProduct = useMemo(() => selectCloudProduct(cloudProducts, selectedProductId), [cloudProducts, selectedProductId]);
+  const selectedSlot = useMemo(() => selectCloudPhoneSlot(selectedProduct, selectedSlotId), [selectedProduct, selectedSlotId]);
+  const totals = useMemo(() => summarizeIpGroups(selectedProduct?.ipGroups), [selectedProduct]);
 
   const countrySections = useMemo(() => buildCountrySections(selectedProduct?.ipGroups || []), [selectedProduct]);
-  const liveTotals = useMemo(() => Object.values(geeLarkPayloads).reduce((sum, payload) => ({
-    pairs: sum.pairs + 1,
-    groups: sum.groups + Number(payload.group_count || 0),
-    phones: sum.phones + Number(payload.phone_count || 0)
-  }), { pairs: 0, groups: 0, phones: 0 }), [geeLarkPayloads]);
+  const liveTotals = useMemo(() => summarizeGeeLarkPayloads(geeLarkPayloads), [geeLarkPayloads]);
 
-  const liveLabel = liveTotals.groups
-    ? `GeeLark 已接入 · ${liveTotals.pairs} 区 / ${liveTotals.groups} 组 / ${formatNumber(liveTotals.phones)} 台`
-    : 'GeeLark 接入预览';
-  const selectedPhoneTitle = selectedSlot
-    ? (selectedSlot.serialNo ? `No. ${selectedSlot.serialNo}` : selectedSlot.label)
-    : '点击手机查看详情';
+  const liveLabel = formatGeeLarkLiveLabel(liveTotals);
+  const selectedPhoneTitle = formatSelectedPhoneTitle(selectedSlot);
 
   useEffect(() => {
     let cancelled = false;
