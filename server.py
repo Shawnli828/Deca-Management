@@ -127,13 +127,12 @@ from server_modules.mixpanel_client import (
     mixpanel_event_user_unique_query_count as mixpanel_event_user_unique_query_count_impl,
 )
 from server_modules.api_keys import (
-    create_external_api_key_record,
-    external_api_key_authorized as external_api_key_record_authorized,
-    list_public_external_api_keys,
-    parse_external_api_keys,
-    public_external_api_key,
-    revoke_external_api_key_record,
-    serialize_external_api_keys,
+    create_external_api_key_from_state,
+    external_api_key_authorized_from_state,
+    list_external_api_keys_from_state,
+    load_external_api_keys_from_state,
+    revoke_external_api_key_from_state,
+    save_external_api_keys_to_state,
 )
 from server_modules.account_issues import (
     ZERO_PLAY_ISSUE,
@@ -1008,34 +1007,45 @@ def enrich_data_with_relational_rollups(data):
 
 
 def load_external_api_keys():
-    return parse_external_api_keys(load_app_value(EXTERNAL_API_KEYS_KEY))
+    return load_external_api_keys_from_state(load_app_value, EXTERNAL_API_KEYS_KEY)
 
 
 def save_external_api_keys(keys):
-    save_app_value(EXTERNAL_API_KEYS_KEY, serialize_external_api_keys(keys))
+    save_external_api_keys_to_state(save_app_value, EXTERNAL_API_KEYS_KEY, keys)
 
 
 def create_external_api_key(name, permissions=None):
-    raw_key, key_record = create_external_api_key_record(name, permissions, generate_id)
-    keys = load_external_api_keys()
-    keys.append(key_record)
-    save_external_api_keys(keys)
-    return {"key": raw_key, "record": public_external_api_key(key_record)}
+    return create_external_api_key_from_state(
+        name,
+        permissions,
+        load_value_fn=load_app_value,
+        save_value_fn=save_app_value,
+        state_key=EXTERNAL_API_KEYS_KEY,
+        id_factory=generate_id,
+    )
 
 
 def revoke_external_api_key(key_id):
-    keys = load_external_api_keys()
-    updated_record = revoke_external_api_key_record(keys, key_id)
-    save_external_api_keys(keys)
-    return public_external_api_key(updated_record)
+    return revoke_external_api_key_from_state(
+        key_id,
+        load_value_fn=load_app_value,
+        save_value_fn=save_app_value,
+        state_key=EXTERNAL_API_KEYS_KEY,
+    )
 
 
 def list_external_api_keys():
-    return list_public_external_api_keys(load_external_api_keys())
+    return list_external_api_keys_from_state(load_app_value, EXTERNAL_API_KEYS_KEY)
 
 
 def external_api_key_authorized(token, permission):
-    return external_api_key_record_authorized(token, permission, AI_API_KEY, load_external_api_keys())
+    return external_api_key_authorized_from_state(
+        token,
+        permission,
+        ai_api_key=AI_API_KEY,
+        load_value_fn=load_app_value,
+        state_key=EXTERNAL_API_KEYS_KEY,
+    )
 
 
 def reelfarm_api_key():

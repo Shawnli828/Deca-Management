@@ -89,3 +89,60 @@ def external_api_key_authorized(token, permission, ai_api_key, key_records):
             return True
 
     return False
+
+
+def load_external_api_keys_from_state(load_value_fn, state_key):
+    return parse_external_api_keys(load_value_fn(state_key))
+
+
+def save_external_api_keys_to_state(save_value_fn, state_key, keys):
+    save_value_fn(state_key, serialize_external_api_keys(keys))
+
+
+def create_external_api_key_from_state(
+    name,
+    permissions,
+    *,
+    load_value_fn,
+    save_value_fn,
+    state_key,
+    id_factory,
+):
+    raw_key, key_record = create_external_api_key_record(name, permissions, id_factory)
+    keys = load_external_api_keys_from_state(load_value_fn, state_key)
+    keys.append(key_record)
+    save_external_api_keys_to_state(save_value_fn, state_key, keys)
+    return {"key": raw_key, "record": public_external_api_key(key_record)}
+
+
+def revoke_external_api_key_from_state(
+    key_id,
+    *,
+    load_value_fn,
+    save_value_fn,
+    state_key,
+):
+    keys = load_external_api_keys_from_state(load_value_fn, state_key)
+    updated_record = revoke_external_api_key_record(keys, key_id)
+    save_external_api_keys_to_state(save_value_fn, state_key, keys)
+    return public_external_api_key(updated_record)
+
+
+def list_external_api_keys_from_state(load_value_fn, state_key):
+    return list_public_external_api_keys(load_external_api_keys_from_state(load_value_fn, state_key))
+
+
+def external_api_key_authorized_from_state(
+    token,
+    permission,
+    *,
+    ai_api_key,
+    load_value_fn,
+    state_key,
+):
+    return external_api_key_authorized(
+        token,
+        permission,
+        ai_api_key,
+        load_external_api_keys_from_state(load_value_fn, state_key),
+    )
