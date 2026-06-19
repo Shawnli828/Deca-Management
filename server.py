@@ -7,11 +7,10 @@ import re
 import socket
 import time
 import webbrowser
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, quote, unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from server_modules.time_windows import (
     BUSINESS_TIMEZONE,
@@ -83,6 +82,7 @@ from server_modules.reelfarm_client import (
     compact_video as compact_video_impl,
     list_payload as list_payload_impl,
     reelfarm_fetch_automations as reelfarm_fetch_automations_impl,
+    reelfarm_matches as reelfarm_matches_impl,
     reelfarm_product_automation_ids as reelfarm_product_automation_ids_impl,
     reelfarm_request as reelfarm_request_impl,
     video_identifier as video_identifier_impl,
@@ -94,8 +94,6 @@ from server_modules.reelfarm_lifecycle import (
     mark_missing_reelfarm_product_automations as mark_missing_reelfarm_product_automations_impl,
 )
 from server_modules.automation_naming import (
-    automation_prefix_candidates,
-    automation_title_matches_prefix,
     build_automation_prefix,
     build_country_automation_prefix,
     parse_concept_format_from_automation,
@@ -1112,125 +1110,12 @@ def compact_post(post):
 
 
 def reelfarm_matches(prefix, automations=None):
-    clean_prefix = (prefix or "").strip()
-    if not clean_prefix:
-        raise ValueError("Missing automation prefix.")
-
-    candidates = automation_prefix_candidates(clean_prefix)
-    automations = list(automations) if automations is not None else reelfarm_fetch_automations()
-    matched = []
-    seen_automation_keys = set()
-    for automation in automations:
-        title = str(automation.get("title", "") or "")
-        if not any(automation_title_matches_prefix(title, candidate) for candidate in candidates):
-            continue
-        key = str(automation.get("automation_id") or title).strip()
-        if key in seen_automation_keys:
-            continue
-        seen_automation_keys.add(key)
-        matched.append(automation)
-
-    accounts_by_id = {}
-    try:
-        accounts_payload = reelfarm_request("/tiktok/accounts")
-        for account in list_payload(accounts_payload, "accounts"):
-            account_id = account.get("tiktok_account_id")
-            if account_id:
-                accounts_by_id[account_id] = account
-    except RuntimeError:
-        accounts_by_id = {}
-
-    def build_card(automation):
-        automation_id = automation.get("automation_id")
-        details = automation
-        needs_details = (
-            not automation.get("tiktok_account_id")
-            or reelfarm_post_as_draft_value(automation) is None
-        )
-        if automation_id and needs_details:
-            try:
-                details = reelfarm_request(f"/automations/{quote(str(automation_id), safe='')}")
-            except RuntimeError:
-                details = automation
-
-        tiktok_account_id = details.get("tiktok_account_id") or automation.get("tiktok_account_id")
-        account = accounts_by_id.get(tiktok_account_id, {}) if tiktok_account_id else {}
-
-        def fetch_videos():
-            if not automation_id:
-                return {"videos": [], "total": 0}
-            try:
-                return reelfarm_request(
-                    "/videos",
-                    {"automation_id": automation_id, "video_type": "slideshow", "limit": 50},
-                )
-            except RuntimeError as error:
-                return {"videos": [], "total": 0, "error": str(error)}
-
-        def fetch_posts():
-            if not tiktok_account_id:
-                return {"posts": [], "statistics": {}}
-            try:
-                return reelfarm_request(
-                    "/tiktok/posts",
-                    {
-                        "tiktok_account_id": tiktok_account_id,
-                        "timeframe": "all",
-                        "sort": "recent",
-                        "limit": 50,
-                    },
-                )
-            except RuntimeError as error:
-                return {"posts": [], "statistics": {}, "error": str(error)}
-
-        with ThreadPoolExecutor(max_workers=2) as inner_executor:
-            videos_future = inner_executor.submit(fetch_videos)
-            posts_future = inner_executor.submit(fetch_posts)
-            videos_payload = videos_future.result()
-            posts_payload = posts_future.result()
-
-        posts = [compact_post(post) for post in list_payload(posts_payload, "posts")]
-        posted_video_ids = {
-            str(post.get("video_id"))
-            for post in posts
-            if post.get("video_id") and (post.get("post_id") or post.get("published_at"))
-        }
-        posted_videos = [
-            video
-            for video in list_payload(videos_payload, "videos")
-            if str(video.get("video_id") or video.get("id")) in posted_video_ids
-        ]
-        videos = [compact_video(video) for video in posted_videos[:50]]
-        automation_posted_video_ids = {str(video.get("video_id")) for video in videos if video.get("video_id")}
-        posts = [
-            post
-            for post in posts
-            if str(post.get("video_id")) in automation_posted_video_ids
-        ]
-
-        return {
-            "automation": compact_automation(details),
-            "account": compact_account(account),
-            "videos": videos,
-            "video_total": len(videos),
-            "posts": posts,
-            "post_statistics": posts_payload.get("statistics", {})
-            if isinstance(posts_payload, dict)
-            else {},
-            "errors": {
-                "videos": videos_payload.get("error")
-                if isinstance(videos_payload, dict)
-                else None,
-                "posts": posts_payload.get("error")
-                if isinstance(posts_payload, dict)
-                else None,
-            },
-        }
-
-    with ThreadPoolExecutor(max_workers=min(6, max(1, len(matched)))) as executor:
-        cards = list(executor.map(build_card, matched))
-
-    return {"prefix": clean_prefix, "matched_prefixes": candidates, "count": len(cards), "cards": cards}
+    return reelfarm_matches_impl(
+        prefix,
+        automations=automations,
+        fetch_automations_fn=reelfarm_fetch_automations,
+        request_fn=reelfarm_request,
+    )
 
 
 def reelfarm_creator_count(result):
