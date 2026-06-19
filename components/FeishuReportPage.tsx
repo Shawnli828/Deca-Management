@@ -2,13 +2,15 @@
 
 import { useFeishuReport } from '@/hooks/useFeishuReport';
 import {
-  FeishuAiPanel,
   FeishuFlowGrid,
-  FeishuReportHero,
+  FeishuReportHero
+} from './FeishuReportParts';
+import {
+  FeishuAiPanel,
   FeishuReportLayout,
   FeishuReportSummary,
   FeishuStatusMessages
-} from './FeishuReportParts';
+} from './FeishuReportPanels';
 
 export function FeishuReportPage() {
   const {
