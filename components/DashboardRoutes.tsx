@@ -3,12 +3,10 @@
 import { ApiKeyPage } from '@/components/ApiKeyPage';
 import { BusinessMaterialReport } from '@/components/BusinessMaterialReport';
 import { CloudPhoneMap } from '@/components/CloudPhoneMap';
-import { CountryList } from '@/components/CountryList';
-import { CountryWorkspace } from '@/components/CountryWorkspace';
 import { FeishuReportPage } from '@/components/FeishuReportPage';
 import { GrowthDashboard } from '@/components/GrowthDashboard';
-import { ProductList } from '@/components/ProductList';
 import { PublishCheckBoard } from '@/components/PublishCheckBoard';
+import { CloneSlideshowToolPanel, SlideshowToolPanel } from '@/components/SlideshowToolPanels';
 import type {
   Country,
   ExternalApiKey,
@@ -18,7 +16,6 @@ import type {
   ReelFarmCard,
   ReelFarmResult
 } from '@/lib/types';
-import { getProductReelFarmCode } from '@/lib/utils';
 
 export type DashboardTool =
   | 'growth'
@@ -139,75 +136,54 @@ export function DashboardRoutes({
         <FeishuReportPage />
       </section>
       <section className={`tool-page ${tool === 'slideshow' ? 'active' : ''}`}>
-        <section className="page-shell slideshow-shell">
-          {page === 'products' ? (
-            <ProductList
-              products={products}
-              productKpis={productKpis}
-              onSelect={selectProduct}
-              onAddProduct={addProduct}
-              onEditProduct={product => setEditingProductId(product.id)}
-            />
-          ) : null}
-          {page === 'product' && selectedProduct ? (
-            <CountryList
-              product={selectedProduct}
-              kpis={productKpis[selectedProduct.id]}
-              syncing={syncProductId === selectedProduct.id}
-              onBack={() => setPage('products')}
-              onSelect={selectCountry}
-              onOpenSettings={() => setCountrySettingsOpen(true)}
-              onSyncProduct={syncProductCountries}
-            />
-          ) : null}
-          {page === 'country' && selectedProduct && selectedCountry ? (
-            <CountryWorkspace
-              product={selectedProduct}
-              country={selectedCountry}
-              kpis={countryKpis[`${selectedProduct.id}:${selectedCountry.id}`]}
-              result={reelFarmResults[currentPrefix]}
-              days={days}
-              loadingPrefix={syncPrefix}
-              expandedCards={expandedCards}
-              postLoading={postLoading}
-              slideIndexes={slideIndexes}
-              onBack={() => setPage('product')}
-              onDays={changeDays}
-              onSync={syncCountry}
-              onToggleCard={toggleCard}
-              onPage={pagePosts}
-              onMoveSlide={moveSlide}
-              onAddTag={addCardTag}
-              onRemoveTag={removeCardTag}
-              productTags={productTags[getProductReelFarmCode(selectedProduct)] || []}
-            />
-          ) : null}
-        </section>
+        <SlideshowToolPanel
+          page={page}
+          products={products}
+          productKpis={productKpis}
+          selectedProduct={selectedProduct}
+          selectedCountry={selectedCountry}
+          countryKpis={countryKpis}
+          currentPrefix={currentPrefix}
+          syncProductId={syncProductId}
+          syncPrefix={syncPrefix}
+          days={days}
+          reelFarmResults={reelFarmResults}
+          expandedCards={expandedCards}
+          postLoading={postLoading}
+          slideIndexes={slideIndexes}
+          productTags={productTags}
+          setPage={setPage}
+          setEditingProductId={setEditingProductId}
+          setCountrySettingsOpen={setCountrySettingsOpen}
+          selectProduct={selectProduct}
+          selectCountry={selectCountry}
+          addProduct={addProduct}
+          syncProductCountries={syncProductCountries}
+          changeDays={changeDays}
+          syncCountry={syncCountry}
+          toggleCard={toggleCard}
+          pagePosts={pagePosts}
+          moveSlide={moveSlide}
+          addCardTag={addCardTag}
+          removeCardTag={removeCardTag}
+        />
       </section>
       <section className={`tool-page ${tool === 'cloneSlideshow' ? 'active' : ''}`}>
-        <section className="page-shell slideshow-shell">
-          {page === 'products' ? (
-            <ProductList
-              products={cloneDisplayProducts}
-              productKpis={cloneProductKpis}
-              onSelect={selectProduct}
-              onAddProduct={addProduct}
-              onEditProduct={product => setEditingProductId(product.id)}
-            />
-          ) : null}
-          {page !== 'products' && selectedProduct ? (
-            <CountryList
-              product={selectedCloneProduct || selectedProduct}
-              kpis={cloneProductKpis[selectedProduct.id]}
-              dataSource="museon_clone"
-              syncing={syncProductId === selectedProduct.id}
-              onBack={() => setPage('products')}
-              onSelect={selectCountry}
-              onOpenSettings={() => setCountrySettingsOpen(true)}
-              onSyncProduct={syncCloneProductCountries}
-            />
-          ) : null}
-        </section>
+        <CloneSlideshowToolPanel
+          page={page}
+          cloneDisplayProducts={cloneDisplayProducts}
+          cloneProductKpis={cloneProductKpis}
+          selectedProduct={selectedProduct}
+          selectedCloneProduct={selectedCloneProduct}
+          syncProductId={syncProductId}
+          setPage={setPage}
+          setEditingProductId={setEditingProductId}
+          setCountrySettingsOpen={setCountrySettingsOpen}
+          selectProduct={selectProduct}
+          selectCountry={selectCountry}
+          addProduct={addProduct}
+          syncCloneProductCountries={syncCloneProductCountries}
+        />
       </section>
       <section className={`tool-page ${tool === 'cloudPhones' ? 'active' : ''}`}>
         <CloudPhoneMap products={products} />
