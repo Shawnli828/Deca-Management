@@ -1,0 +1,129 @@
+        .app {
+            width: 100%;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        .app-layout {
+            display: grid;
+            grid-template-columns: 220px minmax(0, 1fr);
+            min-height: 100vh;
+            transition: grid-template-columns 0.2s ease;
+        }
+
+        .app-layout.side-collapsed {
+            grid-template-columns: 72px minmax(0, 1fr);
+        }
+
+        .side-menu {
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            border-right: 1px solid var(--line);
+            padding: 18px 14px;
+            background: var(--surface);
+        }
+
+        .side-brand {
+            display: flex;
+            align-items: baseline;
+            gap: 7px;
+            min-height: 40px;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .side-collapse-btn {
+            margin-left: auto;
+            width: 26px;
+            height: 26px;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            background: var(--surface-soft);
+            color: var(--text);
+            line-height: 1;
+        }
+
+        .side-nav {
+            display: grid;
+            gap: 8px;
+            margin-top: 18px;
+        }
+
+        .side-nav-btn {
+            display: grid;
+            grid-template-columns: 28px minmax(0, 1fr);
+            gap: 9px;
+            align-items: center;
+            width: 100%;
+            border: 1px solid transparent;
+            border-radius: 0;
+            padding: 12px;
+            background: transparent;
+            color: var(--muted);
+            text-align: left;
+        }
+
+        .side-nav-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border: 1px solid var(--line);
+            border-radius: 7px;
+            color: var(--accent-strong);
+            font-size: 12px;
+            font-weight: 950;
+        }
+
+        .side-nav-copy {
+            display: grid;
+            gap: 3px;
+            min-width: 0;
+        }
+
+        .side-nav-btn:hover,
+        .side-nav-btn.active {
+            border-color: var(--line);
+            background: var(--surface-soft);
+            color: var(--text);
+        }
+
+        .side-nav-title {
+            font-size: 13px;
+            font-weight: 850;
+        }
+
+        .side-nav-meta {
+            color: var(--subtle);
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .side-menu.collapsed {
+            padding: 18px 10px;
+        }
+
+        .side-menu.collapsed .side-brand {
+            justify-content: center;
+        }
+
+        .side-menu.collapsed .side-brand-text,
+        .side-menu.collapsed .side-nav-copy {
+            display: none;
+        }
+
+        .side-menu.collapsed .side-collapse-btn {
+            position: absolute;
+            top: 18px;
+            right: -13px;
+            z-index: 2;
+        }
+
+        .side-menu.collapsed .side-nav-btn {
+            grid-template-columns: 1fr;
+            justify-items: center;
+            padding: 10px 6px;
+        }
