@@ -197,6 +197,15 @@ from server_modules.db_core import (
     upsert_row as upsert_row_impl,
     using_postgres as using_postgres_impl,
 )
+from server_modules.state_helpers import (
+    clean_publish_check_state,
+    data_source_channel_code as data_source_channel_code_impl,
+    default_data as default_data_impl,
+    default_publish_check_state as default_publish_check_state_impl,
+    initial_data as initial_data_impl,
+    parse_publish_check_state,
+    strip_reelfarm_state as strip_reelfarm_state_impl,
+)
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -260,58 +269,11 @@ def make_ssl_context():
 
 
 def default_data():
-    return [
-        {
-            "id": generate_id(),
-            "name": "Product A",
-            "logo": "",
-            "countries": [
-                {
-                    "id": generate_id(),
-                    "name": "United States",
-                    "concepts": [
-                        {"id": generate_id(), "name": "Tech Focus", "count": 45},
-                        {"id": generate_id(), "name": "Lifestyle", "count": 30},
-                    ],
-                },
-                {
-                    "id": generate_id(),
-                    "name": "Japan",
-                    "concepts": [
-                        {"id": generate_id(), "name": "Design/Aesthetics", "count": 50},
-                    ],
-                },
-            ],
-        },
-        {
-            "id": generate_id(),
-            "name": "Product B",
-            "logo": "",
-            "countries": [
-                {
-                    "id": generate_id(),
-                    "name": "Germany",
-                    "concepts": [
-                        {"id": generate_id(), "name": "Efficiency", "count": 28},
-                        {"id": generate_id(), "name": "Sustainability", "count": 18},
-                    ],
-                }
-            ],
-        },
-    ]
+    return default_data_impl(generate_id)
 
 
 def initial_data():
-    if SEED_DATA_PATH.is_file():
-        try:
-            payload = json.loads(SEED_DATA_PATH.read_text(encoding="utf-8"))
-            data = payload.get("data")
-            if isinstance(data, list):
-                return data
-        except (OSError, json.JSONDecodeError):
-            pass
-
-    return default_data()
+    return initial_data_impl(SEED_DATA_PATH, generate_id)
 
 
 def connect_db():
@@ -344,65 +306,25 @@ def save_data(data, conn=None):
 
 
 def default_publish_check_state():
-    return {"assignments": [], "last_result": None}
+    return default_publish_check_state_impl()
 
 
 def load_publish_check_state():
-    raw = load_app_value(PUBLISH_CHECK_STATE_KEY)
-    if not raw:
-        return default_publish_check_state()
-    try:
-        state = json.loads(raw)
-    except json.JSONDecodeError:
-        return default_publish_check_state()
-    if not isinstance(state, dict):
-        return default_publish_check_state()
-    assignments = state.get("assignments")
-    if not isinstance(assignments, list):
-        assignments = []
-    return {
-        "assignments": assignments,
-        "last_result": state.get("last_result") if isinstance(state.get("last_result"), dict) else None,
-    }
+    return parse_publish_check_state(load_app_value(PUBLISH_CHECK_STATE_KEY))
 
 
 def save_publish_check_state(state):
-    clean = default_publish_check_state()
-    assignments = state.get("assignments") if isinstance(state, dict) else []
-    if isinstance(assignments, list):
-        clean["assignments"] = [
-            {
-                "id": str(item.get("id") or generate_id()),
-                "person_id": str(item.get("person_id") or ""),
-                "person_name": str(item.get("person_name") or ""),
-                "product_id": str(item.get("product_id") or ""),
-                "country_id": str(item.get("country_id") or ""),
-            }
-            for item in assignments
-            if isinstance(item, dict) and item.get("product_id") and item.get("country_id")
-        ]
-    if isinstance(state, dict) and isinstance(state.get("last_result"), dict):
-        clean["last_result"] = state["last_result"]
+    clean = clean_publish_check_state(state, generate_id)
     save_app_value(PUBLISH_CHECK_STATE_KEY, clean)
     return clean
 
 
 def strip_reelfarm_state(value):
-    if isinstance(value, list):
-        return [strip_reelfarm_state(item) for item in value]
-    if not isinstance(value, dict):
-        return value
-
-    clean = {}
-    for key, item in value.items():
-        if key == "reelFarmResult":
-            continue
-        clean[key] = strip_reelfarm_state(item)
-    return clean
+    return strip_reelfarm_state_impl(value)
 
 
 def data_source_channel_code(source):
-    return "MUSEON_CLONE" if str(source or "").strip().lower() in {"museon_clone", "clone", "museon"} else "TIKTOK"
+    return data_source_channel_code_impl(source)
 
 
 def upsert_row(conn, table, values, conflict_cols, update_cols=None):
