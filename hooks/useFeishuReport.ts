@@ -2,46 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
+import {
+  DEFAULT_LLM_MODEL,
+  FALLBACK_MODEL_OPTIONS,
+  localIsoDate,
+  ratio,
+  reportTotals
+} from '@/lib/feishuReportHelpers';
 import type {
   DailyFeishuAnalysisPayload,
   DailyFeishuPreviewPayload,
-  DailyFeishuReport,
   DailyFeishuSendResult
 } from '@/lib/types';
-
-export const DEFAULT_LLM_MODEL = 'gpt-4.1-mini';
-
-export const FALLBACK_MODEL_OPTIONS = [
-  'gpt-5',
-  'gpt-5-mini',
-  'gpt-5-nano',
-  'gpt-4.1',
-  'gpt-4.1-mini',
-  'gpt-4.1-nano',
-  'gpt-4o',
-  'gpt-4o-mini',
-  'gpt-4-turbo',
-  'gpt-4'
-];
-
-export function localIsoDate(offsetDays = 0) {
-  const date = new Date();
-  date.setDate(date.getDate() + offsetDays);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function ratio(value: unknown) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return null;
-  return number;
-}
-
-function reportTotals(report?: DailyFeishuReport | null) {
-  return report?.totals || {};
-}
 
 export function useFeishuReport() {
   const [reportDate, setReportDate] = useState(localIsoDate(-1));

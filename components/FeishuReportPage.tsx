@@ -1,12 +1,7 @@
 'use client';
 
-import { localIsoDate, useFeishuReport } from '@/hooks/useFeishuReport';
-import { formatNumber } from '@/lib/utils';
-
-function metric(value: unknown) {
-  if (value === null || value === undefined || value === '') return '—';
-  return formatNumber(value);
-}
+import { useFeishuReport } from '@/hooks/useFeishuReport';
+import { formatFeishuMetric, localIsoDate } from '@/lib/feishuReportHelpers';
 
 export function FeishuReportPage() {
   const {
@@ -150,7 +145,7 @@ export function FeishuReportPage() {
         ].map(([label, value]) => (
           <article key={label as string}>
             <span>{label}</span>
-            <strong>{typeof value === 'string' ? value : metric(value)}</strong>
+            <strong>{typeof value === 'string' ? value : formatFeishuMetric(value)}</strong>
           </article>
         ))}
       </section>
@@ -183,7 +178,7 @@ export function FeishuReportPage() {
                   <strong>{String(product.product_name || product.product_code || 'Product')}</strong>
                   <span>{String(product.product_code || '')}</span>
                 </div>
-                <small>播放 {metric(product.total_views)} · Onboarding {metric(product.downloads)}</small>
+                <small>播放 {formatFeishuMetric(product.total_views)} · Onboarding {formatFeishuMetric(product.downloads)}</small>
               </article>
             )) : (
               <p className="feishu-empty">暂无产品数据。</p>
