@@ -4034,6 +4034,14 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             return None, False
         return (default if payload is None else payload), True
 
+    def payload_value(self, payload, key, default=None):
+        return payload.get(key, default) if isinstance(payload, dict) else default
+
+    def payload_text(self, payload, key, default="", strip=True):
+        value = self.payload_value(payload, key, default)
+        text = str(value)
+        return text.strip() if strip else text
+
     def query_params(self):
         return parse_qs(urlparse(self.path).query)
 
@@ -4275,8 +4283,8 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             if not ok:
                 return
 
-            username = str(payload.get("username", "") if isinstance(payload, dict) else "").strip()
-            password = str(payload.get("password", "") if isinstance(payload, dict) else "")
+            username = self.payload_text(payload, "username")
+            password = self.payload_text(payload, "password", strip=False)
             if username == ADMIN_USERNAME and hmac.compare_digest(password_hash(password), ADMIN_PASSWORD_HASH):
                 token = make_auth_token(username)
                 self.send_json(
@@ -4306,7 +4314,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             if not ok:
                 return
 
-            data = payload.get("data") if isinstance(payload, dict) else None
+            data = self.payload_value(payload, "data")
             if not isinstance(data, list):
                 self.send_error_json(400, "Expected { data: [...] }")
                 return
@@ -4326,7 +4334,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             if not ok:
                 return
 
-            api_key = str(payload.get("api_key", "") if isinstance(payload, dict) else "").strip()
+            api_key = self.payload_text(payload, "api_key")
             if api_key:
                 save_app_value(REELFARM_API_KEY, api_key)
             else:
@@ -4347,7 +4355,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             if not ok:
                 return
 
-            name = str(payload.get("name", "") if isinstance(payload, dict) else "").strip()
+            name = self.payload_text(payload, "name")
             created = create_external_api_key(name, ["materials:read"])
             self.send_json(200, {"ok": True, **created})
             return
@@ -4357,7 +4365,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             if not ok:
                 return
 
-            key_id = str(payload.get("id", "") if isinstance(payload, dict) else "").strip()
+            key_id = self.payload_text(payload, "id")
             try:
                 self.send_json(200, {"ok": True, "record": revoke_external_api_key(key_id)})
             except ValueError as error:
@@ -4369,17 +4377,17 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             if not ok:
                 return
 
-            prefix = str(payload.get("prefix", "") if isinstance(payload, dict) else "").strip()
+            prefix = self.payload_text(payload, "prefix")
             try:
                 self.send_json(
                     200,
                     sync_reelfarm_prefix(
                         prefix,
-                        str(payload.get("product_id", "") if isinstance(payload, dict) else "").strip(),
-                        str(payload.get("country_id", "") if isinstance(payload, dict) else "").strip(),
-                        str(payload.get("concept_id", "") if isinstance(payload, dict) else "").strip(),
-                        str(payload.get("product_code", "") if isinstance(payload, dict) else "").strip(),
-                        str(payload.get("country_code", "") if isinstance(payload, dict) else "").strip(),
+                        self.payload_text(payload, "product_id"),
+                        self.payload_text(payload, "country_id"),
+                        self.payload_text(payload, "concept_id"),
+                        self.payload_text(payload, "product_code"),
+                        self.payload_text(payload, "country_code"),
                     ),
                 )
             except ValueError as error:
@@ -4393,16 +4401,16 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             if not ok:
                 return
 
-            prefix = str(payload.get("prefix", "") if isinstance(payload, dict) else "").strip()
+            prefix = self.payload_text(payload, "prefix")
             try:
                 self.send_json(
                     200,
                     sync_reelfarm_country(
                         prefix,
-                        str(payload.get("product_id", "") if isinstance(payload, dict) else "").strip(),
-                        str(payload.get("country_id", "") if isinstance(payload, dict) else "").strip(),
-                        str(payload.get("product_code", "") if isinstance(payload, dict) else "").strip(),
-                        str(payload.get("country_code", "") if isinstance(payload, dict) else "").strip(),
+                        self.payload_text(payload, "product_id"),
+                        self.payload_text(payload, "country_id"),
+                        self.payload_text(payload, "product_code"),
+                        self.payload_text(payload, "country_code"),
                     ),
                 )
             except ValueError as error:
@@ -4420,10 +4428,10 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
                 self.send_json(
                     200,
                     sync_museon_clone_country(
-                        str(payload.get("product_id", "") if isinstance(payload, dict) else "").strip(),
-                        str(payload.get("country_id", "") if isinstance(payload, dict) else "").strip(),
-                        str(payload.get("product_code", "") if isinstance(payload, dict) else "").strip(),
-                        str(payload.get("country_code", "") if isinstance(payload, dict) else "").strip(),
+                        self.payload_text(payload, "product_id"),
+                        self.payload_text(payload, "country_id"),
+                        self.payload_text(payload, "product_code"),
+                        self.payload_text(payload, "country_code"),
                     ),
                 )
             except ValueError as error:
@@ -4438,8 +4446,8 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
                 return
             try:
                 records = sync_product_growth_snapshots(
-                    str(payload.get("product_code", "") if isinstance(payload, dict) else "").strip(),
-                    payload.get("days", 30) if isinstance(payload, dict) else 30,
+                    self.payload_text(payload, "product_code"),
+                    self.payload_value(payload, "days", 30),
                 )
                 self.send_json(200, {"ok": True, "count": len(records), "records": records})
             except ValueError as error:
