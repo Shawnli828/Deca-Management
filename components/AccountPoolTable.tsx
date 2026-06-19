@@ -1,4 +1,5 @@
 import { Fragment } from 'react';
+import { formatTagLabel } from '@/lib/tagUtils';
 import { countryFlag, formatNumber, formatUtcReadable } from '@/lib/utils';
 import {
   type AccountPoolDataSource,
@@ -10,7 +11,6 @@ import {
 } from './AccountPoolHelpers';
 import { AccountPostPanel, type AccountPostState } from './CountryAccountPosts';
 import { accountTagStyle, nonIssueTags } from './CountryAccountTagHelpers';
-import { formatTagLabel } from './ReelFarmAccountCard';
 
 export function AccountPoolTable({
   rows,

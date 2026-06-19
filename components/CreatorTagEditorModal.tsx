@@ -3,14 +3,14 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { ReelFarmCard } from '@/lib/types';
-import { cardStateKey } from '@/lib/utils';
 import {
   composeTag,
   formatTagLabel,
   getTagCategory,
   getTagName,
   tagChipStyle
-} from './ReelFarmAccountCard';
+} from '@/lib/tagUtils';
+import { cardStateKey } from '@/lib/utils';
 
 export function CreatorTagEditorModal({
   card,

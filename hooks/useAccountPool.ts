@@ -4,16 +4,17 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   type AccountPoolRow,
   type ViewSortDirection,
-  getAccountAvgViews,
   getAccountPoolPerformanceMetrics,
   getAccountRowKey,
-  getPublishMethod
+  getAccountPoolTagOptions,
+  filterAccountPoolRows,
+  sortAccountPoolRows
 } from '@/components/AccountPoolHelpers';
 import { ACCOUNT_POST_PAGE_SIZE, type AccountPostState } from '@/components/CountryAccountPosts';
 import { type TagFilterRow } from '@/components/CountryAccountTags';
-import { formatTagLabel, getTagCategory } from '@/components/ReelFarmAccountCard';
 import { api } from '@/lib/api';
 import { defaultDateRange } from '@/lib/dateRange';
+import { formatTagLabel } from '@/lib/tagUtils';
 import type { AccountSummary, Country, DetailedPostRow, Product } from '@/lib/types';
 import { getCountryReelFarmCode, getProductReelFarmCode } from '@/lib/utils';
 
@@ -179,12 +180,10 @@ export function useAccountPool({
     }
   }
 
-  const tagOptions = useMemo(() => {
-    return Array.from(new Set([
-      ...productTagOptions,
-      ...rows.flatMap(row => row.tags || [])
-    ])).filter(Boolean).sort((a, b) => a.localeCompare(b));
-  }, [productTagOptions, rows]);
+  const tagOptions = useMemo(
+    () => getAccountPoolTagOptions(productTagOptions, rows),
+    [productTagOptions, rows]
+  );
 
   const editingTagRow = editingTagAccountId ? rows.find(row => row.account_id === editingTagAccountId) || null : null;
 
@@ -233,41 +232,18 @@ export function useAccountPool({
     );
   }
 
-  const filteredRows = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    const activeTagFilters = tagFilters.filter(filter => filter.category && filter.tags.length);
-    return rows.filter(row => {
-      const username = String(row.username || row.display_name || row.account_id || '').toLowerCase();
-      const countryCode = getCountryReelFarmCode(row.country);
-      const status = String(row.status || 'unknown').toLowerCase();
-      const publishMethod = getPublishMethod(row, dataSource);
-      if (query && !username.includes(query)) return false;
-      if (countryFilter !== 'all' && countryCode !== countryFilter) return false;
-      if (statusFilter !== 'all' && status !== statusFilter) return false;
-      if (publishMethodFilter !== 'all' && publishMethod !== publishMethodFilter) return false;
-      if (activeTagFilters.length) {
-        const rowTags = row.tags || [];
-        const matchesTags = activeTagFilters.every(filter => {
-          const selected = new Set(filter.tags);
-          return rowTags.some(tag => getTagCategory(tag) === filter.category && selected.has(tag));
-        });
-        if (!matchesTags) return false;
-      }
-      return true;
-    });
-  }, [countryFilter, dataSource, publishMethodFilter, rows, search, statusFilter, tagFilters]);
+  const filteredRows = useMemo(() => filterAccountPoolRows({
+    rows,
+    search,
+    countryFilter,
+    statusFilter,
+    publishMethodFilter,
+    tagFilters,
+    dataSource
+  }), [countryFilter, dataSource, publishMethodFilter, rows, search, statusFilter, tagFilters]);
 
   const sortedRows = useMemo(() => {
-    if (viewSort === 'none') return filteredRows;
-    return [...filteredRows].sort((left, right) => {
-      const leftViews = getAccountAvgViews(left);
-      const rightViews = getAccountAvgViews(right);
-      if (leftViews === rightViews) {
-        return String(left.username || left.display_name || left.account_id || '')
-          .localeCompare(String(right.username || right.display_name || right.account_id || ''));
-      }
-      return viewSort === 'desc' ? rightViews - leftViews : leftViews - rightViews;
-    });
+    return sortAccountPoolRows(filteredRows, viewSort);
   }, [filteredRows, viewSort]);
 
   function toggleViewSort() {

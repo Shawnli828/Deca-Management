@@ -1,7 +1,7 @@
 'use client';
 
 import type { AccountSummary, Country } from '@/lib/types';
-import { getTagCategory, getTagName } from './ReelFarmAccountCard';
+import { getTagCategory, getTagName } from '@/lib/tagUtils';
 
 export type AccountTagRow = AccountSummary & { country: Country; tags?: string[]; issues?: string[] };
 export type TagFilterRow = { id: string; category: string; tags: string[] };

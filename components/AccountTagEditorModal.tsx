@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { composeTag, formatTagLabel, getTagCategory, getTagName } from './ReelFarmAccountCard';
+import { composeTag, formatTagLabel, getTagCategory, getTagName } from '@/lib/tagUtils';
 import {
   accountTagStyle,
   categorySuggestions as getCategorySuggestions,

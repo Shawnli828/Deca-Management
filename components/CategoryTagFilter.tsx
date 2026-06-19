@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getTagName } from './ReelFarmAccountCard';
+import { getTagName } from '@/lib/tagUtils';
 import {
   accountTagStyle,
   generateUiId,

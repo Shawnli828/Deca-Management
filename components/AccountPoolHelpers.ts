@@ -1,5 +1,6 @@
-import { formatNumber } from '@/lib/utils';
-import type { AccountTagRow } from './CountryAccountTagHelpers';
+import { getTagCategory } from '@/lib/tagUtils';
+import { formatNumber, getCountryReelFarmCode } from '@/lib/utils';
+import type { AccountTagRow, TagFilterRow } from './CountryAccountTagHelpers';
 
 export type AccountPoolRow = AccountTagRow;
 export type ViewSortDirection = 'none' | 'desc' | 'asc';
@@ -70,4 +71,64 @@ export function getAccountPoolPerformanceMetrics(filteredRows: AccountPoolRow[])
     { label: 'SHARES', value: formatNumber(shares) },
     { label: 'ENGAGEMENT', value: `${engagement.toFixed(2)}%`, note: '(Likes + comments + shares) / views' }
   ];
+}
+
+export function getAccountPoolTagOptions(productTagOptions: string[], rows: AccountPoolRow[]) {
+  return Array.from(new Set([
+    ...productTagOptions,
+    ...rows.flatMap(row => row.tags || [])
+  ])).filter(Boolean).sort((a, b) => a.localeCompare(b));
+}
+
+export function filterAccountPoolRows({
+  rows,
+  search,
+  countryFilter,
+  statusFilter,
+  publishMethodFilter,
+  tagFilters,
+  dataSource
+}: {
+  rows: AccountPoolRow[];
+  search: string;
+  countryFilter: string;
+  statusFilter: string;
+  publishMethodFilter: string;
+  tagFilters: TagFilterRow[];
+  dataSource: AccountPoolDataSource;
+}) {
+  const query = search.trim().toLowerCase();
+  const activeTagFilters = tagFilters.filter(filter => filter.category && filter.tags.length);
+  return rows.filter(row => {
+    const username = String(row.username || row.display_name || row.account_id || '').toLowerCase();
+    const countryCode = getCountryReelFarmCode(row.country);
+    const status = String(row.status || 'unknown').toLowerCase();
+    const publishMethod = getPublishMethod(row, dataSource);
+    if (query && !username.includes(query)) return false;
+    if (countryFilter !== 'all' && countryCode !== countryFilter) return false;
+    if (statusFilter !== 'all' && status !== statusFilter) return false;
+    if (publishMethodFilter !== 'all' && publishMethod !== publishMethodFilter) return false;
+    if (activeTagFilters.length) {
+      const rowTags = row.tags || [];
+      const matchesTags = activeTagFilters.every(filter => {
+        const selected = new Set(filter.tags);
+        return rowTags.some(tag => getTagCategory(tag) === filter.category && selected.has(tag));
+      });
+      if (!matchesTags) return false;
+    }
+    return true;
+  });
+}
+
+export function sortAccountPoolRows(rows: AccountPoolRow[], viewSort: ViewSortDirection) {
+  if (viewSort === 'none') return rows;
+  return [...rows].sort((left, right) => {
+    const leftViews = getAccountAvgViews(left);
+    const rightViews = getAccountAvgViews(right);
+    if (leftViews === rightViews) {
+      return String(left.username || left.display_name || left.account_id || '')
+        .localeCompare(String(right.username || right.display_name || right.account_id || ''));
+    }
+    return viewSort === 'desc' ? rightViews - leftViews : leftViews - rightViews;
+  });
 }
