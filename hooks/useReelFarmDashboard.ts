@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { accountSummaryToCard, api, mergePostRowsIntoCard } from '@/lib/api';
+import { api } from '@/lib/api';
+import { accountSummaryToCard, mergePostRowsIntoCard } from '@/lib/reelfarmCardAdapters';
 import type { Country, Product, ReelFarmCard, ReelFarmResult } from '@/lib/types';
 import {
   buildCountryAutomationPrefix,
