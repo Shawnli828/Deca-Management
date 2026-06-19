@@ -1,22 +1,7 @@
 import re
 
 from server_modules.common import code_from_name, slug_part
-
-
-COUNTRY_CODES = {
-    "United States": "US",
-    "United Kingdom": "UK",
-    "Japan": "JP",
-    "Germany": "DE",
-    "Brazil": "BR",
-    "India": "IN",
-    "China": "CN",
-    "France": "FR",
-    "Italy": "IT",
-    "Canada": "CA",
-    "Australia": "AU",
-    "South Korea": "KR",
-}
+from server_modules.product_config import COUNTRY_CODES
 
 
 def _country_code(country):

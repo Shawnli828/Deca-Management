@@ -182,6 +182,12 @@ from server_modules.common import (
     utc_snapshot_date,
 )
 from server_modules.schema import init_relational_schema as init_relational_schema_impl
+from server_modules.product_config import (
+    COUNTRY_CODES,
+    configured_product_codes as configured_product_codes_impl,
+    configured_product_name_map as configured_product_name_map_impl,
+    product_country_lookup as product_country_lookup_impl,
+)
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -230,20 +236,6 @@ SESSION_SECRET = os.environ.get("SESSION_SECRET", ADMIN_PASSWORD_HASH).strip()
 SESSION_COOKIE = "deca_growth_session"
 SESSION_TTL_SECONDS = 60 * 60 * 12
 AI_API_KEY = os.environ.get("AI_API_KEY", "").strip()
-COUNTRY_CODES = {
-    "United States": "US",
-    "United Kingdom": "UK",
-    "Japan": "JP",
-    "Germany": "DE",
-    "Brazil": "BR",
-    "India": "IN",
-    "China": "CN",
-    "France": "FR",
-    "Italy": "IT",
-    "Canada": "CA",
-    "Australia": "AU",
-    "South Korea": "KR",
-}
 
 
 def using_postgres():
@@ -1692,27 +1684,11 @@ def sync_all_growth_snapshots(days=30):
 
 
 def configured_product_codes():
-    product_codes = []
-    seen = set()
-    for product in load_data():
-        if not isinstance(product, dict):
-            continue
-        product_code = str(product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
-        if product_code and product_code not in seen:
-            seen.add(product_code)
-            product_codes.append(product_code)
-    return product_codes
+    return configured_product_codes_impl(load_data())
 
 
 def configured_product_name_map():
-    names = {}
-    for product in load_data():
-        if not isinstance(product, dict):
-            continue
-        product_code = str(product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
-        if product_code:
-            names[product_code] = str(product.get("name") or product_code)
-    return names
+    return configured_product_name_map_impl(load_data())
 
 
 def sync_daily_all_records(days=30):
@@ -3807,32 +3783,7 @@ def beijing_day_window(now=None):
 
 
 def product_country_lookup():
-    products = load_data()
-    lookup = {}
-    for product in products if isinstance(products, list) else []:
-        if not isinstance(product, dict):
-            continue
-        product_id = str(product.get("id") or "")
-        product_code = str(product.get("reelFarmCode") or code_from_name(product.get("name"))).upper()
-        for country in product.get("countries") or []:
-            if not isinstance(country, dict):
-                continue
-            country_id = str(country.get("id") or "")
-            country_code = str(country.get("reelFarmCode") or COUNTRY_CODES.get(country.get("name"), "") or code_from_name(country.get("name"))).upper()
-            lookup[(product_id, country_id)] = {
-                "product": {
-                    "id": product_id,
-                    "name": product.get("name") or "",
-                    "code": product_code,
-                    "folder": product.get("folder") or product.get("owner_type") or "",
-                },
-                "country": {
-                    "id": country_id,
-                    "name": country.get("name") or "",
-                    "code": country_code,
-                },
-            }
-    return lookup
+    return product_country_lookup_impl(load_data())
 
 
 def publish_check_accounts(product_code, country_code, utc_start, utc_end):
