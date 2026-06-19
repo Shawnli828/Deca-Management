@@ -16,7 +16,17 @@ import { api } from '@/lib/api';
 import { defaultDateRange } from '@/lib/dateRange';
 import { formatTagLabel } from '@/lib/tagUtils';
 import type { AccountSummary, Country, DetailedPostRow, Product } from '@/lib/types';
-import { getCountryReelFarmCode, getProductReelFarmCode } from '@/lib/utils';
+import { getProductReelFarmCode } from '@/lib/utils';
+import {
+  addTagToRows,
+  attachAccountTagsAndIssues,
+  buildAccountPoolQueryParams,
+  buildAccountPostsQueryParams,
+  fetchAccountTagsAndIssues,
+  removeProductTagFromFilters,
+  removeProductTagFromRows,
+  removeTagFromRows
+} from './accountPoolStateHelpers';
 
 export function useAccountPool({
   product,
@@ -44,12 +54,6 @@ export function useAccountPool({
   const [editingTagAccountId, setEditingTagAccountId] = useState('');
   const [productTagOptions, setProductTagOptions] = useState<string[]>([]);
 
-  function addDateFilters(params: URLSearchParams) {
-    if (dateFrom) params.set('date_from', dateFrom);
-    if (dateTo) params.set('date_to', dateTo);
-    return params;
-  }
-
   async function loadAccountPool() {
     setLoading(true);
     try {
@@ -60,12 +64,7 @@ export function useAccountPool({
         tags: [] as string[]
       }));
       const accountsRequest = Promise.all(countries.map(async country => {
-        const params = addDateFilters(new URLSearchParams({
-          resource: 'accounts',
-          product_code: productCode,
-          country_code: getCountryReelFarmCode(country)
-        }));
-        if (dataSource !== 'reelfarm') params.set('source', dataSource);
+        const params = buildAccountPoolQueryParams({ productCode, country, dateFrom, dateTo, dataSource });
         const payload = await api.dataQuery<{ ok: boolean; data: AccountSummary[] }>(params);
         return (payload.data || []).map(account => ({ ...account, country }));
       }));
@@ -73,22 +72,8 @@ export function useAccountPool({
       setProductTagOptions(productTagsPayload.tags || []);
       const accounts = chunks.flat();
       const accountIds = accounts.map(account => account.account_id).filter(Boolean);
-      const tagMap: Record<string, string[]> = {};
-      const issueMap: Record<string, string[]> = {};
-      for (let index = 0; index < accountIds.length; index += 80) {
-        const batch = accountIds.slice(index, index + 80);
-        const [tagPayload, issuePayload] = await Promise.all([
-          api.accountTags(batch),
-          api.accountIssues(batch)
-        ]);
-        Object.assign(tagMap, tagPayload.tags || {});
-        Object.assign(issueMap, issuePayload.issues || {});
-      }
-      setRows(accounts.map(account => ({
-        ...account,
-        tags: tagMap[account.account_id] || [],
-        issues: issueMap[account.account_id] || []
-      })));
+      const { tagMap, issueMap } = await fetchAccountTagsAndIssues(accountIds);
+      setRows(attachAccountTagsAndIssues(accounts, tagMap, issueMap));
     } finally {
       setLoading(false);
     }
@@ -131,15 +116,16 @@ export function useAccountPool({
     }));
 
     try {
-      const params = addDateFilters(new URLSearchParams({
-        resource: 'account_posts',
-        product_code: getProductReelFarmCode(product),
-        country_code: getCountryReelFarmCode(row.country),
-        account_id: row.account_id,
-        limit: String(ACCOUNT_POST_PAGE_SIZE),
-        offset: String(offset)
-      }));
-      if (dataSource !== 'reelfarm') params.set('source', dataSource);
+      const params = buildAccountPostsQueryParams({
+        productCode: getProductReelFarmCode(product),
+        country: row.country,
+        accountId: row.account_id,
+        limit: ACCOUNT_POST_PAGE_SIZE,
+        offset,
+        dateFrom,
+        dateTo,
+        dataSource
+      });
       const payload = await api.dataQuery<{
         ok: boolean;
         data: DetailedPostRow[];
@@ -194,20 +180,14 @@ export function useAccountPool({
     const productTagsPayload = await api.createProductTag(getProductReelFarmCode(product), nextTag);
     setProductTagOptions(productTagsPayload.tags || []);
     const payload = await api.addAccountTag(accountId, nextTag);
-    setRows(previous => previous.map(item => item.account_id === accountId
-      ? { ...item, tags: Array.from(new Set([...(item.tags || []), payload.tag])) }
-      : item
-    ));
+    setRows(previous => addTagToRows(previous, accountId, payload.tag));
   }
 
   async function removeAccountTag(row: AccountPoolRow, tag: string) {
     const accountId = String(row.account_id || '').trim();
     if (!accountId || !tag) return;
     await api.deleteAccountTag(accountId, tag);
-    setRows(previous => previous.map(item => item.account_id === accountId
-      ? { ...item, tags: (item.tags || []).filter(value => value !== tag) }
-      : item
-    ));
+    setRows(previous => removeTagFromRows(previous, accountId, tag));
   }
 
   async function deleteProductTagOption(tag: string) {
@@ -219,17 +199,8 @@ export function useAccountPool({
     const payload = await api.deleteProductTag(productCode, nextTag, true);
     const deletedTag = (payload.deleted_tag || nextTag).toLowerCase();
     setProductTagOptions(payload.tags || []);
-    setRows(previous => previous.map(item => ({
-      ...item,
-      tags: (item.tags || []).filter(value => value.toLowerCase() !== deletedTag)
-    })));
-    setTagFilters(previous => previous
-      .map(filter => ({
-        ...filter,
-        tags: filter.tags.filter(value => value.toLowerCase() !== deletedTag)
-      }))
-      .filter(filter => filter.tags.length)
-    );
+    setRows(previous => removeProductTagFromRows(previous, deletedTag));
+    setTagFilters(previous => removeProductTagFromFilters(previous, deletedTag));
   }
 
   const filteredRows = useMemo(() => filterAccountPoolRows({
