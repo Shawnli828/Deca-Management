@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 import json
-import base64
-import hashlib
 import hmac
 import mimetypes
 import os
@@ -15,9 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote, unquote, urlparse
-from urllib.request import Request, urlopen
 
 from server_modules.time_windows import (
     BUSINESS_TIMEZONE,
@@ -50,6 +46,17 @@ from server_modules.daily_report import (
     daily_feishu_report_text,
     default_daily_report_date,
     previous_daily_report_date,
+)
+from server_modules.external_clients import (
+    call_daily_feishu_llm as call_daily_feishu_llm_impl,
+    daily_feishu_llm_api_key as daily_feishu_llm_api_key_impl,
+    daily_feishu_llm_model as daily_feishu_llm_model_impl,
+    fallback_llm_models as fallback_llm_models_impl,
+    feishu_signed_payload as feishu_signed_payload_impl,
+    llm_models_payload as llm_models_payload_impl,
+    selectable_gpt_model as selectable_gpt_model_impl,
+    send_feishu_message as send_feishu_message_impl,
+    sort_llm_models as sort_llm_models_impl,
 )
 from server_modules.sync_status import (
     SYNC_RUN_SOURCE_LABELS,
@@ -3982,48 +3989,16 @@ def publish_check_reminder_text(result):
 
 
 def feishu_signed_payload(message):
-    payload = {
-        "msg_type": "text",
-        "content": {"text": message},
-    }
-    if FEISHU_WEBHOOK_SECRET:
-        timestamp = str(int(time.time()))
-        string_to_sign = f"{timestamp}\n{FEISHU_WEBHOOK_SECRET}"
-        sign = base64.b64encode(hmac.new(string_to_sign.encode("utf-8"), digestmod=hashlib.sha256).digest()).decode("utf-8")
-        payload["timestamp"] = timestamp
-        payload["sign"] = sign
-    return payload
+    return feishu_signed_payload_impl(message, FEISHU_WEBHOOK_SECRET)
 
 
 def send_feishu_message(message):
-    if not FEISHU_WEBHOOK_URL:
-        return {"ok": False, "error": "FEISHU_WEBHOOK_URL is not configured."}
-    body = json.dumps(feishu_signed_payload(message), ensure_ascii=False).encode("utf-8")
-    request = Request(
+    return send_feishu_message_impl(
+        message,
         FEISHU_WEBHOOK_URL,
-        data=body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
+        FEISHU_WEBHOOK_SECRET,
+        make_ssl_context,
     )
-    try:
-        with urlopen(request, timeout=12, context=make_ssl_context()) as response:
-            raw = response.read().decode("utf-8", errors="replace")
-    except HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        return {"ok": False, "error": f"Feishu returned HTTP {exc.code}: {detail[:300]}"}
-    except URLError as exc:
-        return {"ok": False, "error": f"Could not reach Feishu webhook: {exc.reason}"}
-    except Exception as exc:
-        return {"ok": False, "error": f"Feishu send failed: {exc}"}
-
-    try:
-        payload = json.loads(raw) if raw else {}
-    except json.JSONDecodeError:
-        payload = {"raw": raw}
-    code = payload.get("code", payload.get("StatusCode", 0))
-    if code not in (0, "0", None):
-        return {"ok": False, "error": payload.get("msg") or payload.get("StatusMessage") or raw[:300], "response": payload}
-    return {"ok": True, "response": payload}
 
 
 def daily_feishu_report_payload(report_date=""):
@@ -4099,199 +4074,45 @@ def daily_feishu_report_payload(report_date=""):
 
 
 def daily_feishu_llm_api_key():
-    return (
-        os.environ.get("LLM_API_KEY", "").strip()
-        or os.environ.get("OPENAI_API_KEY", "").strip()
-    )
+    return daily_feishu_llm_api_key_impl(os.environ)
 
 
 def daily_feishu_llm_model(model=""):
-    value = str(model or "").strip() or os.environ.get("LLM_MODEL", "").strip() or LLM_MODEL
-    if not re.fullmatch(r"[A-Za-z0-9._:/-]{1,96}", value):
-        return LLM_MODEL
-    return value
+    return daily_feishu_llm_model_impl(model, os.environ, LLM_MODEL)
 
 
 def fallback_llm_models():
-    models = []
-    configured_model = os.environ.get("LLM_MODEL", "").strip() or LLM_MODEL
-    if configured_model:
-        models.append(configured_model)
-    models.extend(FALLBACK_LLM_MODELS)
-    return list(dict.fromkeys(models))
+    return fallback_llm_models_impl(os.environ, LLM_MODEL, FALLBACK_LLM_MODELS)
 
 
 def selectable_gpt_model(model_id):
-    value = str(model_id or "").strip()
-    if not re.fullmatch(r"[A-Za-z0-9._:/-]{1,128}", value):
-        return False
-    if not value.startswith("gpt-"):
-        return False
-    lowered = value.lower()
-    blocked_fragments = (
-        "audio",
-        "image",
-        "realtime",
-        "search-preview",
-        "transcribe",
-        "tts",
-        "vision",
-    )
-    return not any(fragment in lowered for fragment in blocked_fragments)
+    return selectable_gpt_model_impl(model_id)
 
 
 def sort_llm_models(models):
-    preferred = fallback_llm_models()
-    preferred_index = {model: index for index, model in enumerate(preferred)}
-    return sorted(
-        list(dict.fromkeys(models)),
-        key=lambda model: (
-            preferred_index.get(model, len(preferred)),
-            model,
-        ),
-    )
+    return sort_llm_models_impl(models, fallback_llm_models())
 
 
 def llm_models_payload():
     fallback_models = fallback_llm_models()
-    selected_default = daily_feishu_llm_model()
-    api_key = daily_feishu_llm_api_key()
-    generated_at = datetime.now(timezone.utc).isoformat()
-    if not api_key:
-        return {
-            "ok": True,
-            "configured": False,
-            "needs_api_key": True,
-            "fallback": True,
-            "models": fallback_models,
-            "default_model": selected_default,
-            "generated_at": generated_at,
-        }
-
-    endpoint = f"{(os.environ.get('LLM_API_BASE', '').strip().rstrip('/') or LLM_API_BASE)}/models"
-    request = Request(
-        endpoint,
-        headers={"Authorization": f"Bearer {api_key}"},
-        method="GET",
+    return llm_models_payload_impl(
+        daily_feishu_llm_api_key(),
+        os.environ.get("LLM_API_BASE", "").strip().rstrip("/") or LLM_API_BASE,
+        daily_feishu_llm_model(),
+        fallback_models,
+        LLM_MODEL,
+        make_ssl_context,
     )
-    try:
-        with urlopen(request, timeout=20, context=make_ssl_context()) as response:
-            raw = response.read().decode("utf-8", errors="replace")
-        payload = json.loads(raw)
-        models = [
-            str(item.get("id", "")).strip()
-            for item in payload.get("data", [])
-            if isinstance(item, dict) and selectable_gpt_model(item.get("id"))
-        ]
-        models = sort_llm_models(models or fallback_models)
-        if selected_default not in models:
-            selected_default = models[0] if models else LLM_MODEL
-        return {
-            "ok": True,
-            "configured": True,
-            "needs_api_key": False,
-            "fallback": False,
-            "models": models,
-            "default_model": selected_default,
-            "generated_at": generated_at,
-        }
-    except HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        error = f"LLM models API returned HTTP {exc.code}: {detail[:300]}"
-    except URLError as exc:
-        error = f"Could not reach LLM models API: {exc.reason}"
-    except Exception as exc:
-        error = f"Could not load LLM models: {exc}"
-
-    return {
-        "ok": True,
-        "configured": True,
-        "needs_api_key": False,
-        "fallback": True,
-        "models": fallback_models,
-        "default_model": selected_default,
-        "error": error,
-        "generated_at": generated_at,
-    }
 
 
 def call_daily_feishu_llm(messages, model=""):
-    api_key = daily_feishu_llm_api_key()
-    selected_model = daily_feishu_llm_model(model)
-    if not api_key:
-        return {
-            "ok": True,
-            "configured": False,
-            "needs_api_key": True,
-            "model": selected_model,
-            "analysis": "需要在后端环境变量配置 LLM_API_KEY 或 OPENAI_API_KEY 后，才能生成 AI 分析。",
-        }
-
-    endpoint = f"{(os.environ.get('LLM_API_BASE', '').strip().rstrip('/') or LLM_API_BASE)}/chat/completions"
-    request_payloads = [
-        {
-            "model": selected_model,
-            "messages": messages,
-            "max_completion_tokens": 1200,
-        },
-        {
-            "model": selected_model,
-            "messages": messages,
-            "max_tokens": 1200,
-        },
-    ]
-    last_http_error = None
-    try:
-        raw = ""
-        for payload in request_payloads:
-            body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-            request = Request(
-                endpoint,
-                data=body,
-                headers={
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {api_key}",
-                },
-                method="POST",
-            )
-            try:
-                with urlopen(request, timeout=45, context=make_ssl_context()) as response:
-                    raw = response.read().decode("utf-8", errors="replace")
-                last_http_error = None
-                break
-            except HTTPError as exc:
-                detail = exc.read().decode("utf-8", errors="replace")
-                last_http_error = (exc.code, detail)
-                if exc.code == 400 and "max_completion_tokens" in payload and "max_completion_tokens" in detail:
-                    continue
-                if exc.code == 400 and "max_tokens" in payload and "max_tokens" in detail:
-                    continue
-                raise
-        if last_http_error:
-            code, detail = last_http_error
-            return {"ok": False, "error": f"LLM API returned HTTP {code}: {detail[:500]}", "model": selected_model}
-    except HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        return {"ok": False, "error": f"LLM API returned HTTP {exc.code}: {detail[:500]}", "model": selected_model}
-    except URLError as exc:
-        return {"ok": False, "error": f"Could not reach LLM API: {exc.reason}", "model": selected_model}
-    except Exception as exc:
-        return {"ok": False, "error": f"LLM analysis failed: {exc}", "model": selected_model}
-
-    try:
-        payload = json.loads(raw)
-        analysis = ((payload.get("choices") or [{}])[0].get("message") or {}).get("content", "").strip()
-    except (json.JSONDecodeError, AttributeError, IndexError):
-        analysis = ""
-    if not analysis:
-        return {"ok": False, "error": "LLM API returned an empty analysis.", "model": selected_model}
-    return {
-        "ok": True,
-        "configured": True,
-        "needs_api_key": False,
-        "model": selected_model,
-        "analysis": analysis,
-    }
+    return call_daily_feishu_llm_impl(
+        messages,
+        daily_feishu_llm_api_key(),
+        os.environ.get("LLM_API_BASE", "").strip().rstrip("/") or LLM_API_BASE,
+        daily_feishu_llm_model(model),
+        make_ssl_context,
+    )
 
 
 def daily_feishu_ai_analysis(report_date="", model="", report=None, require_config=False):
