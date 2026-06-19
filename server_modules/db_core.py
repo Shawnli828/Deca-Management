@@ -109,6 +109,56 @@ def delete_app_value(key, init_db_fn, connect_db_fn, placeholder):
         conn.commit()
 
 
+def database_snapshot_payload(
+    *,
+    init_db_fn,
+    connect_db_fn,
+    placeholder,
+    state_key,
+    db_path,
+    database_backend,
+    relational_table_counts_fn,
+    load_data_fn,
+):
+    init_db_fn()
+    with connect_db_fn() as conn:
+        row = conn.execute(
+            f"SELECT key, value, updated_at FROM app_state WHERE key = {placeholder}",
+            (state_key,),
+        ).fetchone()
+        relational_counts = relational_table_counts_fn(conn)
+
+    data = load_data_fn()
+    countries_count = sum(len(product.get("countries", [])) for product in data)
+    concepts_count = sum(
+        len(country.get("concepts", []))
+        for product in data
+        for country in product.get("countries", [])
+    )
+    total_count = sum(
+        int(concept.get("count", 0) or 0)
+        for product in data
+        for country in product.get("countries", [])
+        for concept in country.get("concepts", [])
+    )
+
+    return {
+        "database_path": str(db_path),
+        "database_backend": database_backend,
+        "table": "app_state",
+        "key": state_key,
+        "updated_at": row["updated_at"] if row else None,
+        "stats": {
+            "products": len(data),
+            "countries": countries_count,
+            "concepts": concepts_count,
+            "total_count": total_count,
+        },
+        "relational_tables": relational_counts,
+        "data": data,
+    }
+
+
 def upsert_row(conn, table, values, conflict_cols, placeholder, update_cols=None):
     columns = list(values.keys())
     placeholders = ", ".join([placeholder] * len(columns))

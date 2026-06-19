@@ -196,6 +196,7 @@ from server_modules.product_config import (
 )
 from server_modules.db_core import (
     connect_db as connect_db_impl,
+    database_snapshot_payload as database_snapshot_payload_impl,
     db_placeholder as db_placeholder_impl,
     delete_app_value as delete_app_value_impl,
     init_app_state_db,
@@ -1665,44 +1666,16 @@ def valid_auth_token(token):
 
 
 def database_snapshot():
-    init_db()
-    with connect_db() as conn:
-        placeholder = db_placeholder()
-        row = conn.execute(
-            f"SELECT key, value, updated_at FROM app_state WHERE key = {placeholder}",
-            (STATE_KEY,),
-        ).fetchone()
-        relational_counts = relational_table_counts(conn)
-
-    data = load_data()
-    countries_count = sum(len(product.get("countries", [])) for product in data)
-    concepts_count = sum(
-        len(country.get("concepts", []))
-        for product in data
-        for country in product.get("countries", [])
+    return database_snapshot_payload_impl(
+        init_db_fn=init_db,
+        connect_db_fn=connect_db,
+        placeholder=db_placeholder(),
+        state_key=STATE_KEY,
+        db_path=DB_PATH,
+        database_backend="postgres" if using_postgres() else "sqlite",
+        relational_table_counts_fn=relational_table_counts,
+        load_data_fn=load_data,
     )
-    total_count = sum(
-        int(concept.get("count", 0) or 0)
-        for product in data
-        for country in product.get("countries", [])
-        for concept in country.get("concepts", [])
-    )
-
-    return {
-        "database_path": str(DB_PATH),
-        "database_backend": "postgres" if using_postgres() else "sqlite",
-        "table": "app_state",
-        "key": STATE_KEY,
-        "updated_at": row["updated_at"] if row else None,
-        "stats": {
-            "products": len(data),
-            "countries": countries_count,
-            "concepts": concepts_count,
-            "total_count": total_count,
-        },
-        "relational_tables": relational_counts,
-        "data": data,
-    }
 
 
 DATA_QUERY_RESOURCES = {
