@@ -1,158 +1,41 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { api } from '@/lib/api';
-import type { DailyFeishuAnalysisPayload, DailyFeishuPreviewPayload, DailyFeishuReport, DailyFeishuSendResult } from '@/lib/types';
+import { localIsoDate, useFeishuReport } from '@/hooks/useFeishuReport';
 import { formatNumber } from '@/lib/utils';
-
-const DEFAULT_LLM_MODEL = 'gpt-4.1-mini';
-const FALLBACK_MODEL_OPTIONS = [
-  'gpt-5',
-  'gpt-5-mini',
-  'gpt-5-nano',
-  'gpt-4.1',
-  'gpt-4.1-mini',
-  'gpt-4.1-nano',
-  'gpt-4o',
-  'gpt-4o-mini',
-  'gpt-4-turbo',
-  'gpt-4'
-];
-
-function localIsoDate(offsetDays = 0) {
-  const date = new Date();
-  date.setDate(date.getDate() + offsetDays);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
 
 function metric(value: unknown) {
   if (value === null || value === undefined || value === '') return '—';
   return formatNumber(value);
 }
 
-function percent(value: unknown) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return '—';
-  return `${number.toFixed(2)}%`;
-}
-
-function ratio(value: unknown) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return null;
-  return number;
-}
-
-function reportTotals(report?: DailyFeishuReport | null) {
-  return report?.totals || {};
-}
-
 export function FeishuReportPage() {
-  const [reportDate, setReportDate] = useState(localIsoDate(-1));
-  const [payload, setPayload] = useState<DailyFeishuPreviewPayload | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState('');
-  const [sendResult, setSendResult] = useState<DailyFeishuSendResult | null>(null);
-  const [model, setModel] = useState(DEFAULT_LLM_MODEL);
-  const [modelOptions, setModelOptions] = useState(FALLBACK_MODEL_OPTIONS);
-  const [modelListStatus, setModelListStatus] = useState('');
-  const [customModel, setCustomModel] = useState('');
-  const [includeAi, setIncludeAi] = useState(false);
-  const [analysisLoading, setAnalysisLoading] = useState(false);
-  const [analysisPayload, setAnalysisPayload] = useState<DailyFeishuAnalysisPayload | null>(null);
-  const [analysisError, setAnalysisError] = useState('');
-
-  const totals = useMemo(() => reportTotals(payload?.report), [payload]);
-  const products = payload?.report?.products || [];
-  const downloadRate = ratio(totals.download_rate);
-  const selectedModel = customModel.trim() || model;
-
-  async function loadPreview(nextDate = reportDate) {
-    setLoading(true);
-    setError('');
-    setSendResult(null);
-    setAnalysisPayload(null);
-    setAnalysisError('');
-    try {
-      const next = await api.dailyFeishuPreview(nextDate);
-      setPayload(next);
-    } catch (previewError: any) {
-      setError(previewError?.message || '日报预览读取失败');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function sendReport() {
-    setSending(true);
-    setError('');
-    setSendResult(null);
-    try {
-      const selectedModel = customModel.trim() || model;
-      const result = await api.sendDailyFeishuReport(reportDate, { includeAi, model: selectedModel });
-      setSendResult(result);
-      await loadPreview(reportDate);
-    } catch (sendError: any) {
-      setError(sendError?.message || '飞书发送失败');
-    } finally {
-      setSending(false);
-    }
-  }
-
-  async function generateAnalysis() {
-    setAnalysisLoading(true);
-    setAnalysisError('');
-    setAnalysisPayload(null);
-    try {
-      const selectedModel = customModel.trim() || model;
-      const result = await api.dailyFeishuAnalysis(reportDate, selectedModel);
-      setAnalysisPayload(result);
-    } catch (analysisException: any) {
-      setAnalysisError(analysisException?.message || 'AI 分析生成失败');
-    } finally {
-      setAnalysisLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    void loadPreview(reportDate);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    api.llmModels()
-      .then(result => {
-        if (cancelled) return;
-        const options = (Array.isArray(result.models) && result.models.length > 0)
-          ? result.models
-          : FALLBACK_MODEL_OPTIONS;
-        setModelOptions(options);
-        setModel(current => {
-          if (options.includes(current)) return current;
-          if (result.default_model && options.includes(result.default_model)) return result.default_model;
-          return options[0] || DEFAULT_LLM_MODEL;
-        });
-        if (result.fallback && result.error) {
-          setModelListStatus(`模型列表使用默认候选：${result.error}`);
-        } else if (result.fallback || result.needs_api_key) {
-          setModelListStatus('模型列表使用默认候选。');
-        } else {
-          setModelListStatus(`${options.length} 个可用 GPT 模型`);
-        }
-      })
-      .catch(modelError => {
-        if (cancelled) return;
-        setModelOptions(FALLBACK_MODEL_OPTIONS);
-        setModelListStatus(modelError?.message || '模型列表读取失败，使用默认候选。');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const {
+    reportDate,
+    setReportDate,
+    payload,
+    loading,
+    sending,
+    error,
+    sendResult,
+    model,
+    setModel,
+    modelOptions,
+    modelListStatus,
+    customModel,
+    setCustomModel,
+    includeAi,
+    setIncludeAi,
+    analysisLoading,
+    analysisPayload,
+    analysisError,
+    totals,
+    products,
+    downloadRate,
+    selectedModel,
+    loadPreview,
+    sendReport,
+    generateAnalysis
+  } = useFeishuReport();
 
   return (
     <section className="feishu-report-page">
