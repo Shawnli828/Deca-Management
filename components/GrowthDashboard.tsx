@@ -1,34 +1,8 @@
 'use client';
 
 import { businessIsoDate, useBusinessMaterialReport } from '@/hooks/useBusinessMaterialReport';
-import type { BusinessMaterialReportRow, Product } from '@/lib/types';
-import { formatNumber } from '@/lib/utils';
-
-function metric(value: unknown) {
-  if (value === null || value === undefined) return '—';
-  return formatNumber(value);
-}
-
-function percent(value: unknown) {
-  if (value === null || value === undefined) return '—';
-  const number = Number(value);
-  if (!Number.isFinite(number)) return '—';
-  return `${number.toFixed(2)}%`;
-}
-
-function windowText(row: BusinessMaterialReportRow) {
-  const start = row.business_window_local?.start;
-  const end = row.business_window_local?.end;
-  if (!start || !end) return '—';
-  return `${start.slice(0, 16).replace('T', ' ')} → ${end.slice(0, 16).replace('T', ' ')}`;
-}
-
-function downloadRate(downloads: unknown, views: unknown) {
-  const downloadCount = Number(downloads || 0);
-  const viewCount = Number(views || 0);
-  if (!viewCount) return null;
-  return (downloadCount / viewCount) * 100;
-}
+import { businessWindowText, downloadRate, metric, percent } from '@/lib/businessReportFormatters';
+import type { Product } from '@/lib/types';
 
 export function GrowthDashboard({ products }: { products: Product[] }) {
   const {
@@ -151,7 +125,7 @@ export function GrowthDashboard({ products }: { products: Product[] }) {
               {rows.length ? rows.slice().reverse().map(row => (
                 <tr key={row.report_date}>
                   <td><strong>{row.report_date}</strong></td>
-                  <td>{windowText(row)}</td>
+                  <td>{businessWindowText(row)}</td>
                   <td>{metric(row.reelfarm_views)}</td>
                   <td>{metric(row.clone_views)}</td>
                   <td><strong>{metric(row.total_views)}</strong></td>

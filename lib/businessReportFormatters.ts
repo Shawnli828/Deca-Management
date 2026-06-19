@@ -29,3 +29,17 @@ export function numberValue(value: unknown) {
 export function coverage(row: BusinessMaterialReportRow) {
   return `${metric(row.reelfarm_published_automations)} / ${metric(row.reelfarm_expected_automations)}`;
 }
+
+export function businessWindowText(row: BusinessMaterialReportRow) {
+  const start = row.business_window_local?.start;
+  const end = row.business_window_local?.end;
+  if (!start || !end) return '—';
+  return `${start.slice(0, 16).replace('T', ' ')} → ${end.slice(0, 16).replace('T', ' ')}`;
+}
+
+export function downloadRate(downloads: unknown, views: unknown) {
+  const downloadCount = Number(downloads || 0);
+  const viewCount = Number(views || 0);
+  if (!viewCount) return null;
+  return (downloadCount / viewCount) * 100;
+}
