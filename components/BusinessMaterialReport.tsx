@@ -1,37 +1,8 @@
 'use client';
 
 import { businessIsoDate, useBusinessMaterialReport } from '@/hooks/useBusinessMaterialReport';
-import type { BusinessMaterialReportRow, Product } from '@/lib/types';
-import { formatNumber } from '@/lib/utils';
-
-function metric(value: unknown) {
-  if (value === null || value === undefined) return '—';
-  return formatNumber(value);
-}
-
-function percent(value: unknown) {
-  if (value === null || value === undefined) return '—';
-  const number = Number(value);
-  if (!Number.isFinite(number)) return '—';
-  return `${number.toFixed(2)}%`;
-}
-
-function dateOnly(value?: string) {
-  return String(value || '').slice(0, 10) || '—';
-}
-
-function metricDetail(count?: unknown, views?: unknown) {
-  return `${metric(count)} posts · ${metric(views)} views`;
-}
-
-function numberValue(value: unknown) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : 0;
-}
-
-function coverage(row: BusinessMaterialReportRow) {
-  return `${metric(row.reelfarm_published_automations)} / ${metric(row.reelfarm_expected_automations)}`;
-}
+import { coverage, dateOnly, metric, metricDetail, numberValue, percent } from '@/lib/businessReportFormatters';
+import type { Product } from '@/lib/types';
 
 export function BusinessMaterialReport({ products }: { products: Product[] }) {
   const {
