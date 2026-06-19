@@ -67,6 +67,9 @@ from server_modules.sync_status import (
     sync_status_payload_from_runs,
 )
 from server_modules.reelfarm_utils import (
+    reelfarm_automation_is_active as reelfarm_automation_is_active_impl,
+    reelfarm_dashboard_automation_condition as reelfarm_dashboard_automation_condition_impl,
+    reelfarm_expected_automation_condition as reelfarm_expected_automation_condition_impl,
     reelfarm_post_as_draft_value,
     reelfarm_post_mode,
     reelfarm_publish_method,
@@ -377,21 +380,15 @@ def sync_status_payload():
 
 
 def reelfarm_dashboard_automation_condition(alias="a"):
-    return (
-        f"LOWER(COALESCE({alias}.status, '')) IN ('active', 'paused') "
-        f"AND LOWER(COALESCE({alias}.sync_status, 'present')) <> 'deleted'"
-    )
+    return reelfarm_dashboard_automation_condition_impl(alias)
 
 
 def reelfarm_expected_automation_condition(alias="a"):
-    return (
-        f"LOWER(COALESCE({alias}.status, '')) = 'active' "
-        f"AND LOWER(COALESCE({alias}.sync_status, 'present')) <> 'deleted'"
-    )
+    return reelfarm_expected_automation_condition_impl(alias)
 
 
 def reelfarm_automation_is_active(automation):
-    return str((automation or {}).get("status") or "").strip().lower() == "active"
+    return reelfarm_automation_is_active_impl(automation)
 
 
 def active_tiktok_automation_account_ids(conn, account_ids):

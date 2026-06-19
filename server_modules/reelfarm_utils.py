@@ -114,3 +114,21 @@ def reelfarm_schedule_slot_count(schedule_value):
         return 1
 
     return 1
+
+
+def reelfarm_dashboard_automation_condition(alias="a"):
+    return (
+        f"LOWER(COALESCE({alias}.status, '')) IN ('active', 'paused') "
+        f"AND LOWER(COALESCE({alias}.sync_status, 'present')) <> 'deleted'"
+    )
+
+
+def reelfarm_expected_automation_condition(alias="a"):
+    return (
+        f"LOWER(COALESCE({alias}.status, '')) = 'active' "
+        f"AND LOWER(COALESCE({alias}.sync_status, 'present')) <> 'deleted'"
+    )
+
+
+def reelfarm_automation_is_active(automation):
+    return str((automation or {}).get("status") or "").strip().lower() == "active"
