@@ -1,9 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { api } from '@/lib/api';
-import type { BusinessMaterialReportPayload, BusinessMaterialReportRow, Product } from '@/lib/types';
-import { formatNumber, getProductReelFarmCode } from '@/lib/utils';
+import { businessIsoDate, useBusinessMaterialReport } from '@/hooks/useBusinessMaterialReport';
+import type { BusinessMaterialReportRow, Product } from '@/lib/types';
+import { formatNumber } from '@/lib/utils';
 
 function metric(value: unknown) {
   if (value === null || value === undefined) return '—';
@@ -15,12 +14,6 @@ function percent(value: unknown) {
   const number = Number(value);
   if (!Number.isFinite(number)) return '—';
   return `${number.toFixed(2)}%`;
-}
-
-function isoDate(offset = 0) {
-  const date = new Date();
-  date.setDate(date.getDate() + offset);
-  return date.toISOString().slice(0, 10);
 }
 
 function windowText(row: BusinessMaterialReportRow) {
@@ -38,47 +31,25 @@ function downloadRate(downloads: unknown, views: unknown) {
 }
 
 export function GrowthDashboard({ products }: { products: Product[] }) {
-  const [productId, setProductId] = useState('');
-  const [days, setDays] = useState(7);
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [payload, setPayload] = useState<BusinessMaterialReportPayload | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const selectedProduct = useMemo(
-    () => products.find(product => product.id === productId) || products[0] || null,
-    [products, productId]
-  );
-  const productCode = selectedProduct ? getProductReelFarmCode(selectedProduct) : '';
-  const customRange = Boolean(dateFrom || dateTo);
-
-  async function loadGrowth() {
-    if (!productCode) return;
-    setLoading(true);
-    setError('');
-    try {
-      const next = await api.businessMaterialReport(productCode, {
-        days,
-        dateFrom: dateFrom || undefined,
-        dateTo: dateTo || undefined
-      });
-      setPayload(next);
-    } catch (loadError: any) {
-      setError(loadError?.message || 'Growth 看板读取失败');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    if (!productId && products[0]) setProductId(products[0].id);
-  }, [products, productId]);
-
-  useEffect(() => {
-    loadGrowth();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [productCode, days]);
+  const {
+    days,
+    setDays,
+    dateFrom,
+    setDateFrom,
+    dateTo,
+    setDateTo,
+    payload,
+    loading,
+    error,
+    selectedProduct,
+    productCode,
+    customRange,
+    loadReport: loadGrowth,
+    setProductId
+  } = useBusinessMaterialReport({
+    products,
+    errorMessage: 'Growth 看板读取失败'
+  });
 
   const rows = payload?.rows || [];
   const totals = payload?.totals || {};
@@ -136,8 +107,8 @@ export function GrowthDashboard({ products }: { products: Product[] }) {
               </button>
             ))}
           </div>
-          <input type="date" value={dateFrom} max={dateTo || isoDate()} onChange={event => setDateFrom(event.target.value)} />
-          <input type="date" value={dateTo} min={dateFrom || undefined} max={isoDate()} onChange={event => setDateTo(event.target.value)} />
+          <input type="date" value={dateFrom} max={dateTo || businessIsoDate()} onChange={event => setDateFrom(event.target.value)} />
+          <input type="date" value={dateTo} min={dateFrom || undefined} max={businessIsoDate()} onChange={event => setDateTo(event.target.value)} />
           <button type="button" onClick={loadGrowth} disabled={loading || !productCode}>{loading ? '读取中...' : '应用'}</button>
         </div>
       </header>
