@@ -1,19 +1,9 @@
 'use client';
 
-import type { Product, PublishCheckAccount, PublishCheckAssignment, PublishCheckState } from '@/lib/types';
+import { formatPublishUtcTime, publishAccountLabel, publishCheckPeople, sortPublishCheckAssignments, type PublishAssignmentSort } from '@/lib/publishCheckFormatters';
+import type { Product, PublishCheckAssignment, PublishCheckState } from '@/lib/types';
 import { countryFlag } from '@/lib/utils';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-
-function accountLabel(account: PublishCheckAccount) {
-  return account.username || account.display_name || account.reelfarm_account_id || account.account_id || 'Unknown account';
-}
-
-function formatTime(value?: string) {
-  if (!value) return '暂无记录';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return `${date.getUTCFullYear()}/${String(date.getUTCMonth() + 1).padStart(2, '0')}/${String(date.getUTCDate()).padStart(2, '0')} ${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')} UTC`;
-}
 
 export function PublishCheckBoard({
   products,
@@ -33,40 +23,19 @@ export function PublishCheckBoard({
   onSendReminder: () => Promise<void>;
 }) {
   const people = useMemo(() => {
-    const seen = new Set<string>();
-    return state.assignments
-      .filter(item => {
-        const key = item.person_id || item.person_name;
-        if (!key || seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .map(item => ({ id: item.person_id || item.person_name, name: item.person_name || item.person_id }));
+    return publishCheckPeople(state.assignments);
   }, [state.assignments]);
   const [personName, setPersonName] = useState(people[0]?.name || '');
   const [productId, setProductId] = useState(products[0]?.id || '');
   const selectedProduct = products.find(product => product.id === productId) || products[0];
   const [countryId, setCountryId] = useState(selectedProduct?.countries?.[0]?.id || '');
-  const [assignmentSort, setAssignmentSort] = useState<'person' | 'product' | 'country'>('person');
+  const [assignmentSort, setAssignmentSort] = useState<PublishAssignmentSort>('person');
   const [expandedResultCards, setExpandedResultCards] = useState<Record<string, boolean>>({});
   const result = state.last_result;
 
   const peopleById = useMemo(() => new Map(people.map(person => [person.id, person])), [people]);
   const sortedAssignments = useMemo(() => {
-    return [...state.assignments].sort((left, right) => {
-      const leftProduct = products.find(product => product.id === left.product_id);
-      const rightProduct = products.find(product => product.id === right.product_id);
-      const leftCountry = leftProduct?.countries?.find(country => country.id === left.country_id);
-      const rightCountry = rightProduct?.countries?.find(country => country.id === right.country_id);
-      const values = {
-        person: [left.person_name, right.person_name],
-        product: [leftProduct?.name || '', rightProduct?.name || ''],
-        country: [leftCountry?.name || '', rightCountry?.name || '']
-      }[assignmentSort];
-      const primary = String(values[0] || '').localeCompare(String(values[1] || ''), 'zh-Hans');
-      if (primary !== 0) return primary;
-      return String(left.person_name || '').localeCompare(String(right.person_name || ''), 'zh-Hans');
-    });
+    return sortPublishCheckAssignments(state.assignments, products, assignmentSort);
   }, [assignmentSort, products, state.assignments]);
 
   useEffect(() => {
@@ -223,10 +192,10 @@ export function PublishCheckBoard({
                   {group.missing_accounts.map(account => (
                     <div className="missing-account-row" key={`${account.account_id}-${account.automation_id}`}>
                       <div>
-                        <strong>@{accountLabel(account).replace(/^@/, '')}</strong>
+                        <strong>@{publishAccountLabel(account).replace(/^@/, '')}</strong>
                         <span>{account.automation_name || account.reelfarm_automation_id || '无 automation 名称'}</span>
                       </div>
-                      <span>最近发布：{formatTime(account.latest_post_at)}</span>
+                      <span>最近发布：{formatPublishUtcTime(account.latest_post_at)}</span>
                     </div>
                   ))}
                 </div>
