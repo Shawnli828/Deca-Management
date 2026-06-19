@@ -1,6 +1,7 @@
 'use client';
 
-import { businessIsoDate, useBusinessMaterialReport } from '@/hooks/useBusinessMaterialReport';
+import { BusinessReportControls } from '@/components/BusinessReportControls';
+import { useBusinessMaterialReport } from '@/hooks/useBusinessMaterialReport';
 import { businessWindowText, downloadRate, metric, percent } from '@/lib/businessReportFormatters';
 import type { Product } from '@/lib/types';
 
@@ -59,32 +60,21 @@ export function GrowthDashboard({ products }: { products: Product[] }) {
           <h1>Growth 情况</h1>
           <p>按北京时间 23:59 → 23:59 归档，播放量使用每日快照差值计算。</p>
         </div>
-        <div className="business-report-controls">
-          <select value={selectedProduct?.id || ''} onChange={event => setProductId(event.target.value)}>
-            {products.map(product => (
-              <option value={product.id} key={product.id}>{product.name}</option>
-            ))}
-          </select>
-          <div className="business-report-preset" aria-label="业务日范围">
-            {[7, 14, 30].map(value => (
-              <button
-                className={!customRange && days === value ? 'active' : ''}
-                type="button"
-                onClick={() => {
-                  setDays(value);
-                  setDateFrom('');
-                  setDateTo('');
-                }}
-                key={value}
-              >
-                {value} 天
-              </button>
-            ))}
-          </div>
-          <input type="date" value={dateFrom} max={dateTo || businessIsoDate()} onChange={event => setDateFrom(event.target.value)} />
-          <input type="date" value={dateTo} min={dateFrom || undefined} max={businessIsoDate()} onChange={event => setDateTo(event.target.value)} />
-          <button type="button" onClick={loadGrowth} disabled={loading || !productCode}>{loading ? '读取中...' : '应用'}</button>
-        </div>
+        <BusinessReportControls
+          products={products}
+          selectedProductId={selectedProduct?.id || ''}
+          days={days}
+          customRange={customRange}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          loading={loading}
+          productCode={productCode}
+          onProductChange={setProductId}
+          onDaysChange={setDays}
+          onDateFromChange={setDateFrom}
+          onDateToChange={setDateTo}
+          onApply={loadGrowth}
+        />
       </header>
 
       {error ? <div className="growth-error">{error}</div> : null}
