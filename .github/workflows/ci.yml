@@ -53,6 +53,9 @@ jobs:
       - name: ReelFarm projection fixture checks
         run: npm run reelfarm-projection-fixture
 
+      - name: Reporting fixture checks
+        run: npm run reporting-fixture
+
       - name: Smoke checks
         run: npm run smoke
 

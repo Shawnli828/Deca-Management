@@ -5,12 +5,14 @@ from api.schemas.requests import (
     ReelfarmSyncCountryRequest,
     ReelfarmSyncPrefixRequest,
 )
+from api.schemas.responses import FlexibleResponse, SyncResultResponse
 from server_modules.services.sync_runtime import (
     sync_all_reelfarm_records,
     sync_daily_all_records,
     sync_museon_clone_country,
     sync_reelfarm_country,
     sync_reelfarm_prefix,
+    sync_status_payload,
 )
 
 from .shared import cron_authorized, require_dashboard_auth
@@ -19,7 +21,14 @@ from .shared import cron_authorized, require_dashboard_auth
 router = APIRouter()
 
 
-@router.api_route("/api/sync/daily-all", methods=["GET", "POST"])
+@router.get("/api/sync/status", response_model=FlexibleResponse)
+def get_sync_status(request: Request):
+    require_dashboard_auth(request)
+    return sync_status_payload()
+
+
+@router.get("/api/sync/daily-all", response_model=SyncResultResponse, operation_id="get_sync_daily_all")
+@router.post("/api/sync/daily-all", response_model=SyncResultResponse, operation_id="post_sync_daily_all")
 def sync_daily_all(request: Request, days: int = 30):
     if not cron_authorized(request.headers):
         require_dashboard_auth(request)
@@ -30,7 +39,7 @@ def sync_daily_all(request: Request, days: int = 30):
         raise HTTPException(status_code=502, detail=str(error)) from error
 
 
-@router.post("/api/reelfarm/sync-prefix")
+@router.post("/api/reelfarm/sync-prefix", response_model=SyncResultResponse)
 def post_reelfarm_sync_prefix(request: Request, payload: ReelfarmSyncPrefixRequest = Body(default_factory=ReelfarmSyncPrefixRequest)):
     require_dashboard_auth(request)
     try:
@@ -48,7 +57,7 @@ def post_reelfarm_sync_prefix(request: Request, payload: ReelfarmSyncPrefixReque
         raise HTTPException(status_code=502, detail=str(error)) from error
 
 
-@router.post("/api/reelfarm/sync-country")
+@router.post("/api/reelfarm/sync-country", response_model=SyncResultResponse)
 def post_reelfarm_sync_country(request: Request, payload: ReelfarmSyncCountryRequest = Body(default_factory=ReelfarmSyncCountryRequest)):
     require_dashboard_auth(request)
     try:
@@ -65,7 +74,7 @@ def post_reelfarm_sync_country(request: Request, payload: ReelfarmSyncCountryReq
         raise HTTPException(status_code=502, detail=str(error)) from error
 
 
-@router.post("/api/museon/sync-country")
+@router.post("/api/museon/sync-country", response_model=SyncResultResponse)
 def post_museon_sync_country(request: Request, payload: MuseonSyncCountryRequest = Body(default_factory=MuseonSyncCountryRequest)):
     require_dashboard_auth(request)
     try:
@@ -81,7 +90,8 @@ def post_museon_sync_country(request: Request, payload: MuseonSyncCountryRequest
         raise HTTPException(status_code=502, detail=str(error)) from error
 
 
-@router.api_route("/api/reelfarm/sync-all", methods=["GET", "POST"])
+@router.get("/api/reelfarm/sync-all", response_model=SyncResultResponse, operation_id="get_reelfarm_sync_all")
+@router.post("/api/reelfarm/sync-all", response_model=SyncResultResponse, operation_id="post_reelfarm_sync_all")
 def reelfarm_sync_all(request: Request):
     if not cron_authorized(request.headers):
         require_dashboard_auth(request)

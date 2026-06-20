@@ -315,6 +315,53 @@
     gap: 5px;
 }
 
+.sync-status-strip {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin: 10px 0 14px;
+}
+
+.sync-status-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.sync-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 32px;
+    padding: 6px 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+}
+
+.sync-status-pill b {
+    font-size: 12px;
+}
+
+.sync-status-pill small {
+    color: var(--muted);
+    font-size: 11px;
+}
+
+.sync-status-pill.fresh {
+    border-color: rgba(34, 197, 94, 0.32);
+}
+
+.sync-status-pill.error {
+    border-color: rgba(239, 68, 68, 0.34);
+}
+
+.sync-status-refresh {
+    white-space: nowrap;
+}
+
 .dot {
     display: inline-block;
     width: 6px;

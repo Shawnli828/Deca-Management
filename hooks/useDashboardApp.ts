@@ -84,6 +84,7 @@ export function useDashboardApp() {
     const data = Array.isArray(payload.data) ? payload.data : [];
     productCatalog.replaceProducts(data);
     void Promise.all(data.map(product => productMetrics.loadProductKpis(product)));
+    void reelFarmSync.loadSyncStatus().catch(() => {});
     reportStatus('已连接数据库');
     await publishCheckState.loadPublishCheck();
   }

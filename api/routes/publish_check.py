@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Body, HTTPException, Request
 
 from api.schemas.requests import PublishCheckStateRequest
+from api.schemas.responses import FlexibleResponse, PublishCheckStateResponse
 from server_modules.services.publish_check_runtime import (
     load_state,
     run,
@@ -14,13 +15,13 @@ from .shared import cron_authorized, require_dashboard_auth
 router = APIRouter()
 
 
-@router.get("/api/publish-check")
+@router.get("/api/publish-check", response_model=PublishCheckStateResponse)
 def get_publish_check(request: Request):
     require_dashboard_auth(request)
     return {"ok": True, "state": load_state()}
 
 
-@router.post("/api/publish-check")
+@router.post("/api/publish-check", response_model=PublishCheckStateResponse)
 def post_publish_check(request: Request, payload: PublishCheckStateRequest = Body(default_factory=PublishCheckStateRequest)):
     require_dashboard_auth(request)
     state = payload.state
@@ -30,7 +31,8 @@ def post_publish_check(request: Request, payload: PublishCheckStateRequest = Bod
     return {"ok": True, "state": save_state(state)}
 
 
-@router.api_route("/api/publish-check/run", methods=["GET", "POST"])
+@router.get("/api/publish-check/run", response_model=FlexibleResponse, operation_id="get_publish_check_run")
+@router.post("/api/publish-check/run", response_model=FlexibleResponse, operation_id="post_publish_check_run")
 def post_publish_check_run(request: Request):
     if not cron_authorized(request.headers):
         require_dashboard_auth(request)
@@ -38,7 +40,7 @@ def post_publish_check_run(request: Request):
     return run()
 
 
-@router.post("/api/publish-check/send-reminder")
+@router.post("/api/publish-check/send-reminder", response_model=FlexibleResponse)
 def post_publish_check_send_reminder(request: Request):
     require_dashboard_auth(request)
     result = send_reminder()

@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from server_modules.app_runtime import connect_db, db_placeholder, init_relational_schema, load_data, save_data
 from server_modules.automation_naming import build_automation_prefix, build_country_automation_prefix, prefixes_equivalent
 from server_modules.common import stable_id
+from server_modules.data_query_helpers import row_dict
 from server_modules.db_core import upsert_row as upsert_row_impl
 from server_modules.product_config import (
     configured_product_codes as configured_product_codes_impl,
@@ -23,7 +24,9 @@ from server_modules.sync_orchestrator import (
 from server_modules.sync_result import normalized_sync_result
 from server_modules.sync_status import (
     compact_sync_run_meta,
+    latest_sync_runs_from_db,
     record_sync_run_in_db,
+    sync_status_payload_from_runs,
     sync_run_records_count,
 )
 
@@ -57,6 +60,24 @@ def safe_record_sync_run(*args, **kwargs):
         return record_sync_run(*args, **kwargs)
     except Exception as error:
         return {"error": str(error)}
+
+
+def latest_sync_runs(sources=None):
+    return latest_sync_runs_from_db(
+        sources=sources,
+        default_sources=("reelfarm", "museon_clone", "growth_mixpanel", "daily_all"),
+        placeholder=db_placeholder(),
+        connect_db_fn=connect_db,
+        init_schema_fn=init_relational_schema,
+        row_dict_fn=row_dict,
+    )
+
+
+def sync_status_payload():
+    return sync_status_payload_from_runs(
+        latest_sync_runs(),
+        datetime.now(timezone.utc).isoformat(),
+    )
 
 
 def project_synced_country_to_relational(product, country):

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Request
 
+from api.schemas.responses import FeishuPreviewResponse, FlexibleResponse
 from server_modules.daily_report import daily_feishu_report_text
 from server_modules.services.daily_feishu_runtime import (
     ai_analysis as daily_feishu_ai_analysis,
@@ -18,7 +19,8 @@ def truthy_query_value(value: str) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
-@router.api_route("/api/reports/daily-feishu", methods=["GET", "POST"])
+@router.get("/api/reports/daily-feishu", response_model=FlexibleResponse, operation_id="get_reports_daily_feishu")
+@router.post("/api/reports/daily-feishu", response_model=FlexibleResponse, operation_id="post_reports_daily_feishu")
 def post_reports_daily_feishu(
     request: Request,
     date: str = "",
@@ -42,7 +44,16 @@ def post_reports_daily_feishu(
     return result
 
 
-@router.api_route("/api/reports/daily-feishu-analysis", methods=["GET", "POST"])
+@router.get(
+    "/api/reports/daily-feishu-analysis",
+    response_model=FlexibleResponse,
+    operation_id="get_reports_daily_feishu_analysis",
+)
+@router.post(
+    "/api/reports/daily-feishu-analysis",
+    response_model=FlexibleResponse,
+    operation_id="post_reports_daily_feishu_analysis",
+)
 def post_reports_daily_feishu_analysis(request: Request, date: str = "", model: str = ""):
     require_dashboard_auth(request)
     try:
@@ -53,13 +64,13 @@ def post_reports_daily_feishu_analysis(request: Request, date: str = "", model: 
         raise HTTPException(status_code=502, detail=str(error)) from error
 
 
-@router.get("/api/reports/llm-models")
+@router.get("/api/reports/llm-models", response_model=FlexibleResponse)
 def get_reports_llm_models(request: Request):
     require_dashboard_auth(request)
     return llm_models_payload()
 
 
-@router.get("/api/reports/daily-feishu-preview")
+@router.get("/api/reports/daily-feishu-preview", response_model=FeishuPreviewResponse)
 def get_reports_daily_feishu_preview(request: Request, date: str = ""):
     require_dashboard_auth(request)
     try:

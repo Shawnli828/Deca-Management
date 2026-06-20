@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Request
 
+from api.schemas.responses import FlexibleResponse
 from server_modules.services.geelark_service import (
     GeelarkServiceError,
     geelark_phone_map_payload,
@@ -28,7 +29,7 @@ def parse_geelark_pairs(pairs: str) -> list[tuple[str, str]]:
     return parsed_pairs
 
 
-@router.get("/api/geelark/phones")
+@router.get("/api/geelark/phones", response_model=FlexibleResponse)
 def get_geelark_phones(request: Request, product_code: str = "DB", country_code: str = "GE"):
     require_dashboard_auth(request)
     clean_product = product_code.strip().upper()
@@ -42,7 +43,7 @@ def get_geelark_phones(request: Request, product_code: str = "DB", country_code:
         raise HTTPException(status_code=error.status_code, detail=error.message) from error
 
 
-@router.get("/api/geelark/phones-map")
+@router.get("/api/geelark/phones-map", response_model=FlexibleResponse)
 def get_geelark_phones_map(request: Request, pairs: str = ""):
     require_dashboard_auth(request)
     parsed_pairs = parse_geelark_pairs(pairs)

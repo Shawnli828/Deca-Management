@@ -1,6 +1,16 @@
 from fastapi import APIRouter, Body, Header, HTTPException, Request
 
 from api.schemas.requests import DataUpdateRequest, GrowthSyncProductRequest
+from api.schemas.responses import (
+    BusinessMaterialReportResponse,
+    DataQueryResponse,
+    DataResponse,
+    DatabaseRelationalResponse,
+    FlexibleResponse,
+    GrowthDashboardResponse,
+    OkDataResponse,
+    RecordsResponse,
+)
 from server_modules.services.data_runtime import (
     ai_materials_payload,
     business_material_report_payload,
@@ -28,13 +38,13 @@ from .shared import (
 router = APIRouter()
 
 
-@router.get("/api/data")
+@router.get("/api/data", response_model=DataResponse)
 def get_data(request: Request):
     require_dashboard_auth(request)
     return {"data": enriched_data()}
 
 
-@router.post("/api/data")
+@router.post("/api/data", response_model=OkDataResponse)
 def post_data(request: Request, payload: DataUpdateRequest = Body(default_factory=DataUpdateRequest)):
     require_dashboard_auth(request)
     data = payload.data
@@ -45,13 +55,13 @@ def post_data(request: Request, payload: DataUpdateRequest = Body(default_factor
     return {"ok": True, "data": enriched_data(data)}
 
 
-@router.get("/api/database")
+@router.get("/api/database", response_model=FlexibleResponse)
 def get_database(request: Request):
     require_dashboard_auth(request)
     return database_snapshot()
 
 
-@router.get("/api/database/relational")
+@router.get("/api/database/relational", response_model=DatabaseRelationalResponse)
 def get_relational_database(request: Request):
     require_dashboard_auth(request)
     with connect_db() as conn:
@@ -63,19 +73,19 @@ def get_relational_database(request: Request):
         }
 
 
-@router.post("/api/reset")
+@router.post("/api/reset", response_model=OkDataResponse)
 def reset_data(request: Request):
     require_dashboard_auth(request)
     return {"ok": True, "data": reset_data_payload()}
 
 
-@router.get("/api/ai/materials")
+@router.get("/api/ai/materials", response_model=FlexibleResponse)
 def get_ai_materials(request: Request, authorization: str | None = Header(default=None)):
     require_materials_api_key(authorization)
     return ai_materials_payload(query_as_lists(request))
 
 
-@router.get("/api/data/query")
+@router.get("/api/data/query", response_model=DataQueryResponse)
 def get_data_query(request: Request, authorization: str | None = Header(default=None)):
     require_data_query_auth(request, authorization)
     try:
@@ -88,7 +98,7 @@ def get_data_query(request: Request, authorization: str | None = Header(default=
         raise HTTPException(status_code=500, detail=f"Data query failed: {error}") from error
 
 
-@router.get("/api/growth")
+@router.get("/api/growth", response_model=GrowthDashboardResponse)
 def get_growth_dashboard(request: Request):
     require_dashboard_auth(request)
     try:
@@ -97,7 +107,7 @@ def get_growth_dashboard(request: Request):
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 
-@router.get("/api/business-material-report")
+@router.get("/api/business-material-report", response_model=BusinessMaterialReportResponse)
 def get_business_material_report(request: Request):
     require_dashboard_auth(request)
     try:
@@ -108,7 +118,7 @@ def get_business_material_report(request: Request):
         raise HTTPException(status_code=502, detail=str(error)) from error
 
 
-@router.post("/api/growth/sync-product")
+@router.post("/api/growth/sync-product", response_model=RecordsResponse)
 def post_growth_sync_product(request: Request, payload: GrowthSyncProductRequest = Body(default_factory=GrowthSyncProductRequest)):
     require_dashboard_auth(request)
     try:

@@ -7,6 +7,7 @@
     "account-pool-regression": "tsx scripts/account_pool_regression_checks.ts",
     "architecture-boundaries": "python3 scripts/architecture_boundary_checks.py",
     "reelfarm-projection-fixture": "python3 scripts/reelfarm_projection_fixture_checks.py",
+    "reporting-fixture": "python3 scripts/reporting_fixture_checks.py",
     "smoke": "python3 scripts/smoke_checks.py",
     "api-contract": "python3 scripts/api_contract_checks.py"
   },
