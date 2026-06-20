@@ -4458,76 +4458,29 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             self.send_error_json(401, "Unauthorized")
             return
 
-        if path == "/api/health":
-            self.handle_health_get()
-            return
-
-        if path == "/api/auth/status":
-            self.handle_auth_status_get()
-            return
-
-        if path == "/api/data":
-            self.handle_data_get()
-            return
-
-        if path == "/api/database":
-            self.handle_database_get()
-            return
-
-        if path == "/api/database/relational":
-            self.handle_database_relational_get()
-            return
-
-        if path == "/api/api-keys":
-            self.handle_api_keys_get()
-            return
-
-        if path == "/api/ai/materials":
-            self.handle_ai_materials_get()
-            return
-
-        if path == "/api/data/query":
-            self.handle_data_query_get()
-            return
-
-        if path == "/api/growth":
-            self.handle_growth_get()
-            return
-
-        if path == "/api/business-material-report":
-            self.handle_business_material_report_get()
-            return
-
-        if path == "/api/reports/daily-feishu":
-            self.handle_daily_feishu_get()
-            return
-
-        if path == "/api/reports/daily-feishu-analysis":
-            self.handle_daily_feishu_analysis_get()
-            return
-
-        if path == "/api/reports/llm-models":
-            self.handle_llm_models_get()
-            return
-
-        if path == "/api/reports/daily-feishu-preview":
-            self.handle_daily_feishu_preview_get()
-            return
-
-        if path == "/api/reelfarm/config":
-            self.handle_reelfarm_config_get()
-            return
-
-        if path == "/api/reelfarm/sync-all":
-            self.handle_reelfarm_sync_all_get()
-            return
-
-        if path == "/api/reelfarm/matches":
-            self.handle_reelfarm_matches_get()
-            return
-
-        if path == "/api/reelfarm/stored-country":
-            self.handle_reelfarm_stored_country_get()
+        get_handlers = {
+            "/api/health": self.handle_health_get,
+            "/api/auth/status": self.handle_auth_status_get,
+            "/api/data": self.handle_data_get,
+            "/api/database": self.handle_database_get,
+            "/api/database/relational": self.handle_database_relational_get,
+            "/api/api-keys": self.handle_api_keys_get,
+            "/api/ai/materials": self.handle_ai_materials_get,
+            "/api/data/query": self.handle_data_query_get,
+            "/api/growth": self.handle_growth_get,
+            "/api/business-material-report": self.handle_business_material_report_get,
+            "/api/reports/daily-feishu": self.handle_daily_feishu_get,
+            "/api/reports/daily-feishu-analysis": self.handle_daily_feishu_analysis_get,
+            "/api/reports/llm-models": self.handle_llm_models_get,
+            "/api/reports/daily-feishu-preview": self.handle_daily_feishu_preview_get,
+            "/api/reelfarm/config": self.handle_reelfarm_config_get,
+            "/api/reelfarm/sync-all": self.handle_reelfarm_sync_all_get,
+            "/api/reelfarm/matches": self.handle_reelfarm_matches_get,
+            "/api/reelfarm/stored-country": self.handle_reelfarm_stored_country_get,
+        }
+        handler = get_handlers.get(path)
+        if handler:
+            handler()
             return
 
         if path == "/":
@@ -4551,56 +4504,24 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             self.send_error_json(401, "Unauthorized")
             return
 
-        if path == "/api/data":
-            self.handle_data_save()
-            return
-
-        if path == "/api/reset":
-            self.handle_data_reset()
-            return
-
-        if path == "/api/reelfarm/config":
-            self.handle_reelfarm_config_save()
-            return
-
-        if path == "/api/api-keys":
-            self.handle_api_key_create()
-            return
-
-        if path == "/api/api-keys/revoke":
-            self.handle_api_key_revoke()
-            return
-
-        if path == "/api/reelfarm/sync-prefix":
-            self.handle_reelfarm_sync_prefix()
-            return
-
-        if path == "/api/reelfarm/sync-country":
-            self.handle_reelfarm_sync_country()
-            return
-
-        if path == "/api/museon/sync-country":
-            self.handle_museon_sync_country()
-            return
-
-        if path == "/api/growth/sync-product":
-            self.handle_growth_sync_product()
-            return
-
-        if path == "/api/sync/daily-all":
-            self.handle_daily_sync_all()
-            return
-
-        if path == "/api/reports/daily-feishu":
-            self.handle_daily_feishu_send()
-            return
-
-        if path == "/api/reports/daily-feishu-analysis":
-            self.handle_daily_feishu_analysis()
-            return
-
-        if path == "/api/reelfarm/sync-all":
-            self.handle_reelfarm_sync_all()
+        post_handlers = {
+            "/api/data": self.handle_data_save,
+            "/api/reset": self.handle_data_reset,
+            "/api/reelfarm/config": self.handle_reelfarm_config_save,
+            "/api/api-keys": self.handle_api_key_create,
+            "/api/api-keys/revoke": self.handle_api_key_revoke,
+            "/api/reelfarm/sync-prefix": self.handle_reelfarm_sync_prefix,
+            "/api/reelfarm/sync-country": self.handle_reelfarm_sync_country,
+            "/api/museon/sync-country": self.handle_museon_sync_country,
+            "/api/growth/sync-product": self.handle_growth_sync_product,
+            "/api/sync/daily-all": self.handle_daily_sync_all,
+            "/api/reports/daily-feishu": self.handle_daily_feishu_send,
+            "/api/reports/daily-feishu-analysis": self.handle_daily_feishu_analysis,
+            "/api/reelfarm/sync-all": self.handle_reelfarm_sync_all,
+        }
+        handler = post_handlers.get(path)
+        if handler:
+            handler()
             return
 
         self.send_error_json(404, "Not found")
