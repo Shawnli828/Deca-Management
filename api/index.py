@@ -421,7 +421,7 @@ def reset_data(request: Request):
     require_dashboard_auth(request)
     data = default_data()
     save_data(data)
-    return {"ok": True, "data": data}
+    return {"ok": True, "data": enrich_data_with_relational_rollups(data)}
 
 
 @app.get("/api/publish-check")
@@ -661,6 +661,10 @@ def get_data_query(request: Request, authorization: str | None = Header(default=
         return data_query_payload(query_as_lists(request))
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Data query failed: {error}") from error
 
 
 @app.get("/api/growth")

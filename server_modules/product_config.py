@@ -5,7 +5,7 @@ COUNTRY_CODES = {
     "United States": "US",
     "United Kingdom": "UK",
     "Japan": "JP",
-    "Germany": "DE",
+    "Germany": "GE",
     "Brazil": "BR",
     "India": "IN",
     "China": "CN",

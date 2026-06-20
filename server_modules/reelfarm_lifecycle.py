@@ -1,14 +1,11 @@
-from server_modules.db_core import connect_db, db_placeholder
 from server_modules.reelfarm_client import reelfarm_product_automation_ids
 from server_modules.reelfarm_utils import reelfarm_expected_automation_condition
-from server_modules.schema import init_relational_schema
 
 
-def active_tiktok_automation_account_ids(conn, account_ids):
+def active_tiktok_automation_account_ids(conn, account_ids, *, placeholder="?"):
     ids = [str(item or "").strip() for item in (account_ids or []) if str(item or "").strip()]
     if not ids:
         return set()
-    placeholder = db_placeholder()
     placeholders = ",".join([placeholder] * len(ids))
     rows = conn.execute(
         f"""
@@ -26,9 +23,8 @@ def active_tiktok_automation_account_ids(conn, account_ids):
     return {str(dict(row).get("account_id") or "") for row in rows}
 
 
-def mark_missing_reelfarm_automations(conn, product_market_channel_id, seen_reelfarm_ids, synced_at):
+def mark_missing_reelfarm_automations(conn, product_market_channel_id, seen_reelfarm_ids, synced_at, *, placeholder="?"):
     seen = sorted({str(item or "").strip() for item in (seen_reelfarm_ids or []) if str(item or "").strip()})
-    placeholder = db_placeholder()
     if seen:
         seen_placeholders = ", ".join([placeholder] * len(seen))
         conn.execute(
@@ -58,13 +54,12 @@ def mark_missing_reelfarm_automations(conn, product_market_channel_id, seen_reel
     )
 
 
-def mark_missing_reelfarm_product_automations(conn, product_code, seen_reelfarm_ids, synced_at):
+def mark_missing_reelfarm_product_automations(conn, product_code, seen_reelfarm_ids, synced_at, *, placeholder="?"):
     product_code = str(product_code or "").strip().upper()
     if not product_code:
         return 0
 
     seen = sorted({str(item or "").strip() for item in (seen_reelfarm_ids or []) if str(item or "").strip()})
-    placeholder = db_placeholder()
     seen_filter = ""
     params = [synced_at, synced_at, product_code]
     if seen:
@@ -96,7 +91,15 @@ def mark_missing_reelfarm_product_automations(conn, product_code, seen_reelfarm_
     return max(int(cursor.rowcount or 0), 0)
 
 
-def cleanup_reelfarm_product_from_latest_automations(product_code, automations, synced_at):
+def cleanup_reelfarm_product_from_latest_automations(
+    product_code,
+    automations,
+    synced_at,
+    *,
+    connect_db,
+    init_relational_schema,
+    placeholder="?",
+):
     seen_ids = reelfarm_product_automation_ids(automations, product_code)
     if not seen_ids:
         return {
@@ -109,7 +112,13 @@ def cleanup_reelfarm_product_from_latest_automations(product_code, automations, 
 
     with connect_db() as conn:
         init_relational_schema(conn)
-        deleted_count = mark_missing_reelfarm_product_automations(conn, product_code, seen_ids, synced_at)
+        deleted_count = mark_missing_reelfarm_product_automations(
+            conn,
+            product_code,
+            seen_ids,
+            synced_at,
+            placeholder=placeholder,
+        )
         conn.commit()
     return {
         "product_code": str(product_code or "").strip().upper(),

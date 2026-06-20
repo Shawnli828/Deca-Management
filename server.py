@@ -5,6 +5,7 @@ import mimetypes
 import os
 import re
 import socket
+import threading
 import time
 import webbrowser
 from datetime import datetime, timedelta, timezone
@@ -258,6 +259,8 @@ SESSION_SECRET = os.environ.get("SESSION_SECRET", ADMIN_PASSWORD_HASH).strip()
 SESSION_COOKIE = "deca_growth_session"
 SESSION_TTL_SECONDS = 60 * 60 * 12
 AI_API_KEY = os.environ.get("AI_API_KEY", "").strip()
+_SCHEMA_INIT_LOCK = threading.Lock()
+_SCHEMA_INITIALIZED_FOR = ""
 
 
 def using_postgres():
@@ -285,7 +288,56 @@ def connect_db():
 
 
 def init_relational_schema(conn):
-    init_relational_schema_impl(conn, using_postgres(), db_placeholder())
+    global _SCHEMA_INITIALIZED_FOR
+    schema_key = DATABASE_URL or str(DB_PATH)
+    if _SCHEMA_INITIALIZED_FOR == schema_key:
+        return
+    with _SCHEMA_INIT_LOCK:
+        if _SCHEMA_INITIALIZED_FOR == schema_key:
+            return
+        init_relational_schema_impl(conn, using_postgres(), db_placeholder())
+        _SCHEMA_INITIALIZED_FOR = schema_key
+
+
+def reset_schema_init_cache():
+    global _SCHEMA_INITIALIZED_FOR
+    _SCHEMA_INITIALIZED_FOR = ""
+
+
+def normalized_catalog_name(value):
+    return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
+
+
+def relational_catalog_code_maps():
+    product_codes_by_name = {}
+    market_codes_by_product_and_name = {}
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        rows = conn.execute(
+            """
+            SELECT DISTINCT
+                p.code AS product_code,
+                p.name AS product_name,
+                m.code AS market_code,
+                m.name AS market_name
+            FROM products p
+            JOIN product_markets pm ON pm.product_id = p.id
+            JOIN markets m ON m.id = pm.market_id
+            JOIN product_market_channels pmc ON pmc.product_market_id = pm.id
+            JOIN channels ch ON ch.id = pmc.channel_id
+            WHERE ch.code = 'TIKTOK'
+            """
+        ).fetchall()
+    for row in rows:
+        product_code = str(row["product_code"] or "").upper()
+        market_code = str(row["market_code"] or "").upper()
+        product_name_key = normalized_catalog_name(row["product_name"])
+        market_name_key = normalized_catalog_name(row["market_name"])
+        if product_code and product_name_key:
+            product_codes_by_name[product_name_key] = product_code
+        if product_code and market_code and market_name_key:
+            market_codes_by_product_and_name[(product_code, market_name_key)] = market_code
+    return product_codes_by_name, market_codes_by_product_and_name
 
 
 def init_db():
@@ -387,15 +439,28 @@ def reelfarm_automation_is_active(automation):
 
 
 def active_tiktok_automation_account_ids(conn, account_ids):
-    return active_tiktok_automation_account_ids_impl(conn, account_ids)
+    return active_tiktok_automation_account_ids_impl(conn, account_ids, placeholder=db_placeholder())
 
 
 def mark_missing_reelfarm_automations(conn, product_market_channel_id, seen_reelfarm_ids, synced_at):
-    return mark_missing_reelfarm_automations_impl(conn, product_market_channel_id, seen_reelfarm_ids, synced_at)
+    return mark_missing_reelfarm_automations_impl(
+        conn,
+        product_market_channel_id,
+        seen_reelfarm_ids,
+        synced_at,
+        placeholder=db_placeholder(),
+    )
 
 
 def cleanup_reelfarm_product_from_latest_automations(product_code, automations, synced_at):
-    return cleanup_reelfarm_product_from_latest_automations_impl(product_code, automations, synced_at)
+    return cleanup_reelfarm_product_from_latest_automations_impl(
+        product_code,
+        automations,
+        synced_at,
+        connect_db=connect_db,
+        init_relational_schema=init_relational_schema,
+        placeholder=db_placeholder(),
+    )
 
 
 def relational_table_counts(conn):
@@ -897,6 +962,7 @@ def enrich_data_with_relational_rollups(data):
         return data
 
     enriched = json.loads(json.dumps(data, ensure_ascii=False))
+    product_codes_by_name, market_codes_by_product_and_name = relational_catalog_code_maps()
     rollups = {}
     product_rollups = {}
     placeholder = db_placeholder()
@@ -950,7 +1016,14 @@ def enrich_data_with_relational_rollups(data):
     for product in enriched:
         if not isinstance(product, dict):
             continue
-        product_code = product_code_for(product)
+        configured_product_code = product_code_for(product)
+        relational_product_code = product_codes_by_name.get(normalized_catalog_name(product.get("name")))
+        product_code = configured_product_code
+        if relational_product_code and (
+            not product.get("reelFarmCode") or configured_product_code not in product_rollups
+        ):
+            product_code = relational_product_code
+            product["reelFarmCode"] = relational_product_code
         product.update(product_rollups.get(product_code, {
             "creatorCount": 0,
             "automationCount": 0,
@@ -961,7 +1034,16 @@ def enrich_data_with_relational_rollups(data):
         for country in product.get("countries", []) or []:
             if not isinstance(country, dict):
                 continue
-            market_code = country_code_for(country)
+            configured_market_code = country_code_for(country)
+            relational_market_code = market_codes_by_product_and_name.get(
+                (product_code, normalized_catalog_name(country.get("name")))
+            )
+            market_code = configured_market_code
+            if relational_market_code and (
+                not country.get("reelFarmCode") or (product_code, configured_market_code) not in rollups
+            ):
+                market_code = relational_market_code
+                country["reelFarmCode"] = relational_market_code
             country.update(rollups.get((product_code, market_code), {
                 "creatorCount": 0,
                 "automationCount": 0,
@@ -3203,28 +3285,49 @@ def query_museon_clone_account_posts(query):
 
 
 def query_reelfarm_accounts(query):
-    where_sql, params = common_where(query, include_post_dates=False)
     channel_code = data_source_channel_code(query_value(query, "source"))
-    visibility_sql = ""
-    if channel_code == "TIKTOK":
-        visibility_sql = f" AND {reelfarm_dashboard_automation_condition('a')}"
     date_from = query_value(query, "date_from")
     date_to = query_value(query, "date_to")
     if not date_from and not date_to:
         date_from, date_to = query_days_window(query)
     metric_date_column = "mat.created_at" if channel_code == "TIKTOK" else "post.published_at"
-    metric_condition = "post.id IS NOT NULL"
-    if channel_code == "TIKTOK":
-        metric_condition += f" AND {reelfarm_expected_automation_condition('a')}"
-    metric_params = []
     placeholder = db_placeholder()
+
+    account_where = ["ch.code = " + placeholder]
+    account_params = [channel_code]
+    product_code = query_value(query, "product_code").upper()
+    market_code = (query_value(query, "country_code") or query_value(query, "market_code")).upper()
+    account_id = query_value(query, "account_id")
+    automation_id = query_value(query, "automation_id")
+    if product_code:
+        account_where.append("p.code = " + placeholder)
+        account_params.append(product_code)
+    if market_code:
+        account_where.append("m.code = " + placeholder)
+        account_params.append(market_code)
+    if account_id:
+        account_where.append(f"(acc.id = {placeholder} OR acc.reelfarm_account_id = {placeholder} OR acc.username = {placeholder})")
+        account_params.extend([account_id, account_id, account_id.lstrip("@")])
+    if automation_id:
+        account_where.append(f"(a.id = {placeholder} OR a.reelfarm_automation_id = {placeholder})")
+        account_params.extend([automation_id, automation_id])
+    if channel_code == "TIKTOK":
+        account_where.append(reelfarm_dashboard_automation_condition("a"))
+    account_where.append("acc.id IS NOT NULL")
+    account_where_sql = " AND ".join(account_where)
+
+    metric_where_sql, metric_params = common_where(query, include_post_dates=False)
+    metric_where = [metric_where_sql, "acc.id IS NOT NULL", "post.id IS NOT NULL"]
+    if channel_code == "TIKTOK":
+        metric_where.append(reelfarm_expected_automation_condition("a"))
     if date_from:
-        metric_condition += f" AND {metric_date_column} >= {placeholder}"
+        metric_where.append(f"{metric_date_column} >= {placeholder}")
         metric_params.append(post_datetime_bound(date_from))
     if date_to:
-        metric_condition += f" AND {metric_date_column} <= {placeholder}"
+        metric_where.append(f"{metric_date_column} <= {placeholder}")
         metric_params.append(post_datetime_bound(date_to, end=True))
-    metric_condition_count = 9
+    metric_where_sql = " AND ".join(metric_where)
+
     automation_names_sql = (
         "STRING_AGG(DISTINCT a.name, ' | ')"
         if using_postgres()
@@ -3239,63 +3342,113 @@ def query_reelfarm_accounts(query):
         init_relational_schema(conn)
         rows = conn.execute(
             f"""
+            WITH account_base AS (
+                SELECT
+                    p.id AS product_id,
+                    p.code AS product_code,
+                    p.name AS product_name,
+                    m.id AS country_id,
+                    m.id AS market_id,
+                    m.code AS country_code,
+                    m.code AS market_code,
+                    m.name AS country_name,
+                    pmc.id AS product_market_channel_id,
+                    acc.id AS account_id,
+                    acc.reelfarm_account_id,
+                    acc.username,
+                    acc.display_name,
+                    acc.avatar_url,
+                    CASE
+                        WHEN SUM(CASE WHEN LOWER(COALESCE(a.status, '')) = 'active' THEN 1 ELSE 0 END) > 0 THEN 'active'
+                        ELSE COALESCE(MAX(NULLIF(a.status, '')), '')
+                    END AS status,
+                    COUNT(DISTINCT a.id) AS automation_count,
+                    MAX(a.name) AS automation_name,
+                    {automation_names_sql} AS automation_names,
+                    MAX(a.post_mode) AS post_mode,
+                    CASE
+                        WHEN SUM(CASE WHEN a.publish_method = 'manual' THEN 1 ELSE 0 END) > 0 THEN 'manual'
+                        WHEN SUM(CASE WHEN a.publish_method = 'rpa' THEN 1 ELSE 0 END) > 0 THEN 'rpa'
+                        ELSE 'api'
+                    END AS publish_method,
+                    {expected_account_sql} AS expected_account_count,
+                    MAX(a.synced_at) AS base_synced_at
+                FROM products p
+                JOIN product_markets pm ON pm.product_id = p.id
+                JOIN markets m ON m.id = pm.market_id
+                JOIN product_market_channels pmc ON pmc.product_market_id = pm.id
+                JOIN channels ch ON ch.id = pmc.channel_id
+                LEFT JOIN automations a ON a.product_market_channel_id = pmc.id
+                LEFT JOIN accounts acc ON acc.id = a.account_id
+                WHERE {account_where_sql}
+                GROUP BY
+                    p.id,
+                    p.code,
+                    p.name,
+                    m.id,
+                    m.code,
+                    m.name,
+                    pmc.id,
+                    acc.id,
+                    acc.reelfarm_account_id,
+                    acc.username,
+                    acc.display_name,
+                    acc.avatar_url
+            ),
+            metrics AS (
+                SELECT
+                    acc.id AS account_id,
+                    COUNT(DISTINCT mat.id) AS material_count,
+                    COUNT(DISTINCT post.id) AS post_count,
+                    CASE WHEN COUNT(DISTINCT post.id) > 0 THEN 1 ELSE 0 END AS posted_account_count,
+                    COALESCE(SUM(post.view_count), 0) AS total_views,
+                    COALESCE(SUM(post.like_count), 0) AS total_likes,
+                    COALESCE(SUM(post.comment_count), 0) AS total_comments,
+                    COALESCE(SUM(post.share_count), 0) AS total_shares,
+                    COALESCE(SUM(post.bookmark_count), 0) AS total_bookmarks,
+                    MAX(post.published_at) AS latest_post_at,
+                    MAX(COALESCE(post.synced_at, mat.synced_at, a.synced_at)) AS metric_synced_at
+                {relational_base_from()}
+                WHERE {metric_where_sql}
+                GROUP BY acc.id
+            )
             SELECT
-                p.id AS product_id,
-                p.code AS product_code,
-                p.name AS product_name,
-                m.id AS country_id,
-                m.id AS market_id,
-                m.code AS country_code,
-                m.code AS market_code,
-                m.name AS country_name,
-                pmc.id AS product_market_channel_id,
-                acc.id AS account_id,
-                acc.reelfarm_account_id,
-                acc.username,
-                acc.display_name,
-                acc.avatar_url,
-                CASE
-                    WHEN SUM(CASE WHEN LOWER(COALESCE(a.status, '')) = 'active' THEN 1 ELSE 0 END) > 0 THEN 'active'
-                    ELSE COALESCE(MAX(NULLIF(a.status, '')), '')
-                END AS status,
-                COUNT(DISTINCT a.id) AS automation_count,
-                MAX(a.name) AS automation_name,
-                {automation_names_sql} AS automation_names,
-                MAX(a.post_mode) AS post_mode,
-                CASE
-                    WHEN SUM(CASE WHEN a.publish_method = 'manual' THEN 1 ELSE 0 END) > 0 THEN 'manual'
-                    WHEN SUM(CASE WHEN a.publish_method = 'rpa' THEN 1 ELSE 0 END) > 0 THEN 'rpa'
-                    ELSE 'api'
-                END AS publish_method,
-                COUNT(DISTINCT CASE WHEN {metric_condition} THEN mat.id END) AS material_count,
-                COUNT(DISTINCT CASE WHEN {metric_condition} THEN post.id END) AS post_count,
-                CASE WHEN COUNT(DISTINCT CASE WHEN {metric_condition} THEN post.id END) > 0 THEN 1 ELSE 0 END AS posted_account_count,
-                {expected_account_sql} AS expected_account_count,
-                COALESCE(SUM(CASE WHEN {metric_condition} THEN post.view_count ELSE 0 END), 0) AS total_views,
-                COALESCE(SUM(CASE WHEN {metric_condition} THEN post.like_count ELSE 0 END), 0) AS total_likes,
-                COALESCE(SUM(CASE WHEN {metric_condition} THEN post.comment_count ELSE 0 END), 0) AS total_comments,
-                COALESCE(SUM(CASE WHEN {metric_condition} THEN post.share_count ELSE 0 END), 0) AS total_shares,
-                COALESCE(SUM(CASE WHEN {metric_condition} THEN post.bookmark_count ELSE 0 END), 0) AS total_bookmarks,
-                MAX(CASE WHEN {metric_condition} THEN post.published_at END) AS latest_post_at,
-                MAX(COALESCE(post.synced_at, mat.synced_at, a.synced_at)) AS last_synced_at
-            {relational_base_from()}
-            WHERE {where_sql}{visibility_sql} AND acc.id IS NOT NULL
-            GROUP BY
-                p.id,
-                p.code,
-                p.name,
-                m.id,
-                m.code,
-                m.name,
-                pmc.id,
-                acc.id,
-                acc.reelfarm_account_id,
-                acc.username,
-                acc.display_name,
-                acc.avatar_url
+                account_base.product_id,
+                account_base.product_code,
+                account_base.product_name,
+                account_base.country_id,
+                account_base.market_id,
+                account_base.country_code,
+                account_base.market_code,
+                account_base.country_name,
+                account_base.product_market_channel_id,
+                account_base.account_id,
+                account_base.reelfarm_account_id,
+                account_base.username,
+                account_base.display_name,
+                account_base.avatar_url,
+                account_base.status,
+                account_base.automation_count,
+                account_base.automation_name,
+                account_base.automation_names,
+                account_base.post_mode,
+                account_base.publish_method,
+                COALESCE(metrics.material_count, 0) AS material_count,
+                COALESCE(metrics.post_count, 0) AS post_count,
+                COALESCE(metrics.posted_account_count, 0) AS posted_account_count,
+                account_base.expected_account_count,
+                COALESCE(metrics.total_views, 0) AS total_views,
+                COALESCE(metrics.total_likes, 0) AS total_likes,
+                COALESCE(metrics.total_comments, 0) AS total_comments,
+                COALESCE(metrics.total_shares, 0) AS total_shares,
+                COALESCE(metrics.total_bookmarks, 0) AS total_bookmarks,
+                COALESCE(metrics.latest_post_at, '') AS latest_post_at,
+                COALESCE(metrics.metric_synced_at, account_base.base_synced_at, '') AS last_synced_at
+            FROM account_base
+            LEFT JOIN metrics ON metrics.account_id = account_base.account_id
             ORDER BY total_views DESC, post_count DESC
             """,
-            tuple(metric_params * metric_condition_count + params),
+            tuple(account_params + metric_params),
         ).fetchall()
     return [normalize_reelfarm_account_row(row_dict(row)) for row in rows]
 
@@ -4009,6 +4162,9 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
         "/api/database": "handle_database_get",
         "/api/database/relational": "handle_database_relational_get",
         "/api/api-keys": "handle_api_keys_get",
+        "/api/account-tags": "handle_account_tags_get",
+        "/api/account-issues": "handle_account_issues_get",
+        "/api/product-tags": "handle_product_tags_get",
         "/api/ai/materials": "handle_ai_materials_get",
         "/api/data/query": "handle_data_query_get",
         "/api/growth": "handle_growth_get",
@@ -4028,6 +4184,12 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
         "/api/reelfarm/config": "handle_reelfarm_config_save",
         "/api/api-keys": "handle_api_key_create",
         "/api/api-keys/revoke": "handle_api_key_revoke",
+        "/api/account-tags": "handle_account_tag_add",
+        "/api/account-tags/delete": "handle_account_tag_delete",
+        "/api/account-issues": "handle_account_issue_add",
+        "/api/account-issues/delete": "handle_account_issue_delete",
+        "/api/product-tags": "handle_product_tag_create",
+        "/api/product-tags/delete": "handle_product_tag_delete",
         "/api/reelfarm/sync-prefix": "handle_reelfarm_sync_prefix",
         "/api/reelfarm/sync-country": "handle_reelfarm_sync_country",
         "/api/museon/sync-country": "handle_museon_sync_country",
@@ -4124,12 +4286,12 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             return
 
         save_data(data)
-        self.send_json(200, {"ok": True, "data": data})
+        self.send_json(200, {"ok": True, "data": enrich_data_with_relational_rollups(data)})
 
     def handle_data_reset(self):
         data = default_data()
         save_data(data)
-        self.send_json(200, {"ok": True, "data": data})
+        self.send_json(200, {"ok": True, "data": enrich_data_with_relational_rollups(data)})
 
     def handle_reelfarm_config_save(self):
         payload, ok = self.read_json_payload()
@@ -4170,6 +4332,84 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             self.send_json(200, {"ok": True, "record": revoke_external_api_key(key_id)})
         except ValueError as error:
             self.send_error_json(404, error)
+
+    def handle_account_tags_get(self):
+        query = self.query_params()
+        account_ids = [item.strip() for item in self.query_text(query, "account_ids").split(",") if item.strip()]
+        self.send_json(200, account_tags_payload(account_ids))
+
+    def handle_account_tag_add(self):
+        payload, ok = self.read_json_payload({})
+        if not ok:
+            return
+        try:
+            self.send_json(200, add_account_tag(self.payload_text(payload, "account_id"), self.payload_text(payload, "tag")))
+        except ValueError as error:
+            self.send_error_json(400, error)
+
+    def handle_account_tag_delete(self):
+        payload, ok = self.read_json_payload({})
+        if not ok:
+            return
+        try:
+            self.send_json(200, delete_account_tag(self.payload_text(payload, "account_id"), self.payload_text(payload, "tag")))
+        except ValueError as error:
+            self.send_error_json(400, error)
+
+    def handle_account_issues_get(self):
+        query = self.query_params()
+        account_ids = [item.strip() for item in self.query_text(query, "account_ids").split(",") if item.strip()]
+        self.send_json(200, account_issues_payload(account_ids))
+
+    def handle_account_issue_add(self):
+        payload, ok = self.read_json_payload({})
+        if not ok:
+            return
+        try:
+            self.send_json(200, add_account_issue(self.payload_text(payload, "account_id"), self.payload_text(payload, "issue")))
+        except ValueError as error:
+            self.send_error_json(400, error)
+
+    def handle_account_issue_delete(self):
+        payload, ok = self.read_json_payload({})
+        if not ok:
+            return
+        try:
+            self.send_json(200, delete_account_issue(self.payload_text(payload, "account_id"), self.payload_text(payload, "issue")))
+        except ValueError as error:
+            self.send_error_json(400, error)
+
+    def handle_product_tags_get(self):
+        query = self.query_params()
+        try:
+            self.send_json(200, product_tags_payload(self.query_text(query, "product_code")))
+        except ValueError as error:
+            self.send_error_json(400, error)
+
+    def handle_product_tag_create(self):
+        payload, ok = self.read_json_payload({})
+        if not ok:
+            return
+        try:
+            self.send_json(200, create_product_tag(self.payload_text(payload, "product_code"), self.payload_text(payload, "tag")))
+        except ValueError as error:
+            self.send_error_json(400, error)
+
+    def handle_product_tag_delete(self):
+        payload, ok = self.read_json_payload({})
+        if not ok:
+            return
+        try:
+            self.send_json(
+                200,
+                delete_product_tag(
+                    self.payload_text(payload, "product_code"),
+                    self.payload_text(payload, "tag"),
+                    bool(self.payload_value(payload, "remove_assignments", True)),
+                ),
+            )
+        except ValueError as error:
+            self.send_error_json(400, error)
 
     def handle_reelfarm_sync_prefix(self):
         payload, ok = self.read_json_payload()
@@ -4379,7 +4619,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
         self.send_json(200, {"authenticated": self.is_authenticated()})
 
     def handle_data_get(self):
-        self.send_json(200, {"data": load_data()})
+        self.send_json(200, {"data": enrich_data_with_relational_rollups(load_data())})
 
     def handle_database_get(self):
         self.send_json(200, database_snapshot())

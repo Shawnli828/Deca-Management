@@ -27,7 +27,7 @@ export async function parseApiResponse<T>(response: Response, fallback = 'Reques
     }
   }
   if (!response.ok || payload.ok === false) {
-    throw new Error(payload.error || fallback);
+    throw new Error(payload.error || payload.detail || fallback);
   }
   return payload as T;
 }

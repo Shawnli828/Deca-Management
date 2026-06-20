@@ -21,7 +21,7 @@ import {
   addTagToRows,
   attachAccountTagsAndIssues,
   buildAccountPostsQueryParams,
-  buildProductAccountPoolQueryParams,
+  buildAccountPoolQueryParams,
   fetchAccountTagsAndIssues,
   removeProductTagFromFilters,
   removeProductTagFromRows,
@@ -76,19 +76,26 @@ export function useAccountPool({
         return;
       }
 
-      const countryByCode = new Map(
-        countries.map(country => [getCountryReelFarmCode(country).toUpperCase(), country])
-      );
-      const params = buildProductAccountPoolQueryParams({ productCode, dateFrom, dateTo, dataSource });
-      const payload = await api.dataQuery<{ ok: boolean; data: AccountSummary[] }>(params);
-      setProductTagOptions(productTagsPayload.tags || []);
-      const accounts = (payload.data || [])
-        .map(account => {
-          const countryCode = String(account.country_code || account.market_code || '').toUpperCase();
-          const country = countryByCode.get(countryCode) || (countries.length === 1 ? countries[0] : undefined);
-          return country ? { ...account, country } : null;
+      const countryPayloads = await Promise.allSettled(
+        countries.map(async country => {
+          const params = buildAccountPoolQueryParams({ productCode, country, dateFrom, dateTo, dataSource });
+          const payload = await api.dataQuery<{ ok: boolean; data: AccountSummary[] }>(params);
+          return (payload.data || []).map(account => ({ ...account, country }));
         })
+      );
+      setProductTagOptions(productTagsPayload.tags || []);
+      const accounts = countryPayloads
+        .flatMap(result => result.status === 'fulfilled' ? result.value : [])
         .filter((account): account is AccountSummary & { country: Country } => Boolean(account));
+      const failures = countryPayloads
+        .map((result, index) => result.status === 'rejected' ? `${countries[index]?.name || 'Unknown'}: ${result.reason?.message || 'Request failed'}` : '')
+        .filter(Boolean);
+      if (!accounts.length && failures.length) {
+        throw new Error(failures.join('; '));
+      }
+      if (failures.length) {
+        setError(`部分国家账号读取失败：${failures.join('; ')}`);
+      }
       const accountIds = accounts.map(account => account.account_id).filter(Boolean);
       const { tagMap, issueMap } = await fetchAccountTagsAndIssues(accountIds);
       setRows(attachAccountTagsAndIssues(accounts, tagMap, issueMap));
