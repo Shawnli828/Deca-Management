@@ -25,10 +25,26 @@ def feishu_signed_payload(message, webhook_secret=""):
     return payload
 
 
-def send_feishu_message(message, webhook_url, webhook_secret="", ssl_context_factory=None):
+def feishu_signed_card_payload(card, webhook_secret=""):
+    payload = {
+        "msg_type": "interactive",
+        "card": card,
+    }
+    if webhook_secret:
+        timestamp = str(int(time.time()))
+        string_to_sign = f"{timestamp}\n{webhook_secret}"
+        sign = base64.b64encode(
+            hmac.new(string_to_sign.encode("utf-8"), digestmod=hashlib.sha256).digest()
+        ).decode("utf-8")
+        payload["timestamp"] = timestamp
+        payload["sign"] = sign
+    return payload
+
+
+def send_feishu_payload(payload, webhook_url, ssl_context_factory=None):
     if not webhook_url:
         return {"ok": False, "error": "FEISHU_WEBHOOK_URL is not configured."}
-    body = json.dumps(feishu_signed_payload(message, webhook_secret), ensure_ascii=False).encode("utf-8")
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     request = Request(
         webhook_url,
         data=body,
@@ -55,6 +71,22 @@ def send_feishu_message(message, webhook_url, webhook_secret="", ssl_context_fac
     if code not in (0, "0", None):
         return {"ok": False, "error": payload.get("msg") or payload.get("StatusMessage") or raw[:300], "response": payload}
     return {"ok": True, "response": payload}
+
+
+def send_feishu_message(message, webhook_url, webhook_secret="", ssl_context_factory=None):
+    return send_feishu_payload(
+        feishu_signed_payload(message, webhook_secret),
+        webhook_url,
+        ssl_context_factory,
+    )
+
+
+def send_feishu_card(card, webhook_url, webhook_secret="", ssl_context_factory=None):
+    return send_feishu_payload(
+        feishu_signed_card_payload(card, webhook_secret),
+        webhook_url,
+        ssl_context_factory,
+    )
 
 
 def daily_feishu_llm_api_key(env):

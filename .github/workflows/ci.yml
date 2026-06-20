@@ -59,6 +59,9 @@ jobs:
       - name: Reporting fixture checks
         run: npm run reporting-fixture
 
+      - name: Feishu card fixture checks
+        run: npm run feishu-card-fixture
+
       - name: Smoke checks
         run: npm run smoke
 

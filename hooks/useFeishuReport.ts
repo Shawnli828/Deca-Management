@@ -12,7 +12,8 @@ import {
 import type {
   DailyFeishuAnalysisPayload,
   DailyFeishuPreviewPayload,
-  DailyFeishuSendResult
+  DailyFeishuSendResult,
+  FeishuSendMode
 } from '@/lib/types';
 
 export function useFeishuReport() {
@@ -27,6 +28,7 @@ export function useFeishuReport() {
   const [modelListStatus, setModelListStatus] = useState('');
   const [customModel, setCustomModel] = useState('');
   const [includeAi, setIncludeAi] = useState(false);
+  const [sendMode, setSendMode] = useState<FeishuSendMode>('card_with_text_fallback');
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisPayload, setAnalysisPayload] = useState<DailyFeishuAnalysisPayload | null>(null);
   const [analysisError, setAnalysisError] = useState('');
@@ -38,7 +40,7 @@ export function useFeishuReport() {
   const downloadRate = ratio(totals.download_rate);
   const selectedModel = customModel.trim() || model;
 
-  const loadPreview = useCallback(async (nextDate = reportDate) => {
+  const loadPreview = useCallback(async (nextDate = reportDate, nextMode = sendMode) => {
     const requestId = previewRequestRef.current + 1;
     previewRequestRef.current = requestId;
     setLoading(true);
@@ -47,7 +49,7 @@ export function useFeishuReport() {
     setAnalysisPayload(null);
     setAnalysisError('');
     try {
-      const next = await api.dailyFeishuPreview(nextDate);
+      const next = await api.dailyFeishuPreview(nextDate, nextMode);
       if (previewRequestRef.current !== requestId) return;
       setPayload(next);
     } catch (previewError: unknown) {
@@ -56,22 +58,22 @@ export function useFeishuReport() {
     } finally {
       if (previewRequestRef.current === requestId) setLoading(false);
     }
-  }, [reportDate]);
+  }, [reportDate, sendMode]);
 
   const sendReport = useCallback(async () => {
     setSending(true);
     setError('');
     setSendResult(null);
     try {
-      const result = await api.sendDailyFeishuReport(reportDate, { includeAi, model: selectedModel });
+      const result = await api.sendDailyFeishuReport(reportDate, { includeAi, model: selectedModel, mode: sendMode });
       setSendResult(result);
-      await loadPreview(reportDate);
+      await loadPreview(reportDate, sendMode);
     } catch (sendError: unknown) {
       setError(getErrorMessage(sendError, '飞书发送失败'));
     } finally {
       setSending(false);
     }
-  }, [includeAi, loadPreview, reportDate, selectedModel]);
+  }, [includeAi, loadPreview, reportDate, selectedModel, sendMode]);
 
   const generateAnalysis = useCallback(async () => {
     const requestId = analysisRequestRef.current + 1;
@@ -128,6 +130,12 @@ export function useFeishuReport() {
     };
   }, []);
 
+  useEffect(() => {
+    if (sendMode === 'card' && includeAi) {
+      setIncludeAi(false);
+    }
+  }, [includeAi, sendMode]);
+
   return {
     reportDate,
     setReportDate,
@@ -144,6 +152,8 @@ export function useFeishuReport() {
     setCustomModel,
     includeAi,
     setIncludeAi,
+    sendMode,
+    setSendMode,
     analysisLoading,
     analysisPayload,
     analysisError,

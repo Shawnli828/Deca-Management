@@ -95,6 +95,14 @@ def report_payload(report_date=""):
     return daily_feishu_service().report_payload(report_date)
 
 
+def report_card_data(report_date="", report=None):
+    return daily_feishu_service().report_card_data(report_date, report)
+
+
+def report_card(report_date="", report=None):
+    return daily_feishu_service().report_card(report_date, report)
+
+
 def ai_analysis(report_date="", model="", report=None, require_config=False):
     return daily_feishu_service().ai_analysis(report_date, model, report, require_config)
 
@@ -103,5 +111,5 @@ def llm_models_payload():
     return daily_feishu_service().llm_models_payload()
 
 
-def send_report(report_date="", include_ai=False, model="", require_synced=False):
-    return daily_feishu_service().send_report(report_date, include_ai, model, require_synced)
+def send_report(report_date="", include_ai=False, model="", require_synced=False, mode="text"):
+    return daily_feishu_service().send_report(report_date, include_ai, model, require_synced, mode)

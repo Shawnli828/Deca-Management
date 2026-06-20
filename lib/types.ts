@@ -178,6 +178,56 @@ export type DailyFeishuProductSummary = {
   [key: string]: unknown;
 };
 
+export type FeishuSendMode = 'text' | 'card' | 'card_with_text_fallback';
+
+export type FeishuCardMetricProduct = {
+  code?: string;
+  name?: string;
+  totalPlays?: number;
+  rfPlays?: number;
+  clonePlays?: number;
+  rfPublished?: number;
+  rfExpected?: number;
+  rfAvg?: number | null;
+  cloneAvg?: number | null;
+  onboarding?: number | null;
+  downloadRate?: number | null;
+  unsent?: number;
+  zeroPlay?: number;
+  countries?: Array<{
+    flag?: string;
+    name?: string;
+    rfAvg?: number | null;
+    posts?: number;
+  }>;
+  anomalyGroups?: Array<{
+    title?: string;
+    more?: string | null;
+    accounts?: Array<{
+      flag?: string;
+      handle?: string;
+      batch?: string;
+    }>;
+  }>;
+};
+
+export type FeishuCardData = {
+  bizDate?: string;
+  window?: string;
+  global?: {
+    totalPlays?: number;
+    rfPlays?: number;
+    clonePlays?: number;
+    rfPublished?: number;
+    rfExpected?: number;
+    rfAvg?: number | null;
+    cloneAvg?: number | null;
+    onboarding?: number | null;
+    downloadRate?: number | null;
+  };
+  products?: FeishuCardMetricProduct[];
+};
+
 export type DailyFeishuReportError = {
   product_code?: string;
   product_name?: string;
@@ -200,6 +250,9 @@ export type DailyFeishuPreviewPayload = {
   report: DailyFeishuReport;
   message: string;
   message_preview?: string;
+  mode?: FeishuSendMode;
+  card_data?: FeishuCardData | null;
+  card?: Record<string, unknown> | null;
 };
 
 export type DailyFeishuSendResult = {
@@ -212,6 +265,9 @@ export type DailyFeishuSendResult = {
   message_preview?: string;
   analysis?: string;
   model?: string;
+  mode?: FeishuSendMode;
+  fallback_reason?: string;
+  card_preview?: FeishuCardData | null;
   error?: string;
 };
 

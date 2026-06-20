@@ -1091,7 +1091,7 @@
 
         .feishu-report-actions {
             display: grid;
-            grid-template-columns: minmax(170px, 1fr) auto auto;
+            grid-template-columns: minmax(150px, 0.8fr) minmax(160px, 1fr) auto auto;
             gap: 10px;
             align-items: end;
         }
@@ -1105,6 +1105,7 @@
         }
 
         .feishu-report-actions input,
+        .feishu-report-actions select,
         .feishu-report-actions button {
             min-height: 46px;
             border: 1px solid var(--line);
@@ -1312,6 +1313,12 @@
             accent-color: #3157d5;
         }
 
+        .feishu-ai-checkbox input:disabled,
+        .feishu-ai-checkbox input:disabled + span {
+            opacity: 0.55;
+            cursor: default;
+        }
+
         .feishu-ai-output {
             min-height: 132px;
             border: 1px solid #dbe3ef;
@@ -1410,6 +1417,213 @@
             grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
             gap: 14px;
             align-items: start;
+        }
+
+        .feishu-native-preview {
+            overflow: hidden;
+            border: 1px solid #dbe3ef;
+            border-radius: 14px;
+            background: #ffffff;
+            box-shadow: 0 16px 34px rgba(15, 23, 42, 0.04);
+        }
+
+        .feishu-native-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 18px 20px;
+            background: #245bdb;
+            color: #ffffff;
+        }
+
+        .feishu-native-header h2 {
+            margin: 0;
+            font-size: 18px;
+            line-height: 1.25;
+            font-weight: 780;
+        }
+
+        .feishu-native-header p {
+            margin: 5px 0 0;
+            color: rgba(255, 255, 255, 0.78);
+            font-size: 12px;
+            line-height: 1.45;
+            font-weight: 560;
+        }
+
+        .feishu-native-header span {
+            flex: 0 0 auto;
+            border: 1px solid rgba(255, 255, 255, 0.34);
+            border-radius: 999px;
+            padding: 5px 9px;
+            background: rgba(255, 255, 255, 0.12);
+            font-size: 11px;
+            font-weight: 760;
+        }
+
+        .feishu-native-tabs {
+            display: flex;
+            gap: 6px;
+            overflow-x: auto;
+            border-bottom: 1px solid #e5eaf2;
+            padding: 8px 10px 0;
+            background: #f8fafc;
+        }
+
+        .feishu-native-tabs button {
+            min-width: 86px;
+            border: 1px solid transparent;
+            border-bottom: 0;
+            border-radius: 10px 10px 0 0;
+            padding: 10px 14px;
+            background: transparent;
+            color: #64748b;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 760;
+        }
+
+        .feishu-native-tabs button.active {
+            border-color: #dbe3ef;
+            background: #ffffff;
+            color: #245bdb;
+        }
+
+        .feishu-native-body {
+            display: grid;
+            gap: 13px;
+            padding: 16px;
+        }
+
+        .feishu-native-kpis {
+            display: grid;
+            gap: 8px;
+        }
+
+        .feishu-native-kpi-row {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .feishu-native-kpi {
+            min-height: 62px;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 10px 12px;
+            background: #f1f5f9;
+        }
+
+        .feishu-native-kpi span {
+            display: block;
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 760;
+        }
+
+        .feishu-native-kpi strong {
+            display: block;
+            margin-top: 6px;
+            color: #0f172a;
+            font-size: 22px;
+            line-height: 1;
+            font-weight: 850;
+        }
+
+        .feishu-native-alert {
+            border-radius: 9px;
+            padding: 9px 11px;
+            background: #fef2f2;
+            color: #b91c1c;
+            font-size: 13px;
+            font-weight: 820;
+        }
+
+        .feishu-native-bars,
+        .feishu-native-table,
+        .feishu-native-countries,
+        .feishu-native-anomaly {
+            display: grid;
+            gap: 8px;
+            border-top: 1px solid #e5eaf2;
+            padding-top: 12px;
+        }
+
+        .feishu-native-bars > strong,
+        .feishu-native-table > strong,
+        .feishu-native-countries > strong,
+        .feishu-native-anomaly > strong {
+            color: #0f172a;
+            font-size: 14px;
+            font-weight: 820;
+        }
+
+        .feishu-native-bar-line {
+            display: grid;
+            grid-template-columns: auto minmax(110px, 1fr) auto;
+            gap: 9px;
+            align-items: baseline;
+            color: #334155;
+            font-size: 13px;
+            font-weight: 650;
+        }
+
+        .feishu-native-bar-line code {
+            color: #245bdb;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 13px;
+            letter-spacing: 0;
+        }
+
+        .feishu-native-bar-line b {
+            color: #0f172a;
+            font-weight: 820;
+        }
+
+        .feishu-native-table div,
+        .feishu-native-countries div,
+        .feishu-native-anomaly div {
+            display: grid;
+            grid-template-columns: minmax(130px, 1fr) auto auto;
+            gap: 10px;
+            align-items: baseline;
+            color: #334155;
+            font-size: 13px;
+            line-height: 1.45;
+            font-weight: 640;
+        }
+
+        .feishu-native-table .is-danger,
+        .feishu-native-anomaly strong {
+            color: #dc2626;
+        }
+
+        .feishu-native-countries b {
+            color: #0f172a;
+            font-weight: 840;
+        }
+
+        .feishu-native-countries small,
+        .feishu-native-anomaly small {
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 620;
+        }
+
+        .feishu-native-countries p,
+        .feishu-native-empty {
+            margin: 0;
+            color: #64748b;
+            font-size: 13px;
+            font-weight: 620;
+        }
+
+        .feishu-native-anomaly em {
+            color: #b45309;
+            font-size: 12px;
+            font-style: normal;
+            font-weight: 680;
         }
 
         .feishu-message-card,
