@@ -4074,6 +4074,16 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
         status = 200 if not status_from_ok or result.get("ok") else 400
         self.send_json(status, result)
 
+    def send_query_payload_json(self, payload_fn, catch_runtime=False):
+        try:
+            self.send_json(200, payload_fn(self.query_params()))
+        except ValueError as error:
+            self.send_error_json(400, error, include_ok=True)
+        except RuntimeError as error:
+            if not catch_runtime:
+                raise
+            self.send_error_json(502, error, include_ok=True)
+
     def send_static_file(self, request_path):
         requested = (BASE_DIR / unquote(request_path.lstrip("/"))).resolve()
         if BASE_DIR not in requested.parents and requested != BASE_DIR:
@@ -4408,24 +4418,13 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
         self.send_json(200, ai_materials_payload(self.query_params()))
 
     def handle_data_query_get(self):
-        try:
-            self.send_json(200, data_query_payload(self.query_params()))
-        except ValueError as error:
-            self.send_error_json(400, error, include_ok=True)
+        self.send_query_payload_json(data_query_payload)
 
     def handle_growth_get(self):
-        try:
-            self.send_json(200, growth_dashboard_payload(self.query_params()))
-        except ValueError as error:
-            self.send_error_json(400, error, include_ok=True)
+        self.send_query_payload_json(growth_dashboard_payload)
 
     def handle_business_material_report_get(self):
-        try:
-            self.send_json(200, business_material_report_payload(self.query_params()))
-        except ValueError as error:
-            self.send_error_json(400, error, include_ok=True)
-        except RuntimeError as error:
-            self.send_error_json(502, error, include_ok=True)
+        self.send_query_payload_json(business_material_report_payload, catch_runtime=True)
 
     def handle_daily_feishu_get(self):
         self.send_daily_feishu_response(allow_require_synced=True)
