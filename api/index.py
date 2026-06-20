@@ -13,7 +13,7 @@ from api.routes.shared import json_error
 from api.routes.sync import router as sync_router
 from api.routes.system import router as system_router
 from api.routes.tags import router as tags_router
-from server import BASE_DIR
+from server_modules.app_runtime import BASE_DIR
 
 
 app = FastAPI(

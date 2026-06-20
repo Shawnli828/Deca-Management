@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Body, HTTPException, Request
 
 from api.schemas.requests import AccountIssueRequest, AccountTagRequest, ProductTagRequest
-from server import (
+from server_modules.services.tag_runtime import (
     account_issues_payload,
     account_tags_payload,
     add_account_issue,

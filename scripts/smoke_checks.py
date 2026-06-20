@@ -7,9 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from server import (  # noqa: E402
-    ZERO_PLAY_VIEW_THRESHOLD,
-)
+from server_modules.account_issues import ZERO_PLAY_VIEW_THRESHOLD  # noqa: E402
 from server_modules.daily_report import daily_feishu_report_text  # noqa: E402
 from server_modules.time_windows import (  # noqa: E402
     business_material_date_for_utc_datetime,
@@ -29,6 +27,7 @@ from server_modules.metrics_service import (  # noqa: E402
     summarize_daily_report_products,
 )
 from server_modules.sync_status import format_sync_readiness_line, sync_status_from_runs  # noqa: E402
+from server_modules.sync_result import error_sync_result, normalized_sync_result  # noqa: E402
 
 
 def assert_equal(actual, expected, label):
@@ -161,6 +160,22 @@ def main():
     )
     assert_equal(readiness_ok["ok"], True, "sync readiness success")
     assert_equal(format_sync_readiness_line(readiness_ok), "同步校验：RF / Clone / Mixpanel 已完成", "sync readiness success line")
+
+    normalized_sync = normalized_sync_result(
+        "reelfarm",
+        {"ok": True, "records": [{"id": 1}, {"id": 2}]},
+        started_at="2026-06-14T00:00:00+00:00",
+        finished_at="2026-06-14T00:00:02+00:00",
+        duration_seconds=2.0,
+    )
+    assert_equal(normalized_sync["source"], "reelfarm", "normalized sync source")
+    assert_equal(normalized_sync["status"], "success", "normalized sync status")
+    assert_equal(normalized_sync["records_count"], 2, "normalized sync records count")
+
+    failed_sync = error_sync_result("museon_clone", "timeout")
+    assert_equal(failed_sync["ok"], False, "failed sync ok flag")
+    assert_equal(failed_sync["status"], "error", "failed sync status")
+    assert_equal(failed_sync["errors"][0]["error"], "timeout", "failed sync error")
 
     readiness_stale = evaluate_sync_readiness(
         {

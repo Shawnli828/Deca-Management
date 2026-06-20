@@ -1,10 +1,15 @@
-import type { AccountSummary, DetailedPostRow, ProductKpis, ProductRollup } from '../types';
 import { apiFetch, withQuery } from './client';
+import type {
+  AccountQueryResponse,
+  DetailedRowsResponse,
+  ProductKpisResponse,
+  ProductRollupsResponse
+} from './types';
 
 export const dataQueryApi = {
   dataQuery: <T>(params: URLSearchParams) => apiFetch<T>(withQuery('/api/data/query', params)),
   productKpis: (productCode: string, countryCode?: string, source?: string) =>
-    dataQueryApi.dataQuery<{ ok: boolean; data: ProductKpis }>(
+    dataQueryApi.dataQuery<ProductKpisResponse>(
       new URLSearchParams({
         resource: 'product_kpis',
         product_code: productCode,
@@ -13,11 +18,11 @@ export const dataQueryApi = {
       })
     ),
   productRollups: (source?: string) =>
-    dataQueryApi.dataQuery<{ ok: boolean; data: ProductRollup[] }>(
+    dataQueryApi.dataQuery<ProductRollupsResponse>(
       new URLSearchParams({ resource: 'product_rollups', ...(source ? { source } : {}) })
     ),
   accounts: (productCode: string, countryCode: string, days: number, source?: string) =>
-    dataQueryApi.dataQuery<{ ok: boolean; data: AccountSummary[] }>(
+    dataQueryApi.dataQuery<AccountQueryResponse>(
       new URLSearchParams({
         resource: 'accounts',
         product_code: productCode,
@@ -27,11 +32,7 @@ export const dataQueryApi = {
       })
     ),
   accountPosts: (productCode: string, countryCode: string, accountId: string, days: number, limit: number, offset: number, source?: string) =>
-    dataQueryApi.dataQuery<{
-      ok: boolean;
-      data: DetailedPostRow[];
-      pagination: { limit: number; offset: number; has_more: boolean; total?: number };
-    }>(
+    dataQueryApi.dataQuery<DetailedRowsResponse>(
       new URLSearchParams({
         resource: 'account_posts',
         product_code: productCode,

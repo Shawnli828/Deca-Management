@@ -7,7 +7,7 @@ from pathlib import Path
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_DIR))
 
-import server  # noqa: E402
+from server_modules import app_runtime  # noqa: E402
 
 
 def main():
@@ -20,9 +20,9 @@ def main():
     if not isinstance(data, list):
         raise SystemExit("seed_data.json must contain {\"data\": [...]}")
 
-    server.init_db()
-    server.save_data(data)
-    print(f"Imported {len(data)} products into {'Postgres' if server.using_postgres() else 'SQLite'}.")
+    app_runtime.init_db()
+    app_runtime.save_data(data)
+    print(f"Imported {len(data)} products into {'Postgres' if app_runtime.using_postgres() else 'SQLite'}.")
 
 
 if __name__ == "__main__":

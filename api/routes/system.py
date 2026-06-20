@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from server import using_postgres
+from server_modules.app_runtime import using_postgres
 
 
 router = APIRouter()

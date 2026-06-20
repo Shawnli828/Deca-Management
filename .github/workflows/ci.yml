@@ -41,11 +41,17 @@ jobs:
       - name: Python compile check
         run: python -m compileall -q server.py api server_modules scripts
 
+      - name: Architecture boundary checks
+        run: npm run architecture-boundaries
+
       - name: TypeScript typecheck
         run: npm run typecheck
 
       - name: Account pool regression checks
         run: npm run account-pool-regression
+
+      - name: ReelFarm projection fixture checks
+        run: npm run reelfarm-projection-fixture
 
       - name: Smoke checks
         run: npm run smoke

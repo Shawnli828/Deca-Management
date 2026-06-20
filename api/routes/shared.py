@@ -1,7 +1,12 @@
+import os
+
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from server import SESSION_COOKIE, external_api_key_authorized, valid_auth_token
+from server_modules.app_runtime import SESSION_COOKIE, valid_auth_token
+from server_modules.auth_utils import cron_authorized as cron_secret_authorized
+from server_modules.services.api_key_runtime import authorized as external_api_key_authorized
+from server_modules.settings import CRON_SECRET
 
 
 def query_as_lists(request: Request) -> dict[str, list[str]]:
@@ -20,6 +25,10 @@ def authenticated(request: Request) -> bool:
 def require_dashboard_auth(request: Request) -> None:
     if not authenticated(request):
         raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+def cron_authorized(headers) -> bool:
+    return cron_secret_authorized(headers, os.environ.get("CRON_SECRET", "").strip() or CRON_SECRET)
 
 
 def bearer_token(authorization: str | None) -> str:
