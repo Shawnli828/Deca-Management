@@ -29,7 +29,7 @@ export function FeishuReportHero({
       <div>
         <p className="dashboard-kicker">AI Feishu Report</p>
         <h1>Feishu Report</h1>
-        <p>每日业务数据先生成可检查预览，再以飞书原生交互卡片发送到群里；文本日报保留为兜底模式。</p>
+        <p>每日业务数据先生成可检查预览，再以飞书 webhook 兼容的原生卡片发送到群里；文本日报保留为兜底模式。</p>
       </div>
       <div className="feishu-report-actions">
         <label>
@@ -66,11 +66,11 @@ export function FeishuFlowGrid({
 }) {
   const sendDescription = sendMode === 'text'
     ? (includeAi ? '发送文本时附带 AI 分析' : '手动发送当前日报文本')
-    : (sendMode === 'card' ? '发送飞书原生交互卡片' : '优先发送交互卡片，失败时转文本');
+    : (sendMode === 'card' ? '发送飞书原生卡片' : '优先发送原生卡片，失败时转文本');
   const cards = [
     ['01', 'Data Snapshot', '读取 Daily Metric 当前业务日数据', 'Ready'],
     ['02', 'LLM Insight', '让模型总结波动、异常和重点产品', analysisPayload ? (analysisPayload.configured ? 'Ready' : 'Needs Key') : 'Optional'],
-    ['03', 'Native Card', '生成总览与产品线 Tab 看板', sendMode === 'text' ? 'Optional' : 'Ready'],
+    ['03', 'Native Card', '生成总览与产品线分段看板', sendMode === 'text' ? 'Optional' : 'Ready'],
     ['04', 'Feishu Send', sendDescription, 'Ready']
   ];
 

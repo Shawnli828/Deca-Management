@@ -369,7 +369,7 @@ function FeishuNativeCardPreview({ data, loading }: { data: FeishuCardData | nul
           <h2>Deca Growth 每日业务数据</h2>
           <p>业务日 {data.bizDate || '—'} · 内容窗口 {data.window || '—'}</p>
         </div>
-        <span>飞书原生版</span>
+        <span>飞书兼容版</span>
       </div>
       <div className="feishu-native-tabs">
         <button type="button" className={activeTab === 'overview' ? 'active' : ''} onClick={() => setActiveTab('overview')}>
