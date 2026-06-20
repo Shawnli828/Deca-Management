@@ -16,6 +16,8 @@ ADMIN_PASSWORD = "contract-password"
 def configure_test_env():
     for key in ("DATABASE_URL", "POSTGRES_URL", "POSTGRES_PRISMA_URL", "POSTGRES_URL_NON_POOLING"):
         os.environ.pop(key, None)
+    for key in ("LLM_API_KEY", "OPENAI_API_KEY"):
+        os.environ.pop(key, None)
     os.environ["ADMIN_USERNAME"] = ADMIN_USERNAME
     os.environ["ADMIN_PASSWORD_HASH"] = hashlib.sha256(ADMIN_PASSWORD.encode("utf-8")).hexdigest()
     os.environ["SESSION_SECRET"] = "contract-session-secret"
@@ -30,6 +32,15 @@ def assert_status(response, expected, label):
 def assert_true(value, label):
     if not value:
         raise AssertionError(label)
+
+
+def assert_api_routes_do_not_import_server():
+    offenders = []
+    for path in (ROOT / "api").rglob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        if "from server import" in text or "import server" in text:
+            offenders.append(str(path.relative_to(ROOT)))
+    assert_true(not offenders, f"api modules should not import server.py directly: {', '.join(offenders)}")
 
 
 def seed_contract_database(server):
@@ -59,6 +70,7 @@ def seed_contract_database(server):
             ("automations", {"id": "automation-dm-ge-1", "product_market_channel_id": "pmc-dm-ge-tiktok", "account_id": "account-dm-ge-1", "reelfarm_automation_id": "rf-auto-1", "name": "GE-DM-topic-format", "status": "active", "schedule": "[]", "settings_json": "{}", "post_mode": "DIRECT_POST", "publish_method": "api", "sync_status": "present", "last_seen_at": synced_at, "deleted_at": "", "created_at": synced_at, "synced_at": synced_at}),
             ("materials", {"id": "material-dm-ge-1", "automation_id": "automation-dm-ge-1", "product_market_channel_id": "pmc-dm-ge-tiktok", "account_id": "account-dm-ge-1", "concept_id": None, "format_id": None, "reelfarm_video_id": "rf-video-1", "video_type": "slideshow", "hook": "contract hook", "prompt": "contract prompt", "images_json": "[]", "slide_count": 3, "status": "Finished", "created_at": "2026-06-15T00:00:00+00:00", "finished_at": "2026-06-15T00:01:00+00:00", "synced_at": synced_at}),
             ("posts", {"id": "post-dm-ge-1", "material_id": "material-dm-ge-1", "account_id": "account-dm-ge-1", "reelfarm_post_id": "rf-post-1", "status": "published", "title": "contract post", "published_at": "2026-06-15T01:00:00+00:00", "published_at_readable": "2026/06/15 01:00 UTC", "view_count": 1234, "like_count": 100, "comment_count": 10, "share_count": 5, "bookmark_count": 2, "synced_at": synced_at}),
+            ("post_daily_snapshots", {"id": "snapshot-dm-ge-1", "post_id": "post-dm-ge-1", "snapshot_date": "2026-06-15", "view_count": 1234, "like_count": 100, "comment_count": 10, "share_count": 5, "bookmark_count": 2, "synced_at": synced_at}),
         ]
         for table, values in rows:
             server.upsert_row(conn, table, values, [next(iter(values.keys()))])
@@ -67,13 +79,16 @@ def seed_contract_database(server):
 
 def main():
     configure_test_env()
+    assert_api_routes_do_not_import_server()
 
     from fastapi.testclient import TestClient
     import server
+    import server_modules.app_runtime as app_runtime
     from api.index import app
 
     with tempfile.TemporaryDirectory() as tmpdir:
         server.DB_PATH = Path(tmpdir) / "contract.sqlite3"
+        app_runtime.DB_PATH = server.DB_PATH
         server.reset_schema_init_cache()
         seed_contract_database(server)
 
@@ -133,6 +148,51 @@ def main():
         assert_true(len(material_rows) == 1, "material query should return seeded material")
         assert_true((material_rows[0].get("material") or {}).get("hook") == "contract hook", "material query should return seeded material fields")
 
+        summary = client.get("/api/data/query", params={
+            "resource": "summary",
+            "product_code": "DM",
+            "country_code": "GE",
+            "date_from": "2026-06-13",
+            "date_to": "2026-06-19",
+        })
+        assert_status(summary, 200, "summary query")
+        assert_true((summary.json().get("data") or {}).get("total_views") == 1234, "summary query should return seeded views")
+
+        countries = client.get("/api/data/query", params={"resource": "countries", "product_code": "DM", "country_code": "GE"})
+        assert_status(countries, 200, "countries query")
+        country_rows = countries.json().get("data") or []
+        assert_true(country_rows and country_rows[0].get("total_views") == 1234, "countries query should return seeded country totals")
+
+        product_kpis = client.get("/api/data/query", params={"resource": "product_kpis", "product_code": "DM", "country_code": "GE"})
+        assert_status(product_kpis, 200, "product kpis query")
+        assert_true((product_kpis.json().get("data") or {}).get("seven_day", {}).get("views") == 1234, "product kpis should include seeded seven-day views")
+
+        daily_metrics = client.get("/api/data/query", params={
+            "resource": "daily_metrics",
+            "product_code": "DM",
+            "country_code": "GE",
+            "date_from": "2026-06-15",
+            "date_to": "2026-06-15",
+        })
+        assert_status(daily_metrics, 200, "daily metrics query")
+        daily_rows = daily_metrics.json().get("data") or []
+        assert_true(daily_rows and daily_rows[0].get("views") == 1234, "daily metrics should return seeded snapshot")
+
+        ai_materials = client.get("/api/ai/materials", headers={"Authorization": "Bearer contract-ai-key"})
+        assert_status(ai_materials, 401, "ai materials without valid key")
+
+        feishu_preview = client.get("/api/reports/daily-feishu-preview", params={"date": "2026-06-15"})
+        assert_status(feishu_preview, 200, "daily Feishu preview")
+        feishu_preview_body = feishu_preview.json()
+        feishu_report = feishu_preview_body.get("report", {})
+        assert_true(feishu_report.get("report_date") == "2026-06-15", "Feishu preview should use requested date")
+        assert_true(any(item.get("product_name") == "Demi" for item in feishu_report.get("products", [])), "Feishu preview should expose product rows")
+        assert_true("Demi" in feishu_preview_body.get("message", ""), "Feishu preview should include seeded product")
+
+        feishu_analysis = client.get("/api/reports/daily-feishu-analysis", params={"date": "2026-06-15", "model": "gpt-4.1-mini"})
+        assert_status(feishu_analysis, 200, "daily Feishu analysis without LLM key")
+        assert_true(feishu_analysis.json().get("needs_api_key") is True, "Feishu analysis should report missing LLM key")
+
         product_tag = client.post("/api/product-tags", json={"product_code": "DM", "tag": "Test Tag"})
         assert_status(product_tag, 200, "create product tag")
         assert_true("Test Tag" in product_tag.json().get("tags", []), "product tag should round trip")
@@ -157,6 +217,13 @@ def main():
         key_list = client.get("/api/api-keys")
         assert_status(key_list, 200, "list api keys")
         assert_true(any(item.get("id") == key_id for item in key_list.json().get("keys", [])), "created api key should be listed")
+        ai_materials_valid = client.get(
+            "/api/ai/materials",
+            params={"product_code": "DM", "country_code": "GE"},
+            headers={"Authorization": f"Bearer {api_key_body.get('key')}"},
+        )
+        assert_status(ai_materials_valid, 200, "ai materials with valid api key")
+        assert_true(ai_materials_valid.json().get("totals", {}).get("materials") == 1, "ai materials should expose seeded material")
         revoked = client.post("/api/api-keys/revoke", json={"id": key_id})
         assert_status(revoked, 200, "revoke api key")
         assert_true((revoked.json().get("record") or {}).get("active") is False, "revoked api key should be inactive")

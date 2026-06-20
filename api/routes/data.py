@@ -1,18 +1,17 @@
 from fastapi import APIRouter, Body, Header, HTTPException, Request
 
 from api.schemas.requests import DataUpdateRequest, GrowthSyncProductRequest
-from server import (
+from server_modules.services.data_runtime import (
     ai_materials_payload,
     business_material_report_payload,
     connect_db,
     database_snapshot,
     data_query_payload,
-    default_data,
-    enrich_data_with_relational_rollups,
+    enriched_data,
     growth_dashboard_payload,
     init_relational_schema,
-    load_data,
     relational_table_counts,
+    reset_data as reset_data_payload,
     save_data,
     sync_product_growth_snapshots,
     using_postgres,
@@ -32,7 +31,7 @@ router = APIRouter()
 @router.get("/api/data")
 def get_data(request: Request):
     require_dashboard_auth(request)
-    return {"data": enrich_data_with_relational_rollups(load_data())}
+    return {"data": enriched_data()}
 
 
 @router.post("/api/data")
@@ -43,7 +42,7 @@ def post_data(request: Request, payload: DataUpdateRequest = Body(default_factor
         raise HTTPException(status_code=400, detail="Expected { data: [...] }")
 
     save_data(data)
-    return {"ok": True, "data": enrich_data_with_relational_rollups(data)}
+    return {"ok": True, "data": enriched_data(data)}
 
 
 @router.get("/api/database")
@@ -67,9 +66,7 @@ def get_relational_database(request: Request):
 @router.post("/api/reset")
 def reset_data(request: Request):
     require_dashboard_auth(request)
-    data = default_data()
-    save_data(data)
-    return {"ok": True, "data": enrich_data_with_relational_rollups(data)}
+    return {"ok": True, "data": reset_data_payload()}
 
 
 @router.get("/api/ai/materials")

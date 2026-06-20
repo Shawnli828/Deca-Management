@@ -1,15 +1,14 @@
 from fastapi import APIRouter, HTTPException, Request
 
-from server import (
-    cron_authorized,
-    daily_feishu_ai_analysis,
-    daily_feishu_report_payload,
-    daily_feishu_report_text,
+from server_modules.daily_report import daily_feishu_report_text
+from server_modules.services.daily_feishu_runtime import (
+    ai_analysis as daily_feishu_ai_analysis,
     llm_models_payload,
-    send_daily_feishu_report,
+    report_payload as daily_feishu_report_payload,
+    send_report as send_daily_feishu_report,
 )
 
-from .shared import require_dashboard_auth
+from .shared import cron_authorized, require_dashboard_auth
 
 
 router = APIRouter()

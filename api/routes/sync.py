@@ -5,8 +5,7 @@ from api.schemas.requests import (
     ReelfarmSyncCountryRequest,
     ReelfarmSyncPrefixRequest,
 )
-from server import (
-    cron_authorized,
+from server_modules.services.sync_runtime import (
     sync_all_reelfarm_records,
     sync_daily_all_records,
     sync_museon_clone_country,
@@ -14,7 +13,7 @@ from server import (
     sync_reelfarm_prefix,
 )
 
-from .shared import require_dashboard_auth
+from .shared import cron_authorized, require_dashboard_auth
 
 
 router = APIRouter()

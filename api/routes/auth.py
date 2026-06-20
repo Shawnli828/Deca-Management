@@ -3,13 +3,15 @@ import hmac
 from fastapi import APIRouter, Body, HTTPException, Request, Response
 
 from api.schemas.requests import AuthLoginRequest
-from server import (
+from server_modules.app_runtime import (
     ADMIN_PASSWORD_HASH,
     ADMIN_USERNAME,
     SESSION_COOKIE,
     SESSION_TTL_SECONDS,
-    cookie_header,
     make_auth_token,
+)
+from server_modules.auth_utils import (
+    cookie_header,
     password_hash,
 )
 
