@@ -178,18 +178,21 @@ def product_tab(product):
     return elements
 
 
+def section_title(title):
+    return markdown(f"**{title}**")
+
+
+def build_webhook_safe_elements(data):
+    elements = [section_title("总览")]
+    elements.extend(overview_tab(data))
+    for product in data.get("products") or []:
+        product_name = str(product.get("name") or product.get("code") or "Product")
+        elements.extend([hr(), section_title(product_name)])
+        elements.extend(product_tab(product))
+    return elements
+
+
 def build_daily_report_card(data):
-    tabs = [
-        {"tag": "tab", "title": {"tag": "plain_text", "content": "总览"}, "elements": overview_tab(data)}
-    ]
-    tabs.extend(
-        {
-            "tag": "tab",
-            "title": {"tag": "plain_text", "content": str(product.get("name") or product.get("code") or "Product")},
-            "elements": product_tab(product),
-        }
-        for product in data.get("products") or []
-    )
     return {
         "schema": "2.0",
         "config": {"update_multi": True, "wide_screen_mode": True},
@@ -201,5 +204,5 @@ def build_daily_report_card(data):
                 "content": f"业务日 {data.get('bizDate') or ''} · 内容窗口 {data.get('window') or ''}",
             },
         },
-        "body": {"elements": [{"tag": "tab_group", "tabs": tabs}]},
+        "body": {"elements": build_webhook_safe_elements(data)},
     }

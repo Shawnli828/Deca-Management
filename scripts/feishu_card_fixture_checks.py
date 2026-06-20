@@ -21,14 +21,6 @@ def assert_true(value, label):
         raise AssertionError(label)
 
 
-def first_tab_group(card):
-    elements = ((card or {}).get("body") or {}).get("elements") or []
-    for element in elements:
-        if element.get("tag") == "tab_group":
-            return element
-    raise AssertionError("card should include a tab_group")
-
-
 def text_blocks(elements):
     blocks = []
     for element in elements or []:
@@ -83,17 +75,16 @@ def main():
 
     assert_equal(card.get("schema"), "2.0", "card schema")
     assert_equal(card.get("header", {}).get("template"), "blue", "card header template")
-    tab_group = first_tab_group(card)
-    tabs = tab_group.get("tabs") or []
-    assert_equal(len(tabs), len(products) + 1, "card tab count")
-    assert_equal(tabs[0].get("title", {}).get("content"), "总览", "overview tab title")
-    assert_equal(tabs[1].get("title", {}).get("content"), products[0].get("product_name"), "product tab title")
+    elements = ((card or {}).get("body") or {}).get("elements") or []
+    assert_true(elements, "card should include body elements")
+    assert_true(all(element.get("tag") != "tab_group" for element in elements), "webhook-safe card should not use tab_group")
 
-    overview_text = "\n".join(text_blocks(tabs[0].get("elements")))
-    product_text = "\n".join(text_blocks(tabs[1].get("elements")))
-    assert_true("产品线总播放量" in overview_text, "overview includes play chart")
-    assert_true("██████████████" in overview_text, "overview includes filled character bar")
-    assert_true("国家 RF 均播" in product_text, "product tab includes country avg")
+    card_text = "\n".join(text_blocks(elements))
+    assert_true("总览" in card_text, "card includes overview section")
+    assert_true(products[0].get("product_name") in card_text, "card includes product section")
+    assert_true("产品线总播放量" in card_text, "overview includes play chart")
+    assert_true("██████████████" in card_text, "overview includes filled character bar")
+    assert_true("国家 RF 均播" in card_text, "product section includes country avg")
 
     signed_payload = feishu_signed_card_payload(card, "secret")
     assert_equal(signed_payload.get("msg_type"), "interactive", "signed payload type")
