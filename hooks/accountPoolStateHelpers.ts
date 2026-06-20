@@ -1,8 +1,8 @@
 import { api } from '@/lib/api';
+import type { AccountPoolDataSource, AccountPoolRow } from '@/lib/domain/accountPool';
+import type { TagFilterRow } from '@/lib/domain/accountTags';
 import type { AccountSummary, Country } from '@/lib/types';
 import { getCountryReelFarmCode } from '@/lib/utils';
-import type { AccountPoolDataSource, AccountPoolRow } from '@/components/AccountPoolHelpers';
-import type { TagFilterRow } from '@/components/CountryAccountTagHelpers';
 
 export type AccountPoolAccount = AccountSummary & { country: Country };
 

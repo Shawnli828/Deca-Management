@@ -4,7 +4,9 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "smoke": "python3 scripts/smoke_checks.py"
+    "account-pool-regression": "tsx scripts/account_pool_regression_checks.ts",
+    "smoke": "python3 scripts/smoke_checks.py",
+    "api-contract": "python3 scripts/api_contract_checks.py"
   },
   "dependencies": {
     "next": "^16.0.0",
@@ -15,6 +17,7 @@
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "tsx": "^4.22.4",
     "typescript": "^5.7.0"
   }
 }

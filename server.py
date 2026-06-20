@@ -1,17 +1,14 @@
 #!/usr/bin/env python3
 import json
 import hmac
-import mimetypes
 import os
 import re
 import socket
-import threading
+import sys
 import time
 import webbrowser
 from datetime import datetime, timedelta, timezone
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlparse
 
 from server_modules.time_windows import (
     BUSINESS_TIMEZONE,
@@ -53,6 +50,18 @@ from server_modules.external_clients import (
     llm_models_payload as llm_models_payload_impl,
     send_feishu_message as send_feishu_message_impl,
 )
+from server_modules.growth_report_service import (
+    business_material_report_payload as business_material_report_payload_impl,
+    growth_dashboard_payload as growth_dashboard_payload_impl,
+)
+from server_modules.services.publish_check_service import (
+    beijing_day_window as beijing_day_window_impl,
+    product_country_lookup as product_country_lookup_service,
+    publish_check_accounts as publish_check_accounts_impl,
+    publish_check_reminder_text as publish_check_reminder_text_impl,
+    run_publish_check as run_publish_check_impl,
+    send_publish_check_reminder as send_publish_check_reminder_impl,
+)
 from server_modules.sync_status import (
     SYNC_RUN_SOURCE_LABELS,
     compact_sync_run_meta,
@@ -62,6 +71,12 @@ from server_modules.sync_status import (
     sync_readiness_payload,
     sync_run_records_count,
     sync_status_payload_from_runs,
+)
+from server_modules.sync_orchestrator import (
+    sync_all_growth_snapshots as sync_all_growth_snapshots_impl,
+    sync_all_museon_clone_records as sync_all_museon_clone_records_impl,
+    sync_all_reelfarm_records as sync_all_reelfarm_records_impl,
+    sync_daily_all_records as sync_daily_all_records_impl,
 )
 from server_modules.reelfarm_utils import (
     reelfarm_automation_is_active as reelfarm_automation_is_active_impl,
@@ -121,6 +136,7 @@ from server_modules.api_keys import (
     list_external_api_keys_from_state,
     revoke_external_api_key_from_state,
 )
+from server_modules.app_context import AppContext
 from server_modules.account_issues import (
     ZERO_PLAY_ISSUE,
     ZERO_PLAY_POST_LIMIT,
@@ -156,6 +172,12 @@ from server_modules.data_query_helpers import (
     query_value as query_value_impl,
     relational_base_from as relational_base_from_impl,
     row_dict as row_dict_impl,
+)
+from server_modules.data_query_router import data_query_payload as data_query_payload_impl
+from server_modules.queries.account_queries import query_reelfarm_accounts as query_reelfarm_accounts_impl
+from server_modules.queries.post_queries import (
+    query_materials as query_materials_impl,
+    query_posts as query_posts_impl,
 )
 from server_modules.detailed_rows import (
     detailed_row as detailed_row_impl,
@@ -259,16 +281,22 @@ SESSION_SECRET = os.environ.get("SESSION_SECRET", ADMIN_PASSWORD_HASH).strip()
 SESSION_COOKIE = "deca_growth_session"
 SESSION_TTL_SECONDS = 60 * 60 * 12
 AI_API_KEY = os.environ.get("AI_API_KEY", "").strip()
-_SCHEMA_INIT_LOCK = threading.Lock()
-_SCHEMA_INITIALIZED_FOR = ""
+APP_CONTEXT = AppContext(
+    database_url=lambda: DATABASE_URL,
+    db_path=lambda: DB_PATH,
+    using_postgres_impl=using_postgres_impl,
+    db_placeholder_impl=db_placeholder_impl,
+    connect_db_impl=connect_db_impl,
+    init_relational_schema_impl=init_relational_schema_impl,
+)
 
 
 def using_postgres():
-    return using_postgres_impl(DATABASE_URL)
+    return APP_CONTEXT.using_postgres()
 
 
 def db_placeholder():
-    return db_placeholder_impl(DATABASE_URL)
+    return APP_CONTEXT.db_placeholder()
 
 
 def make_ssl_context():
@@ -284,24 +312,15 @@ def initial_data():
 
 
 def connect_db():
-    return connect_db_impl(DATABASE_URL, DB_PATH)
+    return APP_CONTEXT.connect_db()
 
 
 def init_relational_schema(conn):
-    global _SCHEMA_INITIALIZED_FOR
-    schema_key = DATABASE_URL or str(DB_PATH)
-    if _SCHEMA_INITIALIZED_FOR == schema_key:
-        return
-    with _SCHEMA_INIT_LOCK:
-        if _SCHEMA_INITIALIZED_FOR == schema_key:
-            return
-        init_relational_schema_impl(conn, using_postgres(), db_placeholder())
-        _SCHEMA_INITIALIZED_FOR = schema_key
+    APP_CONTEXT.init_relational_schema(conn)
 
 
 def reset_schema_init_cache():
-    global _SCHEMA_INITIALIZED_FOR
-    _SCHEMA_INITIALIZED_FOR = ""
+    APP_CONTEXT.reset_schema_init_cache()
 
 
 def normalized_catalog_name(value):
@@ -1187,125 +1206,34 @@ def reelfarm_material_count(result):
 
 
 def sync_all_reelfarm_records():
-    if not reelfarm_api_key():
-        raise RuntimeError("ReelFarm API key is not configured.")
-
-    data = load_data()
-    synced_at = datetime.now(timezone.utc).isoformat()
-    automations = reelfarm_fetch_automations()
-    successes = 0
-    errors = []
-    relational_projection = None
-    product_cleanups = []
-
-    for product in data:
-        product_code = product_code_for(product)
-        for country in product.get("countries", []) or []:
-            prefix = build_country_automation_prefix(product, country)
-            try:
-                result = reelfarm_matches(prefix, automations=automations)
-                country["reelFarmSyncedAt"] = synced_at
-                country["creatorCount"] = reelfarm_creator_count(result)
-                country["materialCount"] = reelfarm_material_count(result)
-                scoped_country = dict(country)
-                scoped_country["reelFarmResult"] = result
-                relational_projection = project_synced_country_to_relational(
-                    product,
-                    scoped_country,
-                )
-                successes += 1
-            except RuntimeError as error:
-                errors.append({"prefix": prefix, "error": str(error)})
-        if product_code:
-            try:
-                product_cleanups.append(
-                    cleanup_reelfarm_product_from_latest_automations(product_code, automations, synced_at)
-                )
-            except RuntimeError as error:
-                errors.append({"product_code": product_code, "error": str(error)})
-
-    save_data(data)
-    return {
-        "ok": True,
-        "synced_at": synced_at,
-        "synced_count": successes,
-        "error_count": len(errors),
-        "errors": errors[:20],
-        "product_cleanups": product_cleanups,
-        "relational_projection": relational_projection,
-    }
-
+    return sync_all_reelfarm_records_impl(
+        reelfarm_api_key=reelfarm_api_key,
+        load_data=load_data,
+        save_data=save_data,
+        reelfarm_fetch_automations=reelfarm_fetch_automations,
+        product_code_for=product_code_for,
+        build_country_automation_prefix=build_country_automation_prefix,
+        reelfarm_matches=reelfarm_matches,
+        reelfarm_creator_count=reelfarm_creator_count,
+        reelfarm_material_count=reelfarm_material_count,
+        project_synced_country_to_relational=project_synced_country_to_relational,
+        cleanup_reelfarm_product_from_latest_automations=cleanup_reelfarm_product_from_latest_automations,
+    )
 
 def sync_all_museon_clone_records():
-    data = load_data()
-    successes = 0
-    skipped = 0
-    errors = []
-    records = []
-
-    for product in data:
-        if not isinstance(product, dict):
-            continue
-        product_code = product_code_for(product)
-        for country in product.get("countries", []) or []:
-            if not isinstance(country, dict):
-                continue
-            country_code = country_code_for(country)
-            try:
-                result = sync_museon_clone_country(
-                    str(product.get("id") or ""),
-                    str(country.get("id") or ""),
-                    product_code,
-                    country_code,
-                )
-                records.append({
-                    "product_code": product_code,
-                    "country_code": country_code,
-                    "creator_count": result.get("creator_count", 0),
-                    "material_count": result.get("material_count", 0),
-                    "post_count": result.get("post_count", 0),
-                    "skipped": bool(result.get("skipped")),
-                    "duration_total_seconds": result.get("duration_total_seconds"),
-                })
-                if result.get("skipped"):
-                    skipped += 1
-                else:
-                    successes += 1
-            except RuntimeError as error:
-                errors.append({"product_code": product_code, "country_code": country_code, "error": str(error)})
-
-    return {
-        "ok": True,
-        "synced_count": successes,
-        "skipped_count": skipped,
-        "error_count": len(errors),
-        "errors": errors[:20],
-        "records": records[:50],
-    }
-
+    return sync_all_museon_clone_records_impl(
+        load_data=load_data,
+        product_code_for=product_code_for,
+        country_code_for=country_code_for,
+        sync_museon_clone_country=sync_museon_clone_country,
+    )
 
 def sync_all_growth_snapshots(days=30):
-    product_codes = configured_product_codes()
-
-    successes = 0
-    errors = []
-    records = []
-    for product_code in product_codes:
-        try:
-            product_records = sync_product_growth_snapshots(product_code, days)
-            successes += 1
-            records.append({"product_code": product_code, "count": len(product_records)})
-        except (RuntimeError, ValueError) as error:
-            errors.append({"product_code": product_code, "error": str(error)})
-
-    return {
-        "ok": True,
-        "synced_count": successes,
-        "error_count": len(errors),
-        "errors": errors[:20],
-        "records": records,
-    }
-
+    return sync_all_growth_snapshots_impl(
+        configured_product_codes=configured_product_codes,
+        sync_product_growth_snapshots=sync_product_growth_snapshots,
+        days=days,
+    )
 
 def configured_product_codes():
     return configured_product_codes_impl(load_data())
@@ -1316,75 +1244,15 @@ def configured_product_name_map():
 
 
 def sync_daily_all_records(days=30):
-    started = time.perf_counter()
-    started_at = datetime.now(timezone.utc).isoformat()
-    synced_at = datetime.now(timezone.utc).isoformat()
-    stages = {}
-
-    for stage_name, runner in (
-        ("reelfarm", sync_all_reelfarm_records),
-        ("museon_clone", sync_all_museon_clone_records),
-        ("growth_mixpanel", lambda: sync_all_growth_snapshots(days)),
-    ):
-        stage_started = time.perf_counter()
-        stage_started_at = datetime.now(timezone.utc).isoformat()
-        try:
-            payload = runner()
-            duration = round(time.perf_counter() - stage_started, 3)
-            stage_finished_at = datetime.now(timezone.utc).isoformat()
-            payload["duration_total_seconds"] = duration
-            safe_record_sync_run(
-                stage_name,
-                "success" if payload.get("ok") else "error",
-                stage_started_at,
-                stage_finished_at,
-                duration,
-                records_count=sync_run_records_count(payload),
-                error="" if payload.get("ok") else json.dumps(payload.get("errors") or payload.get("error") or "", ensure_ascii=False)[:1000],
-                meta=compact_sync_run_meta(payload),
-            )
-            stages[stage_name] = payload
-        except RuntimeError as error:
-            duration = round(time.perf_counter() - stage_started, 3)
-            stage_finished_at = datetime.now(timezone.utc).isoformat()
-            safe_record_sync_run(
-                stage_name,
-                "error",
-                stage_started_at,
-                stage_finished_at,
-                duration,
-                error=str(error),
-                meta={"error": str(error)},
-            )
-            stages[stage_name] = {
-                "ok": False,
-                "error": str(error),
-                "duration_total_seconds": duration,
-            }
-
-    ok = all(stage.get("ok") for stage in stages.values())
-    duration_total = round(time.perf_counter() - started, 3)
-    finished_at = datetime.now(timezone.utc).isoformat()
-    result = {
-        "ok": ok,
-        "synced_at": synced_at,
-        "timezone": "Asia/Shanghai",
-        "schedule": "08:30 BJT",
-        "duration_total_seconds": duration_total,
-        "stages": stages,
-    }
-    safe_record_sync_run(
-        "daily_all",
-        "success" if ok else "error",
-        started_at,
-        finished_at,
-        duration_total,
-        records_count=sync_run_records_count(result),
-        error="" if ok else json.dumps({k: v.get("error") for k, v in stages.items() if not v.get("ok")}, ensure_ascii=False)[:1000],
-        meta=compact_sync_run_meta(result),
+    return sync_daily_all_records_impl(
+        days,
+        sync_all_reelfarm_records=sync_all_reelfarm_records,
+        sync_all_museon_clone_records=sync_all_museon_clone_records,
+        sync_all_growth_snapshots=sync_all_growth_snapshots,
+        safe_record_sync_run=safe_record_sync_run,
+        sync_run_records_count=sync_run_records_count,
+        compact_sync_run_meta=compact_sync_run_meta,
     )
-    return result
-
 
 def sync_reelfarm_country(prefix, product_id="", country_id="", product_code="", country_code=""):
     clean_prefix = (prefix or "").strip()
@@ -1503,22 +1371,6 @@ def database_snapshot():
         relational_table_counts_fn=relational_table_counts,
         load_data_fn=load_data,
     )
-
-
-DATA_QUERY_RESOURCES = {
-    "summary",
-    "product_kpis",
-    "product_rollups",
-    "country_cards",
-    "countries",
-    "accounts",
-    "account_posts",
-    "posts",
-    "materials",
-    "daily_metrics",
-    "top_posts",
-}
-DATA_QUERY_METRICS = {"view_count", "like_count", "comment_count", "share_count", "bookmark_count"}
 
 
 def query_value(query, key, default=""):
@@ -2472,135 +2324,34 @@ def sync_product_growth_snapshots(product_code, days=30):
 
 
 def growth_dashboard_payload(query):
-    product_code = query_value(query, "product_code").upper()
-    if not product_code:
-        raise ValueError("product_code is required.")
-    try:
-        days = int(query_value(query, "days", 30))
-    except ValueError:
-        days = 30
-    days = max(1, min(180, days))
-    tz = report_timezone()
-    current_local = datetime.now(timezone.utc).astimezone(tz)
-    today_start = datetime(current_local.year, current_local.month, current_local.day, tzinfo=tz)
-    date_to = (today_start - timedelta(days=1)).date().isoformat()
-    date_from = (today_start - timedelta(days=days)).date().isoformat()
-    placeholder = db_placeholder()
-    with connect_db() as conn:
-        init_relational_schema(conn)
-        rows = conn.execute(
-            f"""
-            SELECT *
-            FROM product_daily_growth_snapshots
-            WHERE product_code = {placeholder}
-              AND report_date >= {placeholder}
-              AND report_date <= {placeholder}
-            ORDER BY report_date
-            """,
-            (product_code, date_from, date_to),
-        ).fetchall()
-    data = [row_dict(row) for row in rows]
-    latest = data[-1] if data else {}
-    return {
-        "ok": True,
-        "product_code": product_code,
-        "report_timezone": REPORT_TIMEZONE_NAME,
-        "source_timezone": MIXPANEL_TIMEZONE_NAME,
-        "date_from": date_from,
-        "date_to": date_to,
-        "latest": latest,
-        "series": data,
-        "totals": {
-            "total_views": sum(int(row.get("total_views") or 0) for row in data),
-            "reelfarm_views": sum(int(row.get("reelfarm_views") or 0) for row in data),
-            "clone_views": sum(int(row.get("clone_views") or 0) for row in data),
-            "download_count": sum(int(row.get("download_count") or 0) for row in data if row.get("download_count") is not None),
-            "onboarding_unique": sum(int(row.get("onboarding_unique") or 0) for row in data if row.get("onboarding_unique") is not None),
-        },
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-    }
-
+    return growth_dashboard_payload_impl(
+        query,
+        query_value=query_value,
+        report_timezone=report_timezone,
+        db_placeholder=db_placeholder,
+        connect_db=connect_db,
+        init_relational_schema=init_relational_schema,
+        row_dict=row_dict,
+        report_timezone_name=REPORT_TIMEZONE_NAME,
+        mixpanel_timezone_name=MIXPANEL_TIMEZONE_NAME,
+    )
 
 def business_material_report_payload(query):
-    product_code = query_value(query, "product_code").upper()
-    if not product_code:
-        raise ValueError("product_code is required.")
-    mode = query_value(query, "mode", "growth_delta").strip().lower()
-    date_from = query_value(query, "date_from")
-    date_to = query_value(query, "date_to")
-    days = query_value(query, "days", 7)
-    windows, onboarding_windows = business_report_windows_with_onboarding(date_from, date_to, days)
-    if not windows:
-        return {
-            "ok": True,
-            "product_code": product_code,
-            "report_timezone": REPORT_TIMEZONE_NAME,
-            "date_from": "",
-            "date_to": "",
-            "rows": [],
-            "totals": {},
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-        }
-    overall_utc_start = windows[0]["utc_start"]
-    overall_utc_end = windows[-1]["utc_end"]
-    if mode in {"published", "published_materials", "legacy"}:
-        material_daily = product_business_material_daily_stats(product_code, overall_utc_start, overall_utc_end)
-        material_mode = "published_materials"
-        reelfarm_expected_count = product_active_reelfarm_expected_automation_count(product_code)
-    else:
-        material_daily = product_business_growth_daily_stats(product_code, windows)
-        material_mode = "growth_delta"
-        reelfarm_expected_count = None
-    mixpanel_config = product_mixpanel_config(product_code)
-    onboarding_event = product_mixpanel_event_name(product_code, "ONBOARDING")
-    download_daily = {}
-    for report_date, onboarding_window in onboarding_windows.items():
-        onboarding_unique = mixpanel_event_user_unique_query_count(
-            mixpanel_config,
-            onboarding_event,
-            onboarding_window["utc_start"],
-            onboarding_window["utc_end"],
-        )
-        if onboarding_unique is not None:
-            download_daily[report_date] = onboarding_unique
-    rows = [
-        normalize_business_report_row(
-            window,
-            onboarding_windows[window["report_date"]],
-            material_daily.get(window["report_date"], {}),
-            download_daily.get(window["report_date"]),
-            material_mode,
-            reelfarm_expected_count,
-        )
-        for window in windows
-    ]
-    return {
-        "ok": True,
-        "product_code": product_code,
-        "mode": material_mode,
-        "report_timezone": REPORT_TIMEZONE_NAME,
-        "source_timezone": MIXPANEL_TIMEZONE_NAME,
-        "mixpanel": {
-            "event": onboarding_event,
-            "method": "raw_export_exact_unique",
-            "metric": "user_uniques",
-            "region": mixpanel_config.get("region"),
-            "scope": mixpanel_config.get("scope"),
-            "has_project_id": bool(mixpanel_config.get("project_id")),
-            "has_username": bool(mixpanel_config.get("username")),
-            "has_secret": bool(mixpanel_config.get("secret")),
-            "missing": [
-                key for key in ("project_id", "username", "secret")
-                if not mixpanel_config.get(key)
-            ],
-        },
-        "date_from": rows[0]["report_date"],
-        "date_to": rows[-1]["report_date"],
-        "rows": rows,
-        "totals": summarize_business_report_rows(rows),
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-    }
-
+    return business_material_report_payload_impl(
+        query,
+        query_value=query_value,
+        business_report_windows_with_onboarding=business_report_windows_with_onboarding,
+        product_business_material_daily_stats=product_business_material_daily_stats,
+        product_business_growth_daily_stats=product_business_growth_daily_stats,
+        product_active_reelfarm_expected_automation_count=product_active_reelfarm_expected_automation_count,
+        product_mixpanel_config=product_mixpanel_config,
+        product_mixpanel_event_name=product_mixpanel_event_name,
+        mixpanel_event_user_unique_query_count=mixpanel_event_user_unique_query_count,
+        normalize_business_report_row=normalize_business_report_row,
+        summarize_business_report_rows=summarize_business_report_rows,
+        report_timezone_name=REPORT_TIMEZONE_NAME,
+        mixpanel_timezone_name=MIXPANEL_TIMEZONE_NAME,
+    )
 
 def clean_tag(value):
     return clean_tag_impl(value)
@@ -3285,172 +3036,23 @@ def query_museon_clone_account_posts(query):
 
 
 def query_reelfarm_accounts(query):
-    channel_code = data_source_channel_code(query_value(query, "source"))
-    date_from = query_value(query, "date_from")
-    date_to = query_value(query, "date_to")
-    if not date_from and not date_to:
-        date_from, date_to = query_days_window(query)
-    metric_date_column = "mat.created_at" if channel_code == "TIKTOK" else "post.published_at"
-    placeholder = db_placeholder()
-
-    account_where = ["ch.code = " + placeholder]
-    account_params = [channel_code]
-    product_code = query_value(query, "product_code").upper()
-    market_code = (query_value(query, "country_code") or query_value(query, "market_code")).upper()
-    account_id = query_value(query, "account_id")
-    automation_id = query_value(query, "automation_id")
-    if product_code:
-        account_where.append("p.code = " + placeholder)
-        account_params.append(product_code)
-    if market_code:
-        account_where.append("m.code = " + placeholder)
-        account_params.append(market_code)
-    if account_id:
-        account_where.append(f"(acc.id = {placeholder} OR acc.reelfarm_account_id = {placeholder} OR acc.username = {placeholder})")
-        account_params.extend([account_id, account_id, account_id.lstrip("@")])
-    if automation_id:
-        account_where.append(f"(a.id = {placeholder} OR a.reelfarm_automation_id = {placeholder})")
-        account_params.extend([automation_id, automation_id])
-    if channel_code == "TIKTOK":
-        account_where.append(reelfarm_dashboard_automation_condition("a"))
-    account_where.append("acc.id IS NOT NULL")
-    account_where_sql = " AND ".join(account_where)
-
-    metric_where_sql, metric_params = common_where(query, include_post_dates=False)
-    metric_where = [metric_where_sql, "acc.id IS NOT NULL", "post.id IS NOT NULL"]
-    if channel_code == "TIKTOK":
-        metric_where.append(reelfarm_expected_automation_condition("a"))
-    if date_from:
-        metric_where.append(f"{metric_date_column} >= {placeholder}")
-        metric_params.append(post_datetime_bound(date_from))
-    if date_to:
-        metric_where.append(f"{metric_date_column} <= {placeholder}")
-        metric_params.append(post_datetime_bound(date_to, end=True))
-    metric_where_sql = " AND ".join(metric_where)
-
-    automation_names_sql = (
-        "STRING_AGG(DISTINCT a.name, ' | ')"
-        if using_postgres()
-        else "GROUP_CONCAT(DISTINCT a.name)"
+    return query_reelfarm_accounts_impl(
+        query,
+        data_source_channel_code=data_source_channel_code,
+        query_value=query_value,
+        query_days_window=query_days_window,
+        post_datetime_bound=post_datetime_bound,
+        db_placeholder=db_placeholder,
+        common_where=common_where,
+        reelfarm_dashboard_automation_condition=reelfarm_dashboard_automation_condition,
+        reelfarm_expected_automation_condition=reelfarm_expected_automation_condition,
+        using_postgres=using_postgres,
+        connect_db=connect_db,
+        init_relational_schema=init_relational_schema,
+        relational_base_from=relational_base_from,
+        row_dict=row_dict,
+        normalize_reelfarm_account_row=normalize_reelfarm_account_row,
     )
-    expected_account_sql = (
-        f"CASE WHEN SUM(CASE WHEN {reelfarm_expected_automation_condition('a')} THEN 1 ELSE 0 END) > 0 THEN 1 ELSE 0 END"
-        if channel_code == "TIKTOK"
-        else "1"
-    )
-    with connect_db() as conn:
-        init_relational_schema(conn)
-        rows = conn.execute(
-            f"""
-            WITH account_base AS (
-                SELECT
-                    p.id AS product_id,
-                    p.code AS product_code,
-                    p.name AS product_name,
-                    m.id AS country_id,
-                    m.id AS market_id,
-                    m.code AS country_code,
-                    m.code AS market_code,
-                    m.name AS country_name,
-                    pmc.id AS product_market_channel_id,
-                    acc.id AS account_id,
-                    acc.reelfarm_account_id,
-                    acc.username,
-                    acc.display_name,
-                    acc.avatar_url,
-                    CASE
-                        WHEN SUM(CASE WHEN LOWER(COALESCE(a.status, '')) = 'active' THEN 1 ELSE 0 END) > 0 THEN 'active'
-                        ELSE COALESCE(MAX(NULLIF(a.status, '')), '')
-                    END AS status,
-                    COUNT(DISTINCT a.id) AS automation_count,
-                    MAX(a.name) AS automation_name,
-                    {automation_names_sql} AS automation_names,
-                    MAX(a.post_mode) AS post_mode,
-                    CASE
-                        WHEN SUM(CASE WHEN a.publish_method = 'manual' THEN 1 ELSE 0 END) > 0 THEN 'manual'
-                        WHEN SUM(CASE WHEN a.publish_method = 'rpa' THEN 1 ELSE 0 END) > 0 THEN 'rpa'
-                        ELSE 'api'
-                    END AS publish_method,
-                    {expected_account_sql} AS expected_account_count,
-                    MAX(a.synced_at) AS base_synced_at
-                FROM products p
-                JOIN product_markets pm ON pm.product_id = p.id
-                JOIN markets m ON m.id = pm.market_id
-                JOIN product_market_channels pmc ON pmc.product_market_id = pm.id
-                JOIN channels ch ON ch.id = pmc.channel_id
-                LEFT JOIN automations a ON a.product_market_channel_id = pmc.id
-                LEFT JOIN accounts acc ON acc.id = a.account_id
-                WHERE {account_where_sql}
-                GROUP BY
-                    p.id,
-                    p.code,
-                    p.name,
-                    m.id,
-                    m.code,
-                    m.name,
-                    pmc.id,
-                    acc.id,
-                    acc.reelfarm_account_id,
-                    acc.username,
-                    acc.display_name,
-                    acc.avatar_url
-            ),
-            metrics AS (
-                SELECT
-                    acc.id AS account_id,
-                    COUNT(DISTINCT mat.id) AS material_count,
-                    COUNT(DISTINCT post.id) AS post_count,
-                    CASE WHEN COUNT(DISTINCT post.id) > 0 THEN 1 ELSE 0 END AS posted_account_count,
-                    COALESCE(SUM(post.view_count), 0) AS total_views,
-                    COALESCE(SUM(post.like_count), 0) AS total_likes,
-                    COALESCE(SUM(post.comment_count), 0) AS total_comments,
-                    COALESCE(SUM(post.share_count), 0) AS total_shares,
-                    COALESCE(SUM(post.bookmark_count), 0) AS total_bookmarks,
-                    MAX(post.published_at) AS latest_post_at,
-                    MAX(COALESCE(post.synced_at, mat.synced_at, a.synced_at)) AS metric_synced_at
-                {relational_base_from()}
-                WHERE {metric_where_sql}
-                GROUP BY acc.id
-            )
-            SELECT
-                account_base.product_id,
-                account_base.product_code,
-                account_base.product_name,
-                account_base.country_id,
-                account_base.market_id,
-                account_base.country_code,
-                account_base.market_code,
-                account_base.country_name,
-                account_base.product_market_channel_id,
-                account_base.account_id,
-                account_base.reelfarm_account_id,
-                account_base.username,
-                account_base.display_name,
-                account_base.avatar_url,
-                account_base.status,
-                account_base.automation_count,
-                account_base.automation_name,
-                account_base.automation_names,
-                account_base.post_mode,
-                account_base.publish_method,
-                COALESCE(metrics.material_count, 0) AS material_count,
-                COALESCE(metrics.post_count, 0) AS post_count,
-                COALESCE(metrics.posted_account_count, 0) AS posted_account_count,
-                account_base.expected_account_count,
-                COALESCE(metrics.total_views, 0) AS total_views,
-                COALESCE(metrics.total_likes, 0) AS total_likes,
-                COALESCE(metrics.total_comments, 0) AS total_comments,
-                COALESCE(metrics.total_shares, 0) AS total_shares,
-                COALESCE(metrics.total_bookmarks, 0) AS total_bookmarks,
-                COALESCE(metrics.latest_post_at, '') AS latest_post_at,
-                COALESCE(metrics.metric_synced_at, account_base.base_synced_at, '') AS last_synced_at
-            FROM account_base
-            LEFT JOIN metrics ON metrics.account_id = account_base.account_id
-            ORDER BY total_views DESC, post_count DESC
-            """,
-            tuple(account_params + metric_params),
-        ).fetchall()
-    return [normalize_reelfarm_account_row(row_dict(row)) for row in rows]
 
 
 def query_accounts(query):
@@ -3458,173 +3060,41 @@ def query_accounts(query):
 
 
 def beijing_day_window(now=None):
-    beijing = timezone(timedelta(hours=8))
-    current = now or datetime.now(timezone.utc)
-    local = current.astimezone(beijing)
-    start_local = datetime(local.year, local.month, local.day, tzinfo=beijing)
-    end_local = start_local + timedelta(days=1)
-    return {
-        "beijing_date": start_local.date().isoformat(),
-        "utc_start": start_local.astimezone(timezone.utc).isoformat(),
-        "utc_end": end_local.astimezone(timezone.utc).isoformat(),
-    }
+    return beijing_day_window_impl(now)
 
 
 def product_country_lookup():
-    return product_country_lookup_impl(load_data())
+    return product_country_lookup_service(
+        load_data=load_data,
+        product_country_lookup_impl=product_country_lookup_impl,
+    )
 
 
 def publish_check_accounts(product_code, country_code, utc_start, utc_end):
-    placeholder = db_placeholder()
-    with connect_db() as conn:
-        init_relational_schema(conn)
-        rows = conn.execute(
-            f"""
-            SELECT
-                acc.id AS account_id,
-                acc.reelfarm_account_id,
-                acc.username,
-                acc.display_name,
-                acc.avatar_url,
-                acc.status AS account_status,
-                a.id AS automation_id,
-                a.reelfarm_automation_id,
-                a.name AS automation_name,
-                a.status AS automation_status,
-                COUNT(DISTINCT CASE
-                    WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder}
-                    THEN post.id
-                END) AS published_count,
-                MAX(CASE
-                    WHEN post.published_at >= {placeholder} AND post.published_at < {placeholder}
-                    THEN post.published_at
-                END) AS today_latest_post_at,
-                MAX(post.published_at) AS latest_post_at
-            FROM products p
-            JOIN product_markets pm ON pm.product_id = p.id
-            JOIN markets m ON m.id = pm.market_id
-            JOIN product_market_channels pmc ON pmc.product_market_id = pm.id
-            JOIN channels ch ON ch.id = pmc.channel_id
-            JOIN automations a ON a.product_market_channel_id = pmc.id
-            LEFT JOIN accounts acc ON acc.id = a.account_id
-            LEFT JOIN materials mat ON mat.automation_id = a.id
-            LEFT JOIN posts post ON post.material_id = mat.id
-            WHERE ch.code = {placeholder}
-              AND p.code = {placeholder}
-              AND m.code = {placeholder}
-              AND {reelfarm_expected_automation_condition("a")}
-              AND acc.id IS NOT NULL
-            GROUP BY
-                acc.id,
-                acc.reelfarm_account_id,
-                acc.username,
-                acc.display_name,
-                acc.avatar_url,
-                acc.status,
-                a.id,
-                a.reelfarm_automation_id,
-                a.name,
-                a.status
-            ORDER BY acc.username, a.name
-            """,
-            (utc_start, utc_end, utc_start, utc_end, "TIKTOK", product_code, country_code),
-        ).fetchall()
-    return [row_dict(row) for row in rows]
+    return publish_check_accounts_impl(
+        product_code,
+        country_code,
+        utc_start,
+        utc_end,
+        db_placeholder=db_placeholder,
+        connect_db=connect_db,
+        init_relational_schema=init_relational_schema,
+        reelfarm_expected_automation_condition=reelfarm_expected_automation_condition,
+        row_dict=row_dict,
+    )
 
 
 def run_publish_check():
-    state = load_publish_check_state()
-    window = beijing_day_window()
-    lookup = product_country_lookup()
-    groups = []
-    totals = {
-        "assignments": 0,
-        "accounts": 0,
-        "published_accounts": 0,
-        "missing_accounts": 0,
-    }
-
-    for assignment in state.get("assignments", []):
-        product_id = str(assignment.get("product_id") or "")
-        country_id = str(assignment.get("country_id") or "")
-        context = lookup.get((product_id, country_id))
-        if not context:
-            continue
-
-        product_code = context["product"]["code"]
-        country_code = context["country"]["code"]
-        accounts = publish_check_accounts(product_code, country_code, window["utc_start"], window["utc_end"])
-        missing = [account for account in accounts if int(account.get("published_count") or 0) <= 0]
-        published_count = len(accounts) - len(missing)
-        group = {
-            "assignment_id": assignment.get("id"),
-            "person_id": assignment.get("person_id"),
-            "person_name": assignment.get("person_name") or "未命名负责人",
-            "product": context["product"],
-            "country": context["country"],
-            "account_count": len(accounts),
-            "published_account_count": published_count,
-            "missing_account_count": len(missing),
-            "missing_accounts": missing,
-        }
-        groups.append(group)
-        totals["assignments"] += 1
-        totals["accounts"] += len(accounts)
-        totals["published_accounts"] += published_count
-        totals["missing_accounts"] += len(missing)
-
-    result = {
-        "ok": True,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "beijing_date": window["beijing_date"],
-        "utc_window": {"start": window["utc_start"], "end": window["utc_end"]},
-        "totals": totals,
-        "groups": groups,
-    }
-    state["last_result"] = result
-    save_publish_check_state(state)
-    return result
+    return run_publish_check_impl(
+        load_publish_check_state=load_publish_check_state,
+        save_publish_check_state=save_publish_check_state,
+        product_country_lookup=product_country_lookup,
+        publish_check_accounts=publish_check_accounts,
+    )
 
 
 def publish_check_reminder_text(result):
-    totals = result.get("totals") if isinstance(result, dict) else {}
-    groups = result.get("groups") if isinstance(result, dict) else []
-    missing_total = int((totals or {}).get("missing_accounts") or 0)
-    beijing_date = result.get("beijing_date") or "未生成日期"
-    lines = [
-        f"Deca Growth 发布检查提醒",
-        f"北京时间日期：{beijing_date}",
-        f"未发布账号：{missing_total}",
-        "",
-    ]
-    if missing_total <= 0:
-        lines.append("全部负责范围今天都有发布。")
-        return "\n".join(lines)
-
-    shown = 0
-    for group in groups if isinstance(groups, list) else []:
-        if not isinstance(group, dict):
-            continue
-        missing_count = int(group.get("missing_account_count") or 0)
-        if missing_count <= 0:
-            continue
-        product = group.get("product") if isinstance(group.get("product"), dict) else {}
-        country = group.get("country") if isinstance(group.get("country"), dict) else {}
-        lines.append(f"{group.get('person_name') or '未命名负责人'}｜{product.get('name') or '-'} · {country.get('name') or '-'}：{missing_count} 个账号未发布")
-        for account in (group.get("missing_accounts") or [])[:8]:
-            if not isinstance(account, dict):
-                continue
-            username = account.get("username") or account.get("display_name") or account.get("reelfarm_account_id") or account.get("account_id") or "unknown"
-            automation = account.get("automation_name") or account.get("reelfarm_automation_id") or "无 automation 名称"
-            lines.append(f"  - @{str(username).lstrip('@')}｜{automation}")
-            shown += 1
-        if missing_count > 8:
-            lines.append(f"  - 还有 {missing_count - 8} 个账号未展示")
-        lines.append("")
-        if shown >= 40:
-            lines.append("更多未发布账号请打开中台查看。")
-            break
-    return "\n".join(lines).strip()
+    return publish_check_reminder_text_impl(result)
 
 
 def send_feishu_message(message):
@@ -3804,20 +3274,10 @@ def send_daily_feishu_report(report_date="", include_ai=False, model="", require
 
 
 def send_publish_check_reminder():
-    state = load_publish_check_state()
-    result = state.get("last_result") if isinstance(state, dict) else None
-    if not isinstance(result, dict):
-        return {"ok": False, "error": "No publish check result yet. Run check first."}
-    message = publish_check_reminder_text(result)
-    sent = send_feishu_message(message)
-    if not sent.get("ok"):
-        return sent
-    return {
-        "ok": True,
-        "sent_at": datetime.now(timezone.utc).isoformat(),
-        "missing_accounts": (result.get("totals") or {}).get("missing_accounts", 0),
-        "message_preview": message[:500],
-    }
+    return send_publish_check_reminder_impl(
+        load_publish_check_state=load_publish_check_state,
+        send_feishu_message=send_feishu_message,
+    )
 
 
 def detailed_select():
@@ -3829,65 +3289,39 @@ def detailed_row(row):
 
 
 def query_posts(query, top_metric=""):
-    max_limit = 100 if top_metric else 500
-    limit, offset = query_limit_offset(query, max_limit=max_limit)
-    where_sql, params = common_where(query)
-    order_sql = f"post.{top_metric} DESC, post.published_at DESC" if top_metric else "post.published_at DESC"
-    placeholder = db_placeholder()
-    with connect_db() as conn:
-        init_relational_schema(conn)
-        total_row = conn.execute(
-            f"""
-            SELECT COUNT(DISTINCT post.id) AS total
-            {relational_base_from()}
-            WHERE {where_sql} AND post.id IS NOT NULL
-            """,
-            tuple(params),
-        ).fetchone()
-        rows = conn.execute(
-            f"""
-            SELECT {detailed_select()}
-            {relational_base_from()}
-            WHERE {where_sql} AND post.id IS NOT NULL
-            ORDER BY {order_sql}
-            LIMIT {placeholder} OFFSET {placeholder}
-            """,
-            tuple(params + [limit, offset]),
-        ).fetchall()
-        row_data = [row_dict(row) for row in rows]
-        if (
-            query_value(query, "resource").lower() == "account_posts"
-            and data_source_channel_code(query_value(query, "source")) == "MUSEON_CLONE"
-        ):
-            row_data = hydrate_museon_images_for_rows(conn, row_data)
-    return [detailed_row(row) for row in row_data], pagination_payload(limit, offset, row_data, row_dict(total_row).get("total", 0))
+    return query_posts_impl(
+        query,
+        top_metric=top_metric,
+        query_limit_offset=query_limit_offset,
+        common_where=common_where,
+        db_placeholder=db_placeholder,
+        connect_db=connect_db,
+        init_relational_schema=init_relational_schema,
+        relational_base_from=relational_base_from,
+        detailed_select=detailed_select,
+        row_dict=row_dict,
+        query_value=query_value,
+        data_source_channel_code=data_source_channel_code,
+        hydrate_museon_images_for_rows=hydrate_museon_images_for_rows,
+        detailed_row=detailed_row,
+        pagination_payload=pagination_payload,
+    )
 
 
 def query_materials(query):
-    limit, offset = query_limit_offset(query)
-    where_sql, params = common_where(query)
-    placeholder = db_placeholder()
-    with connect_db() as conn:
-        init_relational_schema(conn)
-        total_row = conn.execute(
-            f"""
-            SELECT COUNT(DISTINCT mat.id) AS total
-            {relational_base_from()}
-            WHERE {where_sql} AND mat.id IS NOT NULL
-            """,
-            tuple(params),
-        ).fetchone()
-        rows = conn.execute(
-            f"""
-            SELECT {detailed_select()}
-            {relational_base_from()}
-            WHERE {where_sql} AND mat.id IS NOT NULL
-            ORDER BY mat.created_at DESC, post.published_at DESC
-            LIMIT {placeholder} OFFSET {placeholder}
-            """,
-            tuple(params + [limit, offset]),
-        ).fetchall()
-    return [detailed_row(row) for row in rows], pagination_payload(limit, offset, rows, row_dict(total_row).get("total", 0))
+    return query_materials_impl(
+        query,
+        query_limit_offset=query_limit_offset,
+        common_where=common_where,
+        db_placeholder=db_placeholder,
+        connect_db=connect_db,
+        init_relational_schema=init_relational_schema,
+        relational_base_from=relational_base_from,
+        detailed_select=detailed_select,
+        detailed_row=detailed_row,
+        pagination_payload=pagination_payload,
+        row_dict=row_dict,
+    )
 
 
 def query_daily_metrics(query):
@@ -3953,51 +3387,21 @@ def query_daily_metrics(query):
 
 
 def data_query_payload(query):
-    resource = query_value(query, "resource").lower()
-    if resource not in DATA_QUERY_RESOURCES:
-        raise ValueError("Unsupported or missing resource.")
-
-    filters = compact_filters(query_filters(query))
-    response = {
-        "ok": True,
-        "resource": resource,
-        "filters": filters,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-    }
-
-    if resource == "summary":
-        response["data"] = query_summary(query)
-    elif resource == "product_kpis":
-        response["data"] = query_product_kpis(query)
-    elif resource == "product_rollups":
-        response["data"] = query_product_rollups(query)
-    elif resource == "country_cards":
-        response["data"] = query_country_cards(query)
-    elif resource == "countries":
-        response["data"] = query_countries(query)
-    elif resource == "accounts":
-        response["data"] = query_accounts(query)
-    elif resource in {"posts", "account_posts"}:
-        rows, pagination = query_posts(query)
-        response["data"] = rows[: pagination["limit"]]
-        response["pagination"] = pagination
-    elif resource == "materials":
-        rows, pagination = query_materials(query)
-        response["data"] = rows[: pagination["limit"]]
-        response["pagination"] = pagination
-    elif resource == "daily_metrics":
-        response["data"] = query_daily_metrics(query)
-    elif resource == "top_posts":
-        metric = query_value(query, "metric", "view_count")
-        if metric not in DATA_QUERY_METRICS:
-            raise ValueError("Unsupported metric.")
-        filters["metric"] = metric
-        rows, pagination = query_posts(query, top_metric=metric)
-        response["filters"] = filters
-        response["data"] = rows[: pagination["limit"]]
-        response["pagination"] = pagination
-
-    return response
+    return data_query_payload_impl(
+        query,
+        query_value=query_value,
+        compact_filters=compact_filters,
+        query_filters=query_filters,
+        query_summary=query_summary,
+        query_product_kpis=query_product_kpis,
+        query_product_rollups=query_product_rollups,
+        query_country_cards=query_country_cards,
+        query_countries=query_countries,
+        query_accounts=query_accounts,
+        query_posts=query_posts,
+        query_materials=query_materials,
+        query_daily_metrics=query_daily_metrics,
+    )
 
 
 def ai_materials_payload(query):
@@ -4139,641 +3543,30 @@ def find_open_port(start_port=8765):
     raise RuntimeError("No available local port found.")
 
 
-class ManagementTableHandler(BaseHTTPRequestHandler):
-    PUBLIC_API_PATHS = {
-        "/api/health",
-        "/api/auth/login",
-        "/api/auth/logout",
-        "/api/auth/status",
-    }
-    CRON_API_PATHS = {
-        "/api/reelfarm/sync-all",
-        "/api/sync/daily-all",
-        "/api/reports/daily-feishu",
-    }
-    EXTERNAL_API_PATHS = {
-        "/api/ai/materials",
-        "/api/data/query",
-    }
-    GET_ROUTE_METHODS = {
-        "/api/health": "handle_health_get",
-        "/api/auth/status": "handle_auth_status_get",
-        "/api/data": "handle_data_get",
-        "/api/database": "handle_database_get",
-        "/api/database/relational": "handle_database_relational_get",
-        "/api/api-keys": "handle_api_keys_get",
-        "/api/account-tags": "handle_account_tags_get",
-        "/api/account-issues": "handle_account_issues_get",
-        "/api/product-tags": "handle_product_tags_get",
-        "/api/ai/materials": "handle_ai_materials_get",
-        "/api/data/query": "handle_data_query_get",
-        "/api/growth": "handle_growth_get",
-        "/api/business-material-report": "handle_business_material_report_get",
-        "/api/reports/daily-feishu": "handle_daily_feishu_get",
-        "/api/reports/daily-feishu-analysis": "handle_daily_feishu_analysis_get",
-        "/api/reports/llm-models": "handle_llm_models_get",
-        "/api/reports/daily-feishu-preview": "handle_daily_feishu_preview_get",
-        "/api/reelfarm/config": "handle_reelfarm_config_get",
-        "/api/reelfarm/sync-all": "handle_reelfarm_sync_all_get",
-        "/api/reelfarm/matches": "handle_reelfarm_matches_get",
-        "/api/reelfarm/stored-country": "handle_reelfarm_stored_country_get",
-    }
-    POST_ROUTE_METHODS = {
-        "/api/data": "handle_data_save",
-        "/api/reset": "handle_data_reset",
-        "/api/reelfarm/config": "handle_reelfarm_config_save",
-        "/api/api-keys": "handle_api_key_create",
-        "/api/api-keys/revoke": "handle_api_key_revoke",
-        "/api/account-tags": "handle_account_tag_add",
-        "/api/account-tags/delete": "handle_account_tag_delete",
-        "/api/account-issues": "handle_account_issue_add",
-        "/api/account-issues/delete": "handle_account_issue_delete",
-        "/api/product-tags": "handle_product_tag_create",
-        "/api/product-tags/delete": "handle_product_tag_delete",
-        "/api/reelfarm/sync-prefix": "handle_reelfarm_sync_prefix",
-        "/api/reelfarm/sync-country": "handle_reelfarm_sync_country",
-        "/api/museon/sync-country": "handle_museon_sync_country",
-        "/api/growth/sync-product": "handle_growth_sync_product",
-        "/api/sync/daily-all": "handle_daily_sync_all",
-        "/api/reports/daily-feishu": "handle_daily_feishu_send",
-        "/api/reports/daily-feishu-analysis": "handle_daily_feishu_analysis",
-        "/api/reelfarm/sync-all": "handle_reelfarm_sync_all",
-    }
 
-    def log_message(self, format, *args):
-        print("[%s] %s" % (self.log_date_time_string(), format % args))
+def run_fastapi_server():
+    # When server.py is executed as a script, expose this module under its import
+    # name so api.index imports the same runtime state instead of loading a
+    # second copy of server.py as "server".
+    sys.modules.setdefault("server", sys.modules[__name__])
 
-    def send_json(self, status, payload, headers=None):
-        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        for name, value in (headers or {}).items():
-            self.send_header(name, value)
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+    try:
+        import uvicorn
+    except ImportError as error:
+        raise RuntimeError("uvicorn is required to run the local API server. Run: pip install -r requirements.txt") from error
 
-    def send_error_json(self, status, error, include_ok=False):
-        payload = {"ok": False, "error": str(error)} if include_ok else {"error": str(error)}
-        self.send_json(status, payload)
-
-    def send_result_json(self, result, status_from_ok=True):
-        status = 200 if not status_from_ok or result.get("ok") else 400
-        self.send_json(status, result)
-
-    def send_query_payload_json(self, payload_fn, catch_runtime=False):
-        try:
-            self.send_json(200, payload_fn(self.query_params()))
-        except ValueError as error:
-            self.send_error_json(400, error, include_ok=True)
-        except RuntimeError as error:
-            if not catch_runtime:
-                raise
-            self.send_error_json(502, error, include_ok=True)
-
-    def send_static_file(self, request_path):
-        requested = (BASE_DIR / unquote(request_path.lstrip("/"))).resolve()
-        if BASE_DIR not in requested.parents and requested != BASE_DIR:
-            self.send_error_json(403, "Forbidden")
-            return
-
-        if not requested.is_file():
-            self.send_error_json(404, "Not found")
-            return
-
-        content_type = mimetypes.guess_type(requested.name)[0] or "application/octet-stream"
-        body = requested.read_bytes()
-        self.send_response(200)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def handle_auth_login(self):
-        payload, ok = self.read_json_payload()
-        if not ok:
-            return
-
-        username = self.payload_text(payload, "username")
-        password = self.payload_text(payload, "password", strip=False)
-        if username == ADMIN_USERNAME and hmac.compare_digest(password_hash(password), ADMIN_PASSWORD_HASH):
-            token = make_auth_token(username)
-            self.send_json(
-                200,
-                {"ok": True, "authenticated": True},
-                {"Set-Cookie": cookie_header(SESSION_COOKIE, token, SESSION_TTL_SECONDS)},
-            )
-            return
-
-        self.send_error_json(401, "账号或密码不正确")
-
-    def handle_auth_logout(self):
-        self.send_json(
-            200,
-            {"ok": True, "authenticated": False},
-            {"Set-Cookie": cookie_header(SESSION_COOKIE, "", 0)},
-        )
-
-    def handle_data_save(self):
-        payload, ok = self.read_json_payload()
-        if not ok:
-            return
-
-        data = self.payload_value(payload, "data")
-        if not isinstance(data, list):
-            self.send_error_json(400, "Expected { data: [...] }")
-            return
-
-        save_data(data)
-        self.send_json(200, {"ok": True, "data": enrich_data_with_relational_rollups(data)})
-
-    def handle_data_reset(self):
-        data = default_data()
-        save_data(data)
-        self.send_json(200, {"ok": True, "data": enrich_data_with_relational_rollups(data)})
-
-    def handle_reelfarm_config_save(self):
-        payload, ok = self.read_json_payload()
-        if not ok:
-            return
-
-        api_key = self.payload_text(payload, "api_key")
-        if api_key:
-            save_app_value(REELFARM_API_KEY, api_key)
-        else:
-            delete_app_value(REELFARM_API_KEY)
-
-        self.send_json(
-            200,
-            {
-                "ok": True,
-                "configured": bool(api_key),
-                "base_url": REELFARM_BASE_URL,
-            },
-        )
-
-    def handle_api_key_create(self):
-        payload, ok = self.read_json_payload({})
-        if not ok:
-            return
-
-        name = self.payload_text(payload, "name")
-        created = create_external_api_key(name, ["materials:read"])
-        self.send_json(200, {"ok": True, **created})
-
-    def handle_api_key_revoke(self):
-        payload, ok = self.read_json_payload({})
-        if not ok:
-            return
-
-        key_id = self.payload_text(payload, "id")
-        try:
-            self.send_json(200, {"ok": True, "record": revoke_external_api_key(key_id)})
-        except ValueError as error:
-            self.send_error_json(404, error)
-
-    def handle_account_tags_get(self):
-        query = self.query_params()
-        account_ids = [item.strip() for item in self.query_text(query, "account_ids").split(",") if item.strip()]
-        self.send_json(200, account_tags_payload(account_ids))
-
-    def handle_account_tag_add(self):
-        payload, ok = self.read_json_payload({})
-        if not ok:
-            return
-        try:
-            self.send_json(200, add_account_tag(self.payload_text(payload, "account_id"), self.payload_text(payload, "tag")))
-        except ValueError as error:
-            self.send_error_json(400, error)
-
-    def handle_account_tag_delete(self):
-        payload, ok = self.read_json_payload({})
-        if not ok:
-            return
-        try:
-            self.send_json(200, delete_account_tag(self.payload_text(payload, "account_id"), self.payload_text(payload, "tag")))
-        except ValueError as error:
-            self.send_error_json(400, error)
-
-    def handle_account_issues_get(self):
-        query = self.query_params()
-        account_ids = [item.strip() for item in self.query_text(query, "account_ids").split(",") if item.strip()]
-        self.send_json(200, account_issues_payload(account_ids))
-
-    def handle_account_issue_add(self):
-        payload, ok = self.read_json_payload({})
-        if not ok:
-            return
-        try:
-            self.send_json(200, add_account_issue(self.payload_text(payload, "account_id"), self.payload_text(payload, "issue")))
-        except ValueError as error:
-            self.send_error_json(400, error)
-
-    def handle_account_issue_delete(self):
-        payload, ok = self.read_json_payload({})
-        if not ok:
-            return
-        try:
-            self.send_json(200, delete_account_issue(self.payload_text(payload, "account_id"), self.payload_text(payload, "issue")))
-        except ValueError as error:
-            self.send_error_json(400, error)
-
-    def handle_product_tags_get(self):
-        query = self.query_params()
-        try:
-            self.send_json(200, product_tags_payload(self.query_text(query, "product_code")))
-        except ValueError as error:
-            self.send_error_json(400, error)
-
-    def handle_product_tag_create(self):
-        payload, ok = self.read_json_payload({})
-        if not ok:
-            return
-        try:
-            self.send_json(200, create_product_tag(self.payload_text(payload, "product_code"), self.payload_text(payload, "tag")))
-        except ValueError as error:
-            self.send_error_json(400, error)
-
-    def handle_product_tag_delete(self):
-        payload, ok = self.read_json_payload({})
-        if not ok:
-            return
-        try:
-            self.send_json(
-                200,
-                delete_product_tag(
-                    self.payload_text(payload, "product_code"),
-                    self.payload_text(payload, "tag"),
-                    bool(self.payload_value(payload, "remove_assignments", True)),
-                ),
-            )
-        except ValueError as error:
-            self.send_error_json(400, error)
-
-    def handle_reelfarm_sync_prefix(self):
-        payload, ok = self.read_json_payload()
-        if not ok:
-            return
-
-        prefix = self.payload_text(payload, "prefix")
-        try:
-            self.send_json(
-                200,
-                sync_reelfarm_prefix(
-                    prefix,
-                    self.payload_text(payload, "product_id"),
-                    self.payload_text(payload, "country_id"),
-                    self.payload_text(payload, "concept_id"),
-                    self.payload_text(payload, "product_code"),
-                    self.payload_text(payload, "country_code"),
-                ),
-            )
-        except ValueError as error:
-            self.send_error_json(400, error)
-        except RuntimeError as error:
-            self.send_error_json(502, error)
-
-    def handle_reelfarm_sync_country(self):
-        payload, ok = self.read_json_payload()
-        if not ok:
-            return
-
-        prefix = self.payload_text(payload, "prefix")
-        try:
-            self.send_json(
-                200,
-                sync_reelfarm_country(
-                    prefix,
-                    self.payload_text(payload, "product_id"),
-                    self.payload_text(payload, "country_id"),
-                    self.payload_text(payload, "product_code"),
-                    self.payload_text(payload, "country_code"),
-                ),
-            )
-        except ValueError as error:
-            self.send_error_json(400, error)
-        except RuntimeError as error:
-            self.send_error_json(502, error)
-
-    def handle_museon_sync_country(self):
-        payload, ok = self.read_json_payload()
-        if not ok:
-            return
-
-        try:
-            self.send_json(
-                200,
-                sync_museon_clone_country(
-                    self.payload_text(payload, "product_id"),
-                    self.payload_text(payload, "country_id"),
-                    self.payload_text(payload, "product_code"),
-                    self.payload_text(payload, "country_code"),
-                ),
-            )
-        except ValueError as error:
-            self.send_error_json(400, error)
-        except RuntimeError as error:
-            self.send_error_json(502, error)
-
-    def handle_growth_sync_product(self):
-        payload, ok = self.read_json_payload({})
-        if not ok:
-            return
-
-        try:
-            records = sync_product_growth_snapshots(
-                self.payload_text(payload, "product_code"),
-                self.payload_value(payload, "days", 30),
-            )
-            self.send_json(200, {"ok": True, "count": len(records), "records": records})
-        except ValueError as error:
-            self.send_error_json(400, error)
-        except RuntimeError as error:
-            self.send_error_json(502, error)
-
-    def handle_daily_sync_all(self):
-        if not cron_authorized(self.headers):
-            self.send_error_json(401, "Unauthorized")
-            return
-
-        try:
-            self.send_json(200, sync_daily_all_records())
-        except RuntimeError as error:
-            self.send_error_json(502, error)
-
-    def handle_daily_feishu_send(self):
-        self.send_daily_feishu_response()
-
-    def handle_daily_feishu_analysis(self):
-        self.send_daily_feishu_analysis_response()
-
-    def handle_reelfarm_sync_all(self):
-        if not cron_authorized(self.headers):
-            self.send_error_json(401, "Unauthorized")
-            return
-
-        try:
-            self.send_json(200, sync_all_reelfarm_records())
-        except RuntimeError as error:
-            self.send_error_json(502, error)
-
-    def read_json_body(self):
-        length = int(self.headers.get("Content-Length", "0"))
-        if length <= 0:
-            return None
-        raw_body = self.rfile.read(length)
-        return json.loads(raw_body.decode("utf-8"))
-
-    def read_json_payload(self, default=None):
-        try:
-            payload = self.read_json_body()
-        except json.JSONDecodeError:
-            self.send_error_json(400, "Invalid JSON")
-            return None, False
-        return (default if payload is None else payload), True
-
-    def payload_value(self, payload, key, default=None):
-        return payload.get(key, default) if isinstance(payload, dict) else default
-
-    def payload_text(self, payload, key, default="", strip=True):
-        value = self.payload_value(payload, key, default)
-        text = str(value)
-        return text.strip() if strip else text
-
-    def query_params(self):
-        return parse_qs(urlparse(self.path).query)
-
-    def query_text(self, query, key, default=""):
-        return query_value(query, key, default)
-
-    def query_bool(self, query, key):
-        return self.query_text(query, key).lower() in {"1", "true", "yes", "y", "on"}
-
-    def send_daily_feishu_response(self, allow_require_synced=False):
-        query = self.query_params()
-        try:
-            result = send_daily_feishu_report(
-                self.query_text(query, "date"),
-                include_ai=self.query_bool(query, "include_ai"),
-                model=self.query_text(query, "model"),
-                require_synced=allow_require_synced and self.query_bool(query, "require_synced"),
-            )
-            self.send_result_json(result)
-        except ValueError as error:
-            self.send_error_json(400, error, include_ok=True)
-
-    def send_daily_feishu_analysis_response(self, status_from_ok=False):
-        query = self.query_params()
-        try:
-            result = daily_feishu_ai_analysis(
-                self.query_text(query, "date"),
-                self.query_text(query, "model"),
-            )
-            self.send_result_json(result, status_from_ok=status_from_ok)
-        except ValueError as error:
-            self.send_error_json(400, error, include_ok=True)
-        except RuntimeError as error:
-            self.send_error_json(502, error, include_ok=True)
-
-    def cookies(self):
-        cookies = {}
-        raw_cookie = self.headers.get("Cookie", "")
-        for part in raw_cookie.split(";"):
-            if "=" not in part:
-                continue
-            name, value = part.strip().split("=", 1)
-            cookies[name] = value
-        return cookies
-
-    def is_authenticated(self):
-        return valid_auth_token(self.cookies().get(SESSION_COOKIE, ""))
-
-    def ai_authorized(self):
-        header = self.headers.get("Authorization", "")
-        if not header.startswith("Bearer "):
-            return False
-        return external_api_key_authorized(header.removeprefix("Bearer ").strip(), "materials:read")
-
-    def auth_required(self, path):
-        if not path.startswith("/api/"):
-            return False
-        if path in self.PUBLIC_API_PATHS:
-            return False
-        if path in self.CRON_API_PATHS and cron_authorized(self.headers):
-            return False
-        if path in self.EXTERNAL_API_PATHS and self.ai_authorized():
-            return False
-        return True
-
-    def handle_health_get(self):
-        self.send_json(
-            200,
-            {
-                "ok": True,
-                "database_backend": "postgres" if using_postgres() else "sqlite",
-            },
-        )
-
-    def handle_auth_status_get(self):
-        self.send_json(200, {"authenticated": self.is_authenticated()})
-
-    def handle_data_get(self):
-        self.send_json(200, {"data": enrich_data_with_relational_rollups(load_data())})
-
-    def handle_database_get(self):
-        self.send_json(200, database_snapshot())
-
-    def handle_database_relational_get(self):
-        with connect_db() as conn:
-            init_relational_schema(conn)
-            self.send_json(
-                200,
-                {
-                    "ok": True,
-                    "database_backend": "postgres" if using_postgres() else "sqlite",
-                    "tables": relational_table_counts(conn),
-                },
-            )
-
-    def handle_api_keys_get(self):
-        self.send_json(200, {"ok": True, "keys": list_external_api_keys()})
-
-    def handle_ai_materials_get(self):
-        self.send_json(200, ai_materials_payload(self.query_params()))
-
-    def handle_data_query_get(self):
-        self.send_query_payload_json(data_query_payload)
-
-    def handle_growth_get(self):
-        self.send_query_payload_json(growth_dashboard_payload)
-
-    def handle_business_material_report_get(self):
-        self.send_query_payload_json(business_material_report_payload, catch_runtime=True)
-
-    def handle_daily_feishu_get(self):
-        self.send_daily_feishu_response(allow_require_synced=True)
-
-    def handle_daily_feishu_analysis_get(self):
-        self.send_daily_feishu_analysis_response(status_from_ok=True)
-
-    def handle_llm_models_get(self):
-        self.send_json(200, llm_models_payload())
-
-    def handle_daily_feishu_preview_get(self):
-        query = self.query_params()
-        try:
-            report = daily_feishu_report_payload(self.query_text(query, "date"))
-            message = daily_feishu_report_text(report)
-            self.send_json(
-                200,
-                {
-                    "ok": True,
-                    "report": report,
-                    "message": message,
-                    "message_preview": message[:1200],
-                },
-            )
-        except ValueError as error:
-            self.send_error_json(400, error, include_ok=True)
-        except RuntimeError as error:
-            self.send_error_json(502, error, include_ok=True)
-
-    def handle_reelfarm_config_get(self):
-        self.send_json(
-            200,
-            {
-                "configured": bool(reelfarm_api_key()),
-                "base_url": REELFARM_BASE_URL,
-            },
-        )
-
-    def handle_reelfarm_sync_all_get(self):
-        if not cron_authorized(self.headers):
-            self.send_error_json(401, "Unauthorized")
-            return
-        try:
-            self.send_json(200, sync_all_reelfarm_records())
-        except RuntimeError as error:
-            self.send_error_json(502, error)
-
-    def handle_reelfarm_matches_get(self):
-        query = self.query_params()
-        automation_prefix = self.query_text(query, "prefix")
-        try:
-            self.send_json(200, reelfarm_matches(automation_prefix))
-        except ValueError as error:
-            self.send_error_json(400, error)
-        except RuntimeError as error:
-            self.send_error_json(502, error)
-
-    def handle_reelfarm_stored_country_get(self):
-        query = self.query_params()
-        try:
-            country_code = self.query_text(query, "country_code") or self.query_text(query, "market_code")
-            self.send_json(
-                200,
-                stored_reelfarm_country(
-                    self.query_text(query, "product_code"),
-                    country_code,
-                ),
-            )
-        except ValueError as error:
-            self.send_error_json(400, error)
-
-    def route_handler(self, route_methods, path):
-        method_name = route_methods.get(path)
-        return getattr(self, method_name) if method_name else None
-
-    def do_GET(self):
-        path = urlparse(self.path).path
-        if self.auth_required(path) and not self.is_authenticated():
-            self.send_error_json(401, "Unauthorized")
-            return
-
-        handler = self.route_handler(self.GET_ROUTE_METHODS, path)
-        if handler:
-            handler()
-            return
-
-        if path == "/":
-            path = "/index.html"
-
-        self.send_static_file(path)
-        return
-
-    def do_POST(self):
-        path = urlparse(self.path).path
-
-        if path == "/api/auth/login":
-            self.handle_auth_login()
-            return
-
-        if path == "/api/auth/logout":
-            self.handle_auth_logout()
-            return
-
-        if self.auth_required(path) and not self.is_authenticated():
-            self.send_error_json(401, "Unauthorized")
-            return
-
-        handler = self.route_handler(self.POST_ROUTE_METHODS, path)
-        if handler:
-            handler()
-            return
-
-        self.send_error_json(404, "Not found")
-
-
-if __name__ == "__main__":
     init_db()
     cloud_port = os.environ.get("PORT", "").strip()
     port = int(cloud_port) if cloud_port else find_open_port()
     host = "0.0.0.0" if cloud_port else "127.0.0.1"
     url = f"http://127.0.0.1:{port}/" if not cloud_port else f"http://{host}:{port}/"
-    server = ThreadingHTTPServer((host, port), ManagementTableHandler)
     print(f"Management Table is running: {url}")
     print(f"Database backend: {'Postgres' if using_postgres() else f'SQLite ({DB_PATH})'}")
+    print("API framework: FastAPI")
     if not cloud_port:
         webbrowser.open(url)
-    server.serve_forever()
+    uvicorn.run("api.index:app", host=host, port=port, log_level="info")
+
+
+if __name__ == "__main__":
+    run_fastapi_server()
