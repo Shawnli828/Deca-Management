@@ -4017,6 +4017,41 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
         "/api/ai/materials",
         "/api/data/query",
     }
+    GET_ROUTE_METHODS = {
+        "/api/health": "handle_health_get",
+        "/api/auth/status": "handle_auth_status_get",
+        "/api/data": "handle_data_get",
+        "/api/database": "handle_database_get",
+        "/api/database/relational": "handle_database_relational_get",
+        "/api/api-keys": "handle_api_keys_get",
+        "/api/ai/materials": "handle_ai_materials_get",
+        "/api/data/query": "handle_data_query_get",
+        "/api/growth": "handle_growth_get",
+        "/api/business-material-report": "handle_business_material_report_get",
+        "/api/reports/daily-feishu": "handle_daily_feishu_get",
+        "/api/reports/daily-feishu-analysis": "handle_daily_feishu_analysis_get",
+        "/api/reports/llm-models": "handle_llm_models_get",
+        "/api/reports/daily-feishu-preview": "handle_daily_feishu_preview_get",
+        "/api/reelfarm/config": "handle_reelfarm_config_get",
+        "/api/reelfarm/sync-all": "handle_reelfarm_sync_all_get",
+        "/api/reelfarm/matches": "handle_reelfarm_matches_get",
+        "/api/reelfarm/stored-country": "handle_reelfarm_stored_country_get",
+    }
+    POST_ROUTE_METHODS = {
+        "/api/data": "handle_data_save",
+        "/api/reset": "handle_data_reset",
+        "/api/reelfarm/config": "handle_reelfarm_config_save",
+        "/api/api-keys": "handle_api_key_create",
+        "/api/api-keys/revoke": "handle_api_key_revoke",
+        "/api/reelfarm/sync-prefix": "handle_reelfarm_sync_prefix",
+        "/api/reelfarm/sync-country": "handle_reelfarm_sync_country",
+        "/api/museon/sync-country": "handle_museon_sync_country",
+        "/api/growth/sync-product": "handle_growth_sync_product",
+        "/api/sync/daily-all": "handle_daily_sync_all",
+        "/api/reports/daily-feishu": "handle_daily_feishu_send",
+        "/api/reports/daily-feishu-analysis": "handle_daily_feishu_analysis",
+        "/api/reelfarm/sync-all": "handle_reelfarm_sync_all",
+    }
 
     def log_message(self, format, *args):
         print("[%s] %s" % (self.log_date_time_string(), format % args))
@@ -4461,43 +4496,13 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             self.send_error_json(400, error)
 
     def get_route_handlers(self):
-        return {
-            "/api/health": self.handle_health_get,
-            "/api/auth/status": self.handle_auth_status_get,
-            "/api/data": self.handle_data_get,
-            "/api/database": self.handle_database_get,
-            "/api/database/relational": self.handle_database_relational_get,
-            "/api/api-keys": self.handle_api_keys_get,
-            "/api/ai/materials": self.handle_ai_materials_get,
-            "/api/data/query": self.handle_data_query_get,
-            "/api/growth": self.handle_growth_get,
-            "/api/business-material-report": self.handle_business_material_report_get,
-            "/api/reports/daily-feishu": self.handle_daily_feishu_get,
-            "/api/reports/daily-feishu-analysis": self.handle_daily_feishu_analysis_get,
-            "/api/reports/llm-models": self.handle_llm_models_get,
-            "/api/reports/daily-feishu-preview": self.handle_daily_feishu_preview_get,
-            "/api/reelfarm/config": self.handle_reelfarm_config_get,
-            "/api/reelfarm/sync-all": self.handle_reelfarm_sync_all_get,
-            "/api/reelfarm/matches": self.handle_reelfarm_matches_get,
-            "/api/reelfarm/stored-country": self.handle_reelfarm_stored_country_get,
-        }
+        return self.route_handlers(self.GET_ROUTE_METHODS)
 
     def post_route_handlers(self):
-        return {
-            "/api/data": self.handle_data_save,
-            "/api/reset": self.handle_data_reset,
-            "/api/reelfarm/config": self.handle_reelfarm_config_save,
-            "/api/api-keys": self.handle_api_key_create,
-            "/api/api-keys/revoke": self.handle_api_key_revoke,
-            "/api/reelfarm/sync-prefix": self.handle_reelfarm_sync_prefix,
-            "/api/reelfarm/sync-country": self.handle_reelfarm_sync_country,
-            "/api/museon/sync-country": self.handle_museon_sync_country,
-            "/api/growth/sync-product": self.handle_growth_sync_product,
-            "/api/sync/daily-all": self.handle_daily_sync_all,
-            "/api/reports/daily-feishu": self.handle_daily_feishu_send,
-            "/api/reports/daily-feishu-analysis": self.handle_daily_feishu_analysis,
-            "/api/reelfarm/sync-all": self.handle_reelfarm_sync_all,
-        }
+        return self.route_handlers(self.POST_ROUTE_METHODS)
+
+    def route_handlers(self, route_methods):
+        return {path: getattr(self, method_name) for path, method_name in route_methods.items()}
 
     def do_GET(self):
         path = urlparse(self.path).path
