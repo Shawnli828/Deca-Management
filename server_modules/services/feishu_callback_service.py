@@ -1,6 +1,17 @@
 import os
 
+from server_modules.services.feishu_card_snapshot_service import load_daily_report_snapshot
 from server_modules.services.daily_feishu_runtime import product_template_callback_card
+
+
+def _first_text_value(data, keys):
+    if not isinstance(data, dict):
+        return ""
+    for key in keys:
+        value = data.get(key)
+        if value is not None:
+            return str(value or "").strip()
+    return ""
 
 
 def _callback_action_value(payload):
@@ -11,6 +22,19 @@ def _callback_action_value(payload):
         return {}
     value = action.get("value") or {}
     return value if isinstance(value, dict) else {}
+
+
+def _callback_message_id(payload):
+    payload = payload if isinstance(payload, dict) else {}
+    event = payload.get("event") if isinstance(payload.get("event"), dict) else {}
+    context = event.get("context") if isinstance(event.get("context"), dict) else {}
+    message = event.get("message") if isinstance(event.get("message"), dict) else {}
+    return (
+        _first_text_value(context, ("open_message_id", "message_id"))
+        or _first_text_value(event, ("open_message_id", "message_id"))
+        or _first_text_value(message, ("open_message_id", "message_id"))
+        or _first_text_value(payload, ("open_message_id", "message_id"))
+    )
 
 
 def _valid_callback_token(payload):
@@ -33,9 +57,21 @@ def handle_card_action(payload):
         return {"toast": {"type": "info", "content": "Unsupported action."}}
 
     view_slot = value.get("view_slot") or value.get("view") or "product_1"
+    report_date = value.get("report_date") or value.get("biz_date") or ""
     if not str(view_slot).startswith("product_"):
         return {"toast": {"type": "info", "content": "Only product views are supported."}}
 
+    snapshot = load_daily_report_snapshot(_callback_message_id(payload))
+    if snapshot:
+        return {
+            "card": product_template_callback_card(
+                view_slot=view_slot,
+                report=snapshot.get("report"),
+                history_by_code=snapshot.get("history_by_code"),
+                product_names=snapshot.get("product_names"),
+            ),
+        }
+
     return {
-        "card": product_template_callback_card(view_slot=view_slot),
+        "card": product_template_callback_card(view_slot=view_slot, report_date=report_date),
     }

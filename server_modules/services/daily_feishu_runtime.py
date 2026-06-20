@@ -119,5 +119,17 @@ def send_report(report_date="", include_ai=False, model="", require_synced=False
     return daily_feishu_service().send_report(report_date, include_ai, model, require_synced, mode)
 
 
-def product_template_callback_card(view_slot="product_1", report_date=""):
-    return daily_feishu_service().product_template_callback_card(view_slot, report_date)
+def product_template_callback_card(
+    view_slot="product_1",
+    report_date="",
+    report=None,
+    history_by_code=None,
+    product_names=None,
+):
+    return daily_feishu_service().product_template_callback_card(
+        view_slot,
+        report_date,
+        report=report,
+        history_by_code=history_by_code,
+        product_names=product_names,
+    )

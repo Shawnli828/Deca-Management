@@ -28,6 +28,7 @@ from server_modules.metrics_service import (
     summarize_daily_report_products,
 )
 from server_modules.services.feishu_card_adapter import daily_report_card_data
+from server_modules.services.feishu_card_snapshot_service import save_daily_report_snapshot
 from server_modules.services.feishu_template_variables import (
     overview_template_variables,
     parse_product_names,
@@ -127,27 +128,35 @@ class DailyFeishuReportService:
             history[str(product_code or "").strip().upper()] = payload.get("rows") or []
         return history
 
-    def report_template_variables(self, report=None, report_date="", view_slot="product_1"):
+    def report_template_payload(self, report=None, report_date="", view_slot="product_1"):
         report = report or self.report_payload(report_date)
         config = self.template_config()
         history_by_code = self.template_history(report, config.get("product_names"))
         return {
-            "overview": overview_template_variables(
-                report,
-                product_names=config.get("product_names"),
-                history_by_code=history_by_code,
-            ),
-            "product": product_template_variables(
-                report,
-                product_names=config.get("product_names"),
-                history_by_code=history_by_code,
-                view_slot=view_slot,
-            ),
+            "variables": {
+                "overview": overview_template_variables(
+                    report,
+                    product_names=config.get("product_names"),
+                    history_by_code=history_by_code,
+                ),
+                "product": product_template_variables(
+                    report,
+                    product_names=config.get("product_names"),
+                    history_by_code=history_by_code,
+                    view_slot=view_slot,
+                ),
+            },
+            "history_by_code": history_by_code,
+            "product_names": config.get("product_names"),
         }
+
+    def report_template_variables(self, report=None, report_date="", view_slot="product_1"):
+        return self.report_template_payload(report, report_date, view_slot).get("variables")
 
     def send_template_cards(self, report):
         config = self.template_config()
-        variables = self.report_template_variables(report=report)
+        template_payload = self.report_template_payload(report=report)
+        variables = template_payload.get("variables") or {}
         overview_result = send_feishu_template_card_client(
             app_id=config.get("app_id"),
             app_secret=config.get("app_secret"),
@@ -183,6 +192,16 @@ class DailyFeishuReportService:
                 "template_preview": variables,
             }
 
+        try:
+            save_daily_report_snapshot(
+                (product_result or {}).get("message_id"),
+                report=report,
+                history_by_code=template_payload.get("history_by_code"),
+                product_names=template_payload.get("product_names"),
+            )
+        except Exception:
+            pass
+
         return {
             "ok": True,
             "overview": overview_result,
@@ -190,10 +209,26 @@ class DailyFeishuReportService:
             "template_preview": variables,
         }
 
-    def product_template_callback_card(self, view_slot="product_1", report_date=""):
-        report = self.report_payload(report_date or default_daily_report_date())
+    def product_template_callback_card(
+        self,
+        view_slot="product_1",
+        report_date="",
+        report=None,
+        history_by_code=None,
+        product_names=None,
+    ):
+        report = report or self.report_payload(report_date or default_daily_report_date())
         config = self.template_config()
-        variables = self.report_template_variables(report=report, view_slot=view_slot).get("product")
+        if product_names is None:
+            product_names = config.get("product_names")
+        if history_by_code is None:
+            history_by_code = self.template_history(report, product_names)
+        variables = product_template_variables(
+            report,
+            product_names=product_names,
+            history_by_code=history_by_code,
+            view_slot=view_slot,
+        )
         return feishu_template_card_response(
             config.get("product_template_id"),
             config.get("product_template_version"),
