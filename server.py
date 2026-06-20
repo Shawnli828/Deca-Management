@@ -4070,6 +4070,10 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
         payload = {"ok": False, "error": str(error)} if include_ok else {"error": str(error)}
         self.send_json(status, payload)
 
+    def send_result_json(self, result, status_from_ok=True):
+        status = 200 if not status_from_ok or result.get("ok") else 400
+        self.send_json(status, result)
+
     def send_static_file(self, request_path):
         requested = (BASE_DIR / unquote(request_path.lstrip("/"))).resolve()
         if BASE_DIR not in requested.parents and requested != BASE_DIR:
@@ -4320,8 +4324,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
                 model=self.query_text(query, "model"),
                 require_synced=allow_require_synced and self.query_bool(query, "require_synced"),
             )
-            status = 200 if result.get("ok") else 400
-            self.send_json(status, result)
+            self.send_result_json(result)
         except ValueError as error:
             self.send_error_json(400, error, include_ok=True)
 
@@ -4332,8 +4335,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
                 self.query_text(query, "date"),
                 self.query_text(query, "model"),
             )
-            status = 200 if not status_from_ok or result.get("ok") else 400
-            self.send_json(status, result)
+            self.send_result_json(result, status_from_ok=status_from_ok)
         except ValueError as error:
             self.send_error_json(400, error, include_ok=True)
         except RuntimeError as error:
