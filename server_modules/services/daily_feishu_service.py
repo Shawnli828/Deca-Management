@@ -13,14 +13,17 @@ from server_modules.external_clients import (
     daily_feishu_llm_api_key as daily_feishu_llm_api_key_from_env,
     daily_feishu_llm_model as daily_feishu_llm_model_from_env,
     fallback_llm_models as fallback_llm_models_from_env,
+    send_feishu_card as send_feishu_card_client,
     llm_models_payload as llm_models_payload_client,
     send_feishu_message as send_feishu_message_client,
 )
+from server_modules.domain.feishu_card import build_daily_report_card
 from server_modules.metrics_service import (
     build_daily_report_product_item,
     daily_metric_windows,
     summarize_daily_report_products,
 )
+from server_modules.services.feishu_card_adapter import daily_report_card_data
 from server_modules.sync_status import format_sync_readiness_line
 
 
@@ -45,6 +48,14 @@ class DailyFeishuReportService:
     def send_feishu_message(self, message):
         return send_feishu_message_client(
             message,
+            self.webhook_url,
+            self.webhook_secret,
+            self.make_ssl_context,
+        )
+
+    def send_feishu_card(self, card):
+        return send_feishu_card_client(
+            card,
             self.webhook_url,
             self.webhook_secret,
             self.make_ssl_context,
@@ -129,6 +140,14 @@ class DailyFeishuReportService:
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
+    def report_card_data(self, report_date="", report=None):
+        report = report or self.report_payload(report_date)
+        return daily_report_card_data(report)
+
+    def report_card(self, report_date="", report=None):
+        card_data = self.report_card_data(report_date, report=report)
+        return build_daily_report_card(card_data)
+
     def llm_api_key(self):
         return daily_feishu_llm_api_key_from_env(self.env)
 
@@ -193,7 +212,10 @@ class DailyFeishuReportService:
         )
         return result
 
-    def send_report(self, report_date="", include_ai=False, model="", require_synced=False):
+    def send_report(self, report_date="", include_ai=False, model="", require_synced=False, mode="text"):
+        mode = str(mode or "text").strip().lower()
+        if mode not in {"text", "card", "card_with_text_fallback"}:
+            raise ValueError("mode must be text, card, or card_with_text_fallback.")
         report = self.report_payload(report_date)
         if require_synced and not (report.get("sync_ready") or {}).get("ok"):
             return {
@@ -201,6 +223,34 @@ class DailyFeishuReportService:
                 "error": format_sync_readiness_line(report.get("sync_ready")),
                 "report": report,
             }
+
+        card_data = None
+        card = None
+        if mode in {"card", "card_with_text_fallback"}:
+            card_data = self.report_card_data(report=report)
+            card = build_daily_report_card(card_data)
+            sent_card = self.send_feishu_card(card)
+            if sent_card.get("ok"):
+                return {
+                    "ok": True,
+                    "sent_at": datetime.now(timezone.utc).isoformat(),
+                    "report_date": report.get("report_date"),
+                    "totals": report.get("totals"),
+                    "product_count": len(report.get("products") or []),
+                    "error_count": len(report.get("errors") or []),
+                    "mode": "card",
+                    "card_preview": card_data,
+                }
+            card_error = sent_card.get("error") or "Failed to send Feishu card."
+            if mode == "card":
+                return {
+                    "ok": False,
+                    "error": card_error,
+                    "mode": "card",
+                    "report": report,
+                    "card_preview": card_data,
+                }
+
         analysis = ""
         analysis_payload = None
         if include_ai:
@@ -220,7 +270,11 @@ class DailyFeishuReportService:
             "product_count": len(report.get("products") or []),
             "error_count": len(report.get("errors") or []),
             "message_preview": message[:800],
+            "mode": "text" if mode == "text" else "card_with_text_fallback",
         }
+        if mode == "card_with_text_fallback":
+            result["fallback_reason"] = card_error
+            result["card_preview"] = card_data
         if analysis_payload:
             result["analysis"] = analysis_payload.get("analysis")
             result["model"] = analysis_payload.get("model")

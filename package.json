@@ -7,6 +7,7 @@
     "frontend-regression": "tsx scripts/frontend_regression_checks.ts",
     "account-pool-regression": "tsx scripts/account_pool_regression_checks.ts",
     "architecture-boundaries": "python3 scripts/architecture_boundary_checks.py",
+    "feishu-card-fixture": "python3 scripts/feishu_card_fixture_checks.py",
     "reelfarm-projection-fixture": "python3 scripts/reelfarm_projection_fixture_checks.py",
     "reporting-fixture": "python3 scripts/reporting_fixture_checks.py",
     "smoke": "python3 scripts/smoke_checks.py",
