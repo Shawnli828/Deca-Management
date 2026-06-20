@@ -16,7 +16,7 @@ import { api } from '@/lib/api';
 import { defaultDateRange } from '@/lib/dateRange';
 import { formatTagLabel } from '@/lib/tagUtils';
 import type { AccountSummary, Country, DetailedPostRow, Product } from '@/lib/types';
-import { getProductReelFarmCode } from '@/lib/utils';
+import { getCountryReelFarmCode, getProductReelFarmCode } from '@/lib/utils';
 import {
   addTagToRows,
   attachAccountTagsAndIssues,
@@ -53,6 +53,10 @@ export function useAccountPool({
   const [postCache, setPostCache] = useState<Record<string, AccountPostState>>({});
   const [editingTagAccountId, setEditingTagAccountId] = useState('');
   const [productTagOptions, setProductTagOptions] = useState<string[]>([]);
+  const countryKey = useMemo(
+    () => countries.map(country => getCountryReelFarmCode(country)).join('|'),
+    [countries]
+  );
 
   async function loadAccountPool() {
     setLoading(true);
@@ -63,12 +67,19 @@ export function useAccountPool({
         product_code: productCode,
         tags: [] as string[]
       }));
-      const accountsRequest = Promise.all(countries.map(async country => {
+      const productTagsPayload = await productTagsRequest;
+      if (!countries.length) {
+        setProductTagOptions(productTagsPayload.tags || []);
+        setRows([]);
+        return;
+      }
+
+      const accountResults = await Promise.allSettled(countries.map(async country => {
         const params = buildAccountPoolQueryParams({ productCode, country, dateFrom, dateTo, dataSource });
         const payload = await api.dataQuery<{ ok: boolean; data: AccountSummary[] }>(params);
         return (payload.data || []).map(account => ({ ...account, country }));
       }));
-      const [chunks, productTagsPayload] = await Promise.all([accountsRequest, productTagsRequest]);
+      const chunks = accountResults.flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
       setProductTagOptions(productTagsPayload.tags || []);
       const accounts = chunks.flat();
       const accountIds = accounts.map(account => account.account_id).filter(Boolean);
@@ -87,12 +98,12 @@ export function useAccountPool({
   useEffect(() => {
     loadAccountPool().catch(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product.id, dataSource, dateFrom, dateTo]);
+  }, [product.id, dataSource, dateFrom, dateTo, countryKey]);
 
   useEffect(() => {
     setExpandedAccounts({});
     setPostCache({});
-  }, [product.id, dataSource, dateFrom, dateTo]);
+  }, [product.id, dataSource, dateFrom, dateTo, countryKey]);
 
   function accountRowKey(row: AccountPoolRow) {
     return getAccountRowKey(row, dateFrom, dateTo);
