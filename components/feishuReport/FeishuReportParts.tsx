@@ -39,9 +39,9 @@ export function FeishuReportHero({
         <label>
           <span>发送模式</span>
           <select value={sendMode} onChange={event => setSendMode(event.target.value as FeishuSendMode)}>
-            <option value="template">模板卡片</option>
             <option value="card_with_text_fallback">Webhook 卡片优先</option>
             <option value="card">仅 Webhook 卡片</option>
+            <option value="template">模板卡片</option>
             <option value="text">仅文本</option>
           </select>
         </label>

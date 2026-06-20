@@ -30,7 +30,7 @@ def post_reports_daily_feishu(
     include_ai: str = "",
     model: str = "",
     require_synced: str = "",
-    mode: str = "text",
+    mode: str = "card_with_text_fallback",
 ):
     if not cron_authorized(request.headers):
         require_dashboard_auth(request)

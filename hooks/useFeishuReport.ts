@@ -28,7 +28,7 @@ export function useFeishuReport() {
   const [modelListStatus, setModelListStatus] = useState('');
   const [customModel, setCustomModel] = useState('');
   const [includeAi, setIncludeAi] = useState(false);
-  const [sendMode, setSendMode] = useState<FeishuSendMode>('template');
+  const [sendMode, setSendMode] = useState<FeishuSendMode>('card_with_text_fallback');
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisPayload, setAnalysisPayload] = useState<DailyFeishuAnalysisPayload | null>(null);
   const [analysisError, setAnalysisError] = useState('');
