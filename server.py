@@ -4306,6 +4306,152 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             return False
         return True
 
+    def handle_health_get(self):
+        self.send_json(
+            200,
+            {
+                "ok": True,
+                "database_backend": "postgres" if using_postgres() else "sqlite",
+            },
+        )
+
+    def handle_auth_status_get(self):
+        self.send_json(200, {"authenticated": self.is_authenticated()})
+
+    def handle_data_get(self):
+        self.send_json(200, {"data": load_data()})
+
+    def handle_database_get(self):
+        self.send_json(200, database_snapshot())
+
+    def handle_database_relational_get(self):
+        with connect_db() as conn:
+            init_relational_schema(conn)
+            self.send_json(
+                200,
+                {
+                    "ok": True,
+                    "database_backend": "postgres" if using_postgres() else "sqlite",
+                    "tables": relational_table_counts(conn),
+                },
+            )
+
+    def handle_api_keys_get(self):
+        self.send_json(200, {"ok": True, "keys": list_external_api_keys()})
+
+    def handle_ai_materials_get(self):
+        self.send_json(200, ai_materials_payload(self.query_params()))
+
+    def handle_data_query_get(self):
+        try:
+            self.send_json(200, data_query_payload(self.query_params()))
+        except ValueError as error:
+            self.send_error_json(400, error, include_ok=True)
+
+    def handle_growth_get(self):
+        try:
+            self.send_json(200, growth_dashboard_payload(self.query_params()))
+        except ValueError as error:
+            self.send_error_json(400, error, include_ok=True)
+
+    def handle_business_material_report_get(self):
+        try:
+            self.send_json(200, business_material_report_payload(self.query_params()))
+        except ValueError as error:
+            self.send_error_json(400, error, include_ok=True)
+        except RuntimeError as error:
+            self.send_error_json(502, error, include_ok=True)
+
+    def handle_daily_feishu_get(self):
+        query = self.query_params()
+        try:
+            include_ai = self.query_bool(query, "include_ai")
+            require_synced = self.query_bool(query, "require_synced")
+            result = send_daily_feishu_report(
+                query.get("date", [""])[0],
+                include_ai=include_ai,
+                model=query.get("model", [""])[0],
+                require_synced=require_synced,
+            )
+            status = 200 if result.get("ok") else 400
+            self.send_json(status, result)
+        except ValueError as error:
+            self.send_error_json(400, error, include_ok=True)
+
+    def handle_daily_feishu_analysis_get(self):
+        query = self.query_params()
+        try:
+            result = daily_feishu_ai_analysis(query.get("date", [""])[0], query.get("model", [""])[0])
+            status = 200 if result.get("ok") else 400
+            self.send_json(status, result)
+        except ValueError as error:
+            self.send_error_json(400, error, include_ok=True)
+        except RuntimeError as error:
+            self.send_error_json(502, error, include_ok=True)
+
+    def handle_llm_models_get(self):
+        self.send_json(200, llm_models_payload())
+
+    def handle_daily_feishu_preview_get(self):
+        query = self.query_params()
+        try:
+            report = daily_feishu_report_payload(query.get("date", [""])[0])
+            message = daily_feishu_report_text(report)
+            self.send_json(
+                200,
+                {
+                    "ok": True,
+                    "report": report,
+                    "message": message,
+                    "message_preview": message[:1200],
+                },
+            )
+        except ValueError as error:
+            self.send_error_json(400, error, include_ok=True)
+        except RuntimeError as error:
+            self.send_error_json(502, error, include_ok=True)
+
+    def handle_reelfarm_config_get(self):
+        self.send_json(
+            200,
+            {
+                "configured": bool(reelfarm_api_key()),
+                "base_url": REELFARM_BASE_URL,
+            },
+        )
+
+    def handle_reelfarm_sync_all_get(self):
+        if not cron_authorized(self.headers):
+            self.send_error_json(401, "Unauthorized")
+            return
+        try:
+            self.send_json(200, sync_all_reelfarm_records())
+        except RuntimeError as error:
+            self.send_error_json(502, error)
+
+    def handle_reelfarm_matches_get(self):
+        query = self.query_params()
+        automation_prefix = query.get("prefix", [""])[0]
+        try:
+            self.send_json(200, reelfarm_matches(automation_prefix))
+        except ValueError as error:
+            self.send_error_json(400, error)
+        except RuntimeError as error:
+            self.send_error_json(502, error)
+
+    def handle_reelfarm_stored_country_get(self):
+        query = self.query_params()
+        try:
+            self.send_json(
+                200,
+                stored_reelfarm_country(
+                    query.get("product_code", [""])[0],
+                    query.get("country_code", query.get("market_code", [""]))[0],
+                ),
+            )
+        except ValueError as error:
+            self.send_error_json(400, error)
+
     def do_GET(self):
         path = urlparse(self.path).path
         if self.auth_required(path) and not self.is_authenticated():
@@ -4313,171 +4459,75 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/health":
-            self.send_json(
-                200,
-                {
-                    "ok": True,
-                    "database_backend": "postgres" if using_postgres() else "sqlite",
-                },
-            )
+            self.handle_health_get()
             return
 
         if path == "/api/auth/status":
-            self.send_json(200, {"authenticated": self.is_authenticated()})
+            self.handle_auth_status_get()
             return
 
         if path == "/api/data":
-            self.send_json(200, {"data": load_data()})
+            self.handle_data_get()
             return
 
         if path == "/api/database":
-            self.send_json(200, database_snapshot())
+            self.handle_database_get()
             return
 
         if path == "/api/database/relational":
-            with connect_db() as conn:
-                init_relational_schema(conn)
-                self.send_json(
-                    200,
-                    {
-                        "ok": True,
-                        "database_backend": "postgres" if using_postgres() else "sqlite",
-                        "tables": relational_table_counts(conn),
-                    },
-                )
+            self.handle_database_relational_get()
             return
 
         if path == "/api/api-keys":
-            self.send_json(200, {"ok": True, "keys": list_external_api_keys()})
+            self.handle_api_keys_get()
             return
 
         if path == "/api/ai/materials":
-            query = self.query_params()
-            self.send_json(200, ai_materials_payload(query))
+            self.handle_ai_materials_get()
             return
 
         if path == "/api/data/query":
-            query = self.query_params()
-            try:
-                self.send_json(200, data_query_payload(query))
-            except ValueError as error:
-                self.send_error_json(400, error, include_ok=True)
+            self.handle_data_query_get()
             return
 
         if path == "/api/growth":
-            query = self.query_params()
-            try:
-                self.send_json(200, growth_dashboard_payload(query))
-            except ValueError as error:
-                self.send_error_json(400, error, include_ok=True)
+            self.handle_growth_get()
             return
 
         if path == "/api/business-material-report":
-            query = self.query_params()
-            try:
-                self.send_json(200, business_material_report_payload(query))
-            except ValueError as error:
-                self.send_error_json(400, error, include_ok=True)
-            except RuntimeError as error:
-                self.send_error_json(502, error, include_ok=True)
+            self.handle_business_material_report_get()
             return
 
         if path == "/api/reports/daily-feishu":
-            query = self.query_params()
-            try:
-                include_ai = self.query_bool(query, "include_ai")
-                require_synced = self.query_bool(query, "require_synced")
-                result = send_daily_feishu_report(
-                    query.get("date", [""])[0],
-                    include_ai=include_ai,
-                    model=query.get("model", [""])[0],
-                    require_synced=require_synced,
-                )
-                status = 200 if result.get("ok") else 400
-                self.send_json(status, result)
-            except ValueError as error:
-                self.send_error_json(400, error, include_ok=True)
+            self.handle_daily_feishu_get()
             return
 
         if path == "/api/reports/daily-feishu-analysis":
-            query = self.query_params()
-            try:
-                result = daily_feishu_ai_analysis(query.get("date", [""])[0], query.get("model", [""])[0])
-                status = 200 if result.get("ok") else 400
-                self.send_json(status, result)
-            except ValueError as error:
-                self.send_error_json(400, error, include_ok=True)
-            except RuntimeError as error:
-                self.send_error_json(502, error, include_ok=True)
+            self.handle_daily_feishu_analysis_get()
             return
 
         if path == "/api/reports/llm-models":
-            self.send_json(200, llm_models_payload())
+            self.handle_llm_models_get()
             return
 
         if path == "/api/reports/daily-feishu-preview":
-            query = self.query_params()
-            try:
-                report = daily_feishu_report_payload(query.get("date", [""])[0])
-                message = daily_feishu_report_text(report)
-                self.send_json(
-                    200,
-                    {
-                        "ok": True,
-                        "report": report,
-                        "message": message,
-                        "message_preview": message[:1200],
-                    },
-                )
-            except ValueError as error:
-                self.send_error_json(400, error, include_ok=True)
-            except RuntimeError as error:
-                self.send_error_json(502, error, include_ok=True)
+            self.handle_daily_feishu_preview_get()
             return
 
         if path == "/api/reelfarm/config":
-            self.send_json(
-                200,
-                {
-                    "configured": bool(reelfarm_api_key()),
-                    "base_url": REELFARM_BASE_URL,
-                },
-            )
+            self.handle_reelfarm_config_get()
             return
 
         if path == "/api/reelfarm/sync-all":
-            if not cron_authorized(self.headers):
-                self.send_error_json(401, "Unauthorized")
-                return
-            try:
-                self.send_json(200, sync_all_reelfarm_records())
-            except RuntimeError as error:
-                self.send_error_json(502, error)
+            self.handle_reelfarm_sync_all_get()
             return
 
         if path == "/api/reelfarm/matches":
-            query = self.query_params()
-            automation_prefix = query.get("prefix", [""])[0]
-            try:
-                self.send_json(200, reelfarm_matches(automation_prefix))
-            except ValueError as error:
-                self.send_error_json(400, error)
-            except RuntimeError as error:
-                self.send_error_json(502, error)
+            self.handle_reelfarm_matches_get()
             return
 
         if path == "/api/reelfarm/stored-country":
-            query = self.query_params()
-            try:
-                self.send_json(
-                    200,
-                    stored_reelfarm_country(
-                        query.get("product_code", [""])[0],
-                        query.get("country_code", query.get("market_code", [""]))[0],
-                    ),
-                )
-            except ValueError as error:
-                self.send_error_json(400, error)
+            self.handle_reelfarm_stored_country_get()
             return
 
         if path == "/":
