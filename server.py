@@ -4038,6 +4038,31 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def handle_auth_login(self):
+        payload, ok = self.read_json_payload()
+        if not ok:
+            return
+
+        username = self.payload_text(payload, "username")
+        password = self.payload_text(payload, "password", strip=False)
+        if username == ADMIN_USERNAME and hmac.compare_digest(password_hash(password), ADMIN_PASSWORD_HASH):
+            token = make_auth_token(username)
+            self.send_json(
+                200,
+                {"ok": True, "authenticated": True},
+                {"Set-Cookie": cookie_header(SESSION_COOKIE, token, SESSION_TTL_SECONDS)},
+            )
+            return
+
+        self.send_error_json(401, "账号或密码不正确")
+
+    def handle_auth_logout(self):
+        self.send_json(
+            200,
+            {"ok": True, "authenticated": False},
+            {"Set-Cookie": cookie_header(SESSION_COOKIE, "", 0)},
+        )
+
     def read_json_body(self):
         length = int(self.headers.get("Content-Length", "0"))
         if length <= 0:
@@ -4283,30 +4308,11 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
 
         if path == "/api/auth/login":
-            payload, ok = self.read_json_payload()
-            if not ok:
-                return
-
-            username = self.payload_text(payload, "username")
-            password = self.payload_text(payload, "password", strip=False)
-            if username == ADMIN_USERNAME and hmac.compare_digest(password_hash(password), ADMIN_PASSWORD_HASH):
-                token = make_auth_token(username)
-                self.send_json(
-                    200,
-                    {"ok": True, "authenticated": True},
-                    {"Set-Cookie": cookie_header(SESSION_COOKIE, token, SESSION_TTL_SECONDS)},
-                )
-                return
-
-            self.send_error_json(401, "账号或密码不正确")
+            self.handle_auth_login()
             return
 
         if path == "/api/auth/logout":
-            self.send_json(
-                200,
-                {"ok": True, "authenticated": False},
-                {"Set-Cookie": cookie_header(SESSION_COOKIE, "", 0)},
-            )
+            self.handle_auth_logout()
             return
 
         if self.auth_required(path) and not self.is_authenticated():
