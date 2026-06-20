@@ -3863,12 +3863,12 @@ def data_query_payload(query):
 
 
 def ai_materials_payload(query):
-    product_filter = (query.get("product_code", [""])[0] or "").strip().upper()
-    country_filter = (query.get("country_code", [""])[0] or "").strip().upper()
-    product_id_filter = (query.get("product_id", [""])[0] or "").strip()
-    country_id_filter = (query.get("country_id", [""])[0] or "").strip()
-    synced_only = (query.get("synced_only", [""])[0] or "").strip().lower() in {"1", "true", "yes"}
-    include_raw = (query.get("include_raw", [""])[0] or "").strip().lower() in {"1", "true", "yes"}
+    product_filter = query_value(query, "product_code").upper()
+    country_filter = query_value(query, "country_code").upper()
+    product_id_filter = query_value(query, "product_id")
+    country_id_filter = query_value(query, "country_id")
+    synced_only = query_value(query, "synced_only").lower() in {"1", "true", "yes"}
+    include_raw = query_value(query, "include_raw").lower() in {"1", "true", "yes"}
     placeholder = db_placeholder()
     where = []
     params = []
@@ -4217,9 +4217,9 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
         try:
             include_ai = self.query_bool(query, "include_ai")
             result = send_daily_feishu_report(
-                query.get("date", [""])[0],
+                self.query_text(query, "date"),
                 include_ai=include_ai,
-                model=query.get("model", [""])[0],
+                model=self.query_text(query, "model"),
             )
             status = 200 if result.get("ok") else 400
             self.send_json(status, result)
@@ -4229,7 +4229,13 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
     def handle_daily_feishu_analysis(self):
         query = self.query_params()
         try:
-            self.send_json(200, daily_feishu_ai_analysis(query.get("date", [""])[0], query.get("model", [""])[0]))
+            self.send_json(
+                200,
+                daily_feishu_ai_analysis(
+                    self.query_text(query, "date"),
+                    self.query_text(query, "model"),
+                ),
+            )
         except ValueError as error:
             self.send_error_json(400, error, include_ok=True)
         except RuntimeError as error:
@@ -4271,8 +4277,11 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
     def query_params(self):
         return parse_qs(urlparse(self.path).query)
 
+    def query_text(self, query, key, default=""):
+        return query_value(query, key, default)
+
     def query_bool(self, query, key):
-        return str(query.get(key, [""])[0]).strip().lower() in {"1", "true", "yes", "y", "on"}
+        return self.query_text(query, key).lower() in {"1", "true", "yes", "y", "on"}
 
     def cookies(self):
         cookies = {}
@@ -4368,9 +4377,9 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             include_ai = self.query_bool(query, "include_ai")
             require_synced = self.query_bool(query, "require_synced")
             result = send_daily_feishu_report(
-                query.get("date", [""])[0],
+                self.query_text(query, "date"),
                 include_ai=include_ai,
-                model=query.get("model", [""])[0],
+                model=self.query_text(query, "model"),
                 require_synced=require_synced,
             )
             status = 200 if result.get("ok") else 400
@@ -4381,7 +4390,10 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
     def handle_daily_feishu_analysis_get(self):
         query = self.query_params()
         try:
-            result = daily_feishu_ai_analysis(query.get("date", [""])[0], query.get("model", [""])[0])
+            result = daily_feishu_ai_analysis(
+                self.query_text(query, "date"),
+                self.query_text(query, "model"),
+            )
             status = 200 if result.get("ok") else 400
             self.send_json(status, result)
         except ValueError as error:
@@ -4395,7 +4407,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
     def handle_daily_feishu_preview_get(self):
         query = self.query_params()
         try:
-            report = daily_feishu_report_payload(query.get("date", [""])[0])
+            report = daily_feishu_report_payload(self.query_text(query, "date"))
             message = daily_feishu_report_text(report)
             self.send_json(
                 200,
@@ -4431,7 +4443,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
 
     def handle_reelfarm_matches_get(self):
         query = self.query_params()
-        automation_prefix = query.get("prefix", [""])[0]
+        automation_prefix = self.query_text(query, "prefix")
         try:
             self.send_json(200, reelfarm_matches(automation_prefix))
         except ValueError as error:
@@ -4442,11 +4454,12 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
     def handle_reelfarm_stored_country_get(self):
         query = self.query_params()
         try:
+            country_code = self.query_text(query, "country_code") or self.query_text(query, "market_code")
             self.send_json(
                 200,
                 stored_reelfarm_country(
-                    query.get("product_code", [""])[0],
-                    query.get("country_code", query.get("market_code", [""]))[0],
+                    self.query_text(query, "product_code"),
+                    country_code,
                 ),
             )
         except ValueError as error:
