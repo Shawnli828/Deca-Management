@@ -4,7 +4,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "smoke": "python3 scripts/smoke_checks.py"
+    "smoke": "python3 scripts/smoke_checks.py",
+    "api-contract": "python3 scripts/api_contract_checks.py"
   },
   "dependencies": {
     "next": "^16.0.0",
