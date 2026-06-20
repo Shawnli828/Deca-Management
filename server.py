@@ -49,11 +49,8 @@ from server_modules.external_clients import (
     daily_feishu_llm_api_key as daily_feishu_llm_api_key_impl,
     daily_feishu_llm_model as daily_feishu_llm_model_impl,
     fallback_llm_models as fallback_llm_models_impl,
-    feishu_signed_payload as feishu_signed_payload_impl,
     llm_models_payload as llm_models_payload_impl,
-    selectable_gpt_model as selectable_gpt_model_impl,
     send_feishu_message as send_feishu_message_impl,
-    sort_llm_models as sort_llm_models_impl,
 )
 from server_modules.sync_status import (
     SYNC_RUN_SOURCE_LABELS,
@@ -3477,10 +3474,6 @@ def publish_check_reminder_text(result):
     return "\n".join(lines).strip()
 
 
-def feishu_signed_payload(message):
-    return feishu_signed_payload_impl(message, FEISHU_WEBHOOK_SECRET)
-
-
 def send_feishu_message(message):
     return send_feishu_message_impl(
         message,
@@ -3572,14 +3565,6 @@ def daily_feishu_llm_model(model=""):
 
 def fallback_llm_models():
     return fallback_llm_models_impl(os.environ, LLM_MODEL, FALLBACK_LLM_MODELS)
-
-
-def selectable_gpt_model(model_id):
-    return selectable_gpt_model_impl(model_id)
-
-
-def sort_llm_models(models):
-    return sort_llm_models_impl(models, fallback_llm_models())
 
 
 def llm_models_payload():
