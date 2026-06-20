@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
+import { getErrorMessage } from '@/lib/api';
 
 export function AuthGate({ onLogin }: { onLogin: (username: string, password: string) => Promise<void> }) {
   const [username, setUsername] = useState('');
@@ -15,8 +16,8 @@ export function AuthGate({ onLogin }: { onLogin: (username: string, password: st
     try {
       await onLogin(username.trim(), password);
       setPassword('');
-    } catch (err: any) {
-      setError(err?.message || '登录失败，请重新输入。');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, '登录失败，请重新输入。'));
     } finally {
       setLoading(false);
     }

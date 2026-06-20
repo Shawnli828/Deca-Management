@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { ACCOUNT_POST_PAGE_SIZE, type AccountPostState } from '@/components/CountryAccountPosts';
-import { api } from '@/lib/api';
+import { api, getErrorMessage } from '@/lib/api';
 import {
   type AccountPoolDataSource,
   type AccountPoolRow,
@@ -70,7 +70,7 @@ export function useAccountPoolPosts({ productCode, dateFrom, dateTo, dataSource 
           error: ''
         }
       }));
-    } catch (error: any) {
+    } catch (error: unknown) {
       setPostCache(previous => ({
         ...previous,
         [key]: {
@@ -79,7 +79,7 @@ export function useAccountPoolPosts({ productCode, dateFrom, dateTo, dataSource 
           hasMore: false,
           total: previous[key]?.total,
           loading: false,
-          error: error?.message || 'Posts loading failed.'
+          error: getErrorMessage(error, 'Posts loading failed.')
         }
       }));
     }

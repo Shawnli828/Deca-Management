@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { api } from '@/lib/api';
+import { api, getErrorMessage } from '@/lib/api';
 import type { PublishCheckState } from '@/lib/types';
 
 type UsePublishCheckOptions = {
@@ -39,8 +39,8 @@ export function usePublishCheck({ onStatus }: UsePublishCheckOptions) {
       const result = await api.runPublishCheck();
       setPublishCheck(prev => ({ ...prev, last_result: result }));
       onStatus(`发布检查完成：${result.totals?.missing_accounts || 0} 个账号未发布`);
-    } catch (error: any) {
-      onStatus(error?.message || '发布检查失败', true);
+    } catch (error: unknown) {
+      onStatus(getErrorMessage(error, '发布检查失败'), true);
     } finally {
       setPublishCheckRunning(false);
     }
@@ -51,8 +51,8 @@ export function usePublishCheck({ onStatus }: UsePublishCheckOptions) {
     try {
       const result = await api.sendPublishCheckReminder();
       onStatus(`飞书提醒已发送：${result.missing_accounts || 0} 个账号未发布`);
-    } catch (error: any) {
-      onStatus(error?.message || '飞书提醒发送失败', true);
+    } catch (error: unknown) {
+      onStatus(getErrorMessage(error, '飞书提醒发送失败'), true);
     } finally {
       setPublishReminderSending(false);
     }

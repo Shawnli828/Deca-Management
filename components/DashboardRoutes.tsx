@@ -2,11 +2,12 @@
 
 import { ApiKeyPage } from '@/components/ApiKeyPage';
 import { BusinessMaterialReport } from '@/components/BusinessMaterialReport';
-import { CloudPhoneMap } from '@/components/CloudPhoneMap';
-import { FeishuReportPage } from '@/components/FeishuReportPage';
+import { CloudPhoneMap } from '@/components/cloudPhone/CloudPhoneMap';
+import { FeishuReportPage } from '@/components/feishuReport/FeishuReportPage';
 import { GrowthDashboard } from '@/components/GrowthDashboard';
-import { PublishCheckBoard } from '@/components/PublishCheckBoard';
+import { PublishCheckBoard } from '@/components/publishCheck/PublishCheckBoard';
 import { CloneSlideshowToolPanel, SlideshowToolPanel } from '@/components/SlideshowToolPanels';
+import { DashboardToolSection } from '@/components/dashboard/DashboardToolSection';
 import type { SyncStatusResponse } from '@/lib/api/types';
 import type {
   Country,
@@ -133,16 +134,16 @@ export function DashboardRoutes({
 }: DashboardRoutesProps) {
   return (
     <main className="shell">
-      <section className={`tool-page ${tool === 'growth' ? 'active' : ''}`}>
+      <DashboardToolSection active={tool === 'growth'}>
         <GrowthDashboard products={products} />
-      </section>
-      <section className={`tool-page ${tool === 'businessReport' ? 'active' : ''}`}>
+      </DashboardToolSection>
+      <DashboardToolSection active={tool === 'businessReport'}>
         <BusinessMaterialReport products={products} />
-      </section>
-      <section className={`tool-page ${tool === 'feishuReport' ? 'active' : ''}`}>
+      </DashboardToolSection>
+      <DashboardToolSection active={tool === 'feishuReport'}>
         <FeishuReportPage />
-      </section>
-      <section className={`tool-page ${tool === 'slideshow' ? 'active' : ''}`}>
+      </DashboardToolSection>
+      <DashboardToolSection active={tool === 'slideshow'}>
         <SlideshowToolPanel
           page={page}
           products={products}
@@ -177,8 +178,8 @@ export function DashboardRoutes({
           removeCardTag={removeCardTag}
           loadSyncStatus={loadSyncStatus}
         />
-      </section>
-      <section className={`tool-page ${tool === 'cloneSlideshow' ? 'active' : ''}`}>
+      </DashboardToolSection>
+      <DashboardToolSection active={tool === 'cloneSlideshow'}>
         <CloneSlideshowToolPanel
           page={page}
           cloneDisplayProducts={cloneDisplayProducts}
@@ -197,11 +198,11 @@ export function DashboardRoutes({
           syncCloneProductCountries={syncCloneProductCountries}
           loadSyncStatus={loadSyncStatus}
         />
-      </section>
-      <section className={`tool-page ${tool === 'cloudPhones' ? 'active' : ''}`}>
+      </DashboardToolSection>
+      <DashboardToolSection active={tool === 'cloudPhones'}>
         <CloudPhoneMap products={products} />
-      </section>
-      <section className={`tool-page ${tool === 'apiKeys' ? 'active' : ''}`}>
+      </DashboardToolSection>
+      <DashboardToolSection active={tool === 'apiKeys'}>
         <ApiKeyPage
           keys={apiKeys}
           generatedKey={generatedKey}
@@ -209,8 +210,8 @@ export function DashboardRoutes({
           onRevokeKey={revokeKey}
           onCopy={copy}
         />
-      </section>
-      <section className={`tool-page ${tool === 'publishCheck' ? 'active' : ''}`}>
+      </DashboardToolSection>
+      <DashboardToolSection active={tool === 'publishCheck'}>
         <header className="topbar">
           <div>
             <h1>发布检查</h1>
@@ -227,7 +228,7 @@ export function DashboardRoutes({
           onRun={runPublishCheckNow}
           onSendReminder={sendPublishReminderNow}
         />
-      </section>
+      </DashboardToolSection>
     </main>
   );
 }

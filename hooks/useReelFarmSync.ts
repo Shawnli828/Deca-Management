@@ -1,9 +1,9 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import { api } from '@/lib/api';
-import type { SyncStatusResponse } from '@/lib/api/types';
+import { api, getErrorMessage } from '@/lib/api';
+import { useSyncStatus } from '@/hooks/reelFarm/useSyncStatus';
 import {
   applyCountrySyncPayload,
   SYNC_ALL_COUNTRY_DELAY_MS,
@@ -56,19 +56,7 @@ export function useReelFarmSync({
   const [syncProductId, setSyncProductId] = useState('');
   const [syncAllRunning, setSyncAllRunning] = useState(false);
   const [syncAllProgress, setSyncAllProgress] = useState('');
-  const [syncStatus, setSyncStatus] = useState<SyncStatusResponse | null>(null);
-  const [syncStatusLoading, setSyncStatusLoading] = useState(false);
-
-  const loadSyncStatus = useCallback(async () => {
-    setSyncStatusLoading(true);
-    try {
-      const payload = await api.getSyncStatus();
-      setSyncStatus(payload);
-      return payload;
-    } finally {
-      setSyncStatusLoading(false);
-    }
-  }, []);
+  const { syncStatus, syncStatusLoading, loadSyncStatus } = useSyncStatus();
 
   function applySyncResult(productId: string, countryId: string, payload: CountrySyncResult) {
     setProducts(prev => applyCountrySyncPayload(prev, productId, countryId, payload));
@@ -93,8 +81,8 @@ export function useReelFarmSync({
       await loadCountryKpis(selectedProduct, selectedCountry);
       await loadSyncStatus().catch(() => null);
       onStatus(`当前区同步完成：${payload.creator_count} 个账号，${payload.material_count} 个素材`);
-    } catch (error: any) {
-      onStatus(error?.message || 'ReelFarm 同步失败', true);
+    } catch (error: unknown) {
+      onStatus(getErrorMessage(error, 'ReelFarm 同步失败'), true);
     } finally {
       setSyncPrefix('');
     }
@@ -120,9 +108,9 @@ export function useReelFarmSync({
             country_code: getCountryReelFarmCode(country)
           });
           applySyncResult(product.id, country.id, payload);
-        } catch (error: any) {
+        } catch (error: unknown) {
           failed += 1;
-          onStatus(`${product.name} · ${country.name} 同步失败：${error?.message || '未知错误'}`, true);
+          onStatus(`${product.name} · ${country.name} 同步失败：${getErrorMessage(error, '未知错误')}`, true);
         }
         if (index < countries.length - 1) await wait(SYNC_PRODUCT_COUNTRY_DELAY_MS);
       }
@@ -156,9 +144,9 @@ export function useReelFarmSync({
             product_code: getProductReelFarmCode(product),
             country_code: getCountryReelFarmCode(country)
           });
-        } catch (error: any) {
+        } catch (error: unknown) {
           failed += 1;
-          onStatus(`Clone ${product.name} · ${country.name} 同步失败：${error?.message || '未知错误'}`, true);
+          onStatus(`Clone ${product.name} · ${country.name} 同步失败：${getErrorMessage(error, '未知错误')}`, true);
         }
         if (index < countries.length - 1) await wait(SYNC_CLONE_COUNTRY_DELAY_MS);
       }
@@ -194,9 +182,9 @@ export function useReelFarmSync({
             country_code: getCountryReelFarmCode(country)
           });
           applySyncResult(product.id, country.id, payload);
-        } catch (error: any) {
+        } catch (error: unknown) {
           failed += 1;
-          onStatus(`${product.name} · ${country.name} 同步失败：${error?.message || '未知错误'}`, true);
+          onStatus(`${product.name} · ${country.name} 同步失败：${getErrorMessage(error, '未知错误')}`, true);
         }
         if (index < jobs.length - 1) await wait(SYNC_ALL_COUNTRY_DELAY_MS);
       }

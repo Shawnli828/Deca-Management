@@ -157,13 +157,41 @@ export type BusinessMaterialReportPayload = {
   generated_at?: string;
 };
 
+export type DailyFeishuTotals = {
+  reelfarm_views?: number;
+  clone_views?: number;
+  total_views?: number;
+  downloads?: number;
+  download_rate?: number | null;
+  [key: string]: unknown;
+};
+
+export type DailyFeishuProductSummary = {
+  product_code?: string;
+  product_name?: string;
+  reelfarm_views?: number;
+  clone_views?: number;
+  total_views?: number;
+  downloads?: number;
+  download_rate?: number | null;
+  errors?: string[];
+  [key: string]: unknown;
+};
+
+export type DailyFeishuReportError = {
+  product_code?: string;
+  product_name?: string;
+  error?: string;
+  [key: string]: unknown;
+};
+
 export type DailyFeishuReport = {
   report_date?: string;
   business_window_local?: { start?: string; end?: string };
   onboarding_window_local?: { start?: string; end?: string };
-  totals?: Record<string, any>;
-  products?: Array<Record<string, any>>;
-  errors?: Array<Record<string, any>>;
+  totals?: DailyFeishuTotals;
+  products?: DailyFeishuProductSummary[];
+  errors?: DailyFeishuReportError[];
   generated_at?: string;
 };
 
@@ -178,7 +206,7 @@ export type DailyFeishuSendResult = {
   ok: boolean;
   sent_at?: string;
   report_date?: string;
-  totals?: Record<string, any>;
+  totals?: DailyFeishuTotals;
   product_count?: number;
   error_count?: number;
   message_preview?: string;

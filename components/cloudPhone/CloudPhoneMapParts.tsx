@@ -8,7 +8,7 @@ import {
   type CloudProduct,
   type CountrySection,
   type SelectedCloudPhoneSlot
-} from './CloudPhoneMapHelpers';
+} from '@/lib/domain/cloudPhoneMap';
 
 function PhoneGlyph() {
   return (

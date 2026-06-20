@@ -98,8 +98,8 @@ export function cardStateKey(card: ReelFarmCard) {
   );
 }
 
-export function getMetricFromPosts(posts: Array<Record<string, unknown>>, key: string) {
-  return posts.reduce((sum, post) => sum + (Number(post[key]) || 0), 0);
+export function getMetricFromPosts<T extends object>(posts: readonly T[], key: string) {
+  return posts.reduce((sum, post) => sum + (Number((post as Record<string, unknown>)[key]) || 0), 0);
 }
 
 export function normalizeProductFolder(product: Product) {

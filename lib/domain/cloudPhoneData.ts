@@ -1,7 +1,7 @@
 import type { Product } from '@/lib/types';
 import { getCountryReelFarmCode, getProductReelFarmCode } from '@/lib/utils';
-import { countryNamesByCode, fallbackCountries } from './CloudPhoneConstants';
-import type { CloudProduct, GeeLarkPayload, GeeLarkPayloadMap, IpGroup, PhoneSlot, PhoneState } from './CloudPhoneTypes';
+import { countryNamesByCode, fallbackCountries } from './cloudPhoneConstants';
+import type { CloudProduct, GeeLarkPayload, GeeLarkPayloadMap, IpGroup, PhoneSlot, PhoneState } from './cloudPhoneTypes';
 
 function slotState(seed: number, index: number): PhoneState {
   const score = (seed * 17 + index * 11) % 23;

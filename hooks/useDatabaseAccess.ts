@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { api } from '@/lib/api';
+import { api, getErrorMessage } from '@/lib/api';
 import type { DatabaseSnapshot, ExternalApiKey } from '@/lib/types';
 
 type UseDatabaseAccessOptions = {
@@ -17,8 +17,8 @@ export function useDatabaseAccess({ onStatus }: UseDatabaseAccessOptions) {
       const payload = await api.apiKeys();
       setApiKeys(payload.keys || []);
       return payload.keys || [];
-    } catch (error: any) {
-      onStatus(error?.message || 'API Key 读取失败', true);
+    } catch (error: unknown) {
+      onStatus(getErrorMessage(error, 'API Key 读取失败'), true);
       throw error;
     }
   }

@@ -4,6 +4,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "frontend-regression": "tsx scripts/frontend_regression_checks.ts",
     "account-pool-regression": "tsx scripts/account_pool_regression_checks.ts",
     "architecture-boundaries": "python3 scripts/architecture_boundary_checks.py",
     "reelfarm-projection-fixture": "python3 scripts/reelfarm_projection_fixture_checks.py",

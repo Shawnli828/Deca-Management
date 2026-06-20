@@ -5,7 +5,7 @@ import type { Country, Product, ProductKpis, ReelFarmCard, ReelFarmResult } from
 import { buildCountryAutomationPrefix, cardStateKey, getCountryReelFarmCode } from '@/lib/utils';
 import { CreatorTagEditorModal } from './CreatorTagEditorModal';
 import { ProductKpiBoard } from './ProductKpiBoard';
-import { ReelFarmAccountCard } from './ReelFarmAccountCard';
+import { ReelFarmAccountCard } from './reelFarm/ReelFarmAccountCard';
 
 export function CountryWorkspace({
   product,

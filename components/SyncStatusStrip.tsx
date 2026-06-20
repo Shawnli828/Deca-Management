@@ -1,9 +1,8 @@
 'use client';
 
 import type { SyncStatusResponse } from '@/lib/api/types';
+import { SYNC_STATUS_SOURCE_ORDER, syncStatusPillState, syncStatusSources } from '@/lib/domain/syncStatus';
 import { formatUtcReadable } from '@/lib/utils';
-
-const SOURCE_ORDER = ['reelfarm', 'museon_clone', 'growth_mixpanel'];
 
 export function SyncStatusStrip({
   syncStatus,
@@ -14,14 +13,14 @@ export function SyncStatusStrip({
   loading?: boolean;
   onRefresh: () => void | Promise<unknown>;
 }) {
-  const sources = syncStatus?.freshness?.sources || syncStatus?.sources || {};
+  const sources = syncStatusSources(syncStatus);
 
   return (
     <div className="sync-status-strip">
       <div className="sync-status-items">
-        {SOURCE_ORDER.map(source => {
+        {SYNC_STATUS_SOURCE_ORDER.map(source => {
           const item = sources[source] || {};
-          const state = item.state || (item.status === 'success' ? 'fresh' : item.status ? 'error' : 'missing');
+          const state = syncStatusPillState(item);
           return (
             <span className={`sync-status-pill ${state}`} key={source}>
               <b>{item.label || source}</b>

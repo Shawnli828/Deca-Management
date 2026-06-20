@@ -1,5 +1,5 @@
 import type { Country } from '@/lib/types';
-import type { PhoneState } from './CloudPhoneTypes';
+import type { PhoneState } from './cloudPhoneTypes';
 
 export const fallbackCountries: Country[] = [
   { id: 'ge', name: 'Germany', reelFarmCode: 'GE', creatorCount: 18 },
