@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { api, getErrorMessage } from '@/lib/api';
 import type { Product } from '@/lib/types';
 import {
   buildCountrySections,
@@ -13,10 +14,9 @@ import {
   selectCloudProduct,
   summarizeGeeLarkPayloads,
   summarizeIpGroups,
-  type GeeLarkMapPayload,
   type GeeLarkPayloadMap,
   type SelectedCloudPhoneSlot
-} from '@/components/CloudPhoneMapHelpers';
+} from '@/lib/domain/cloudPhoneMap';
 
 export type { SelectedCloudPhoneSlot };
 
@@ -41,29 +41,17 @@ export function useCloudPhoneMap(products: Product[]) {
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
     if (!geeLarkPairs.length) return () => {
       cancelled = true;
+      controller.abort();
     };
     setGeeLarkLoading(true);
     setGeeLarkError('');
-    const query = geeLarkPairs
-      .map(pair => `${encodeURIComponent(pair.productCode)}:${encodeURIComponent(pair.countryCode)}`)
-      .join(',');
-    fetch(`/api/geelark/phones-map?pairs=${query}`)
-      .then(async response => {
-        const text = await response.text();
-        let payload: GeeLarkMapPayload | { error?: string };
-        try {
-          payload = JSON.parse(text);
-        } catch {
-          throw new Error(text.slice(0, 220) || 'GeeLark response is not JSON');
-        }
-        if (!response.ok || !('ok' in payload) || !payload.ok) {
-          const apiError = 'error' in payload ? payload.error : '';
-          throw new Error(apiError || 'GeeLark API failed');
-        }
+    api.phonesMap(geeLarkPairs, { signal: controller.signal })
+      .then(payload => {
         const nextPayloads: GeeLarkPayloadMap = {};
-        (payload as GeeLarkMapPayload).items?.forEach(item => {
+        payload.items?.forEach(item => {
           const productCode = String(item.filters?.product_code || '').toUpperCase();
           const countryCode = String(item.filters?.country_code || '').toUpperCase();
           if (productCode && countryCode) {
@@ -72,14 +60,16 @@ export function useCloudPhoneMap(products: Product[]) {
         });
         if (!cancelled) setGeeLarkPayloads(nextPayloads);
       })
-      .catch(error => {
-        if (!cancelled) setGeeLarkError(error instanceof Error ? error.message : String(error));
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        if (!cancelled) setGeeLarkError(getErrorMessage(error, 'GeeLark API failed'));
       })
       .finally(() => {
         if (!cancelled) setGeeLarkLoading(false);
       });
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [geeLarkPairs]);
 

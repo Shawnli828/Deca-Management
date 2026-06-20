@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { api } from '@/lib/api';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { api, getErrorMessage } from '@/lib/api';
 import {
   DEFAULT_LLM_MODEL,
   FALLBACK_MODEL_OPTIONS,
@@ -30,6 +30,8 @@ export function useFeishuReport() {
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisPayload, setAnalysisPayload] = useState<DailyFeishuAnalysisPayload | null>(null);
   const [analysisError, setAnalysisError] = useState('');
+  const previewRequestRef = useRef(0);
+  const analysisRequestRef = useRef(0);
 
   const totals = useMemo(() => reportTotals(payload?.report), [payload]);
   const products = payload?.report?.products || [];
@@ -37,6 +39,8 @@ export function useFeishuReport() {
   const selectedModel = customModel.trim() || model;
 
   const loadPreview = useCallback(async (nextDate = reportDate) => {
+    const requestId = previewRequestRef.current + 1;
+    previewRequestRef.current = requestId;
     setLoading(true);
     setError('');
     setSendResult(null);
@@ -44,11 +48,13 @@ export function useFeishuReport() {
     setAnalysisError('');
     try {
       const next = await api.dailyFeishuPreview(nextDate);
+      if (previewRequestRef.current !== requestId) return;
       setPayload(next);
-    } catch (previewError: any) {
-      setError(previewError?.message || '日报预览读取失败');
+    } catch (previewError: unknown) {
+      if (previewRequestRef.current !== requestId) return;
+      setError(getErrorMessage(previewError, '日报预览读取失败'));
     } finally {
-      setLoading(false);
+      if (previewRequestRef.current === requestId) setLoading(false);
     }
   }, [reportDate]);
 
@@ -60,24 +66,28 @@ export function useFeishuReport() {
       const result = await api.sendDailyFeishuReport(reportDate, { includeAi, model: selectedModel });
       setSendResult(result);
       await loadPreview(reportDate);
-    } catch (sendError: any) {
-      setError(sendError?.message || '飞书发送失败');
+    } catch (sendError: unknown) {
+      setError(getErrorMessage(sendError, '飞书发送失败'));
     } finally {
       setSending(false);
     }
   }, [includeAi, loadPreview, reportDate, selectedModel]);
 
   const generateAnalysis = useCallback(async () => {
+    const requestId = analysisRequestRef.current + 1;
+    analysisRequestRef.current = requestId;
     setAnalysisLoading(true);
     setAnalysisError('');
     setAnalysisPayload(null);
     try {
       const result = await api.dailyFeishuAnalysis(reportDate, selectedModel);
+      if (analysisRequestRef.current !== requestId) return;
       setAnalysisPayload(result);
-    } catch (analysisException: any) {
-      setAnalysisError(analysisException?.message || 'AI 分析生成失败');
+    } catch (analysisException: unknown) {
+      if (analysisRequestRef.current !== requestId) return;
+      setAnalysisError(getErrorMessage(analysisException, 'AI 分析生成失败'));
     } finally {
-      setAnalysisLoading(false);
+      if (analysisRequestRef.current === requestId) setAnalysisLoading(false);
     }
   }, [reportDate, selectedModel]);
 
@@ -108,10 +118,10 @@ export function useFeishuReport() {
           setModelListStatus(`${options.length} 个可用 GPT 模型`);
         }
       })
-      .catch(modelError => {
+      .catch((modelError: unknown) => {
         if (cancelled) return;
         setModelOptions(FALLBACK_MODEL_OPTIONS);
-        setModelListStatus(modelError?.message || '模型列表读取失败，使用默认候选。');
+        setModelListStatus(getErrorMessage(modelError, '模型列表读取失败，使用默认候选。'));
       });
     return () => {
       cancelled = true;

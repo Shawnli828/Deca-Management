@@ -3,8 +3,10 @@
 import { formatFeishuMetric } from '@/lib/feishuReportHelpers';
 import type {
   DailyFeishuAnalysisPayload,
+  DailyFeishuProductSummary,
   DailyFeishuPreviewPayload,
-  DailyFeishuSendResult
+  DailyFeishuSendResult,
+  DailyFeishuTotals
 } from '@/lib/types';
 
 type FeishuAiPanelProps = {
@@ -109,7 +111,7 @@ export function FeishuReportSummary({
   totals,
   downloadRate
 }: {
-  totals: Record<string, any>;
+  totals: DailyFeishuTotals;
   downloadRate: number | null;
 }) {
   const summaryItems = [
@@ -141,7 +143,7 @@ export function FeishuReportLayout({
   payload: DailyFeishuPreviewPayload | null;
   loading: boolean;
   reportDate: string;
-  products: Array<Record<string, any>>;
+  products: DailyFeishuProductSummary[];
 }) {
   return (
     <div className="feishu-report-layout">

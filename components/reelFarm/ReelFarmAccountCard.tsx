@@ -1,7 +1,7 @@
 import type { ReelFarmCard } from '@/lib/types';
 import { formatTagLabel, tagChipStyle } from '@/lib/tagUtils';
 import { cardStateKey, formatNumber, formatPercent, getMetricFromPosts } from '@/lib/utils';
-import { MaterialCard } from './MaterialCard';
+import { MaterialCard } from '../MaterialCard';
 
 export function ReelFarmAccountCard({
   card,
@@ -34,10 +34,10 @@ export function ReelFarmAccountCard({
   const videos = card.videos || [];
   const summary = card.summary_metrics || {};
   const tags = card.tags || [];
-  const views = Number(summary.total_views) || getMetricFromPosts(posts as any, 'view_count');
-  const likes = Number(summary.total_likes) || getMetricFromPosts(posts as any, 'like_count');
-  const comments = Number(summary.total_comments) || getMetricFromPosts(posts as any, 'comment_count');
-  const shares = Number(summary.total_shares) || getMetricFromPosts(posts as any, 'share_count');
+  const views = Number(summary.total_views) || getMetricFromPosts(posts, 'view_count');
+  const likes = Number(summary.total_likes) || getMetricFromPosts(posts, 'like_count');
+  const comments = Number(summary.total_comments) || getMetricFromPosts(posts, 'comment_count');
+  const shares = Number(summary.total_shares) || getMetricFromPosts(posts, 'share_count');
   const engagement = views > 0 ? ((likes + comments + shares) / views) * 100 : 0;
   const postMap = new Map(posts.map(post => [String(post.video_id), post]));
   const slideshows = videos.filter(video => postMap.has(String(video.video_id)));

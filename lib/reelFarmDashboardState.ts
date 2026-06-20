@@ -1,5 +1,5 @@
 import { mergePostRowsIntoCard } from '@/lib/reelfarmCardAdapters';
-import type { Country, Product, ReelFarmCard, ReelFarmResult } from '@/lib/types';
+import type { Country, DetailedPostRow, Product, ReelFarmCard, ReelFarmResult } from '@/lib/types';
 import {
   buildCountryAutomationPrefix,
   cardStateKey,
@@ -69,7 +69,7 @@ export function mergeAccountPostRowsIntoResults({
   product: Product;
   country: Country;
   cardKey: string;
-  data: any[];
+  data: DetailedPostRow[];
   pagination: ReelFarmPostPagination;
 }) {
   const prefix = buildCountryAutomationPrefix(product, country);

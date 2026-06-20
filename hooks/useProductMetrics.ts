@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { api } from '@/lib/api';
+import { api, getErrorMessage } from '@/lib/api';
 import type { Country, Product, ProductKpis, ProductRollup } from '@/lib/types';
 import { getCountryReelFarmCode, getProductReelFarmCode } from '@/lib/utils';
 
@@ -98,10 +98,10 @@ export function useProductMetrics({ products, selectedProductId, onStatus }: Use
         }
       }));
       setCloneProductKpis(Object.fromEntries(entries));
-    } catch (error: any) {
+    } catch (error: unknown) {
       setCloneProducts(buildProductsFromRollups(sourceProducts, []));
       setCloneProductKpis({});
-      onStatus(error?.message || 'Clone Slide Show 数据加载失败', true);
+      onStatus(getErrorMessage(error, 'Clone Slide Show 数据加载失败'), true);
     }
   }
 

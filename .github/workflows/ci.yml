@@ -50,6 +50,9 @@ jobs:
       - name: Account pool regression checks
         run: npm run account-pool-regression
 
+      - name: Frontend regression checks
+        run: npm run frontend-regression
+
       - name: ReelFarm projection fixture checks
         run: npm run reelfarm-projection-fixture
 

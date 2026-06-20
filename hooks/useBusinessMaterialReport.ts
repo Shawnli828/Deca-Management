@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { api } from '@/lib/api';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { api, getErrorMessage } from '@/lib/api';
 import type { BusinessMaterialReportPayload, Product } from '@/lib/types';
 import { getProductReelFarmCode } from '@/lib/utils';
 
@@ -29,6 +29,7 @@ export function useBusinessMaterialReport({
   const [payload, setPayload] = useState<BusinessMaterialReportPayload | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const reportRequestRef = useRef(0);
 
   const selectedProduct = useMemo(
     () => products.find(product => product.id === productId) || products[0] || null,
@@ -39,6 +40,8 @@ export function useBusinessMaterialReport({
 
   async function loadReport() {
     if (!productCode) return;
+    const requestId = reportRequestRef.current + 1;
+    reportRequestRef.current = requestId;
     setLoading(true);
     setError('');
     try {
@@ -48,11 +51,13 @@ export function useBusinessMaterialReport({
         dateTo: dateTo || undefined,
         ...(mode ? { mode } : {})
       });
+      if (reportRequestRef.current !== requestId) return;
       setPayload(next);
-    } catch (loadError: any) {
-      setError(loadError?.message || errorMessage);
+    } catch (loadError: unknown) {
+      if (reportRequestRef.current !== requestId) return;
+      setError(getErrorMessage(loadError, errorMessage));
     } finally {
-      setLoading(false);
+      if (reportRequestRef.current === requestId) setLoading(false);
     }
   }
 
