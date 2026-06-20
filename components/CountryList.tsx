@@ -84,6 +84,9 @@ export function CountryList({
         <span><i className="dot usable" /> Countries: {formatNumber(countries.length)}</span>
         <span><i className="dot star" /> Filtered: {formatNumber(accountPool.filteredRows.length)}</span>
       </div>
+      {accountPool.error ? (
+        <div className="account-pool-error">{accountPool.error}</div>
+      ) : null}
 
       <section className="pool-performance">
         <div className="pool-performance-head">

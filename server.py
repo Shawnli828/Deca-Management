@@ -72,25 +72,16 @@ from server_modules.reelfarm_utils import (
     reelfarm_schedule_slot_count,
 )
 from server_modules.reelfarm_client import (
-    automation_title_product_code_matches as automation_title_product_code_matches_impl,
-    compact_account as compact_account_impl,
-    compact_automation as compact_automation_impl,
-    compact_post as compact_post_impl,
-    compact_video as compact_video_impl,
-    list_payload as list_payload_impl,
     reelfarm_creator_count as reelfarm_creator_count_impl,
     reelfarm_fetch_automations as reelfarm_fetch_automations_impl,
     reelfarm_matches as reelfarm_matches_impl,
     reelfarm_material_count as reelfarm_material_count_impl,
-    reelfarm_product_automation_ids as reelfarm_product_automation_ids_impl,
     reelfarm_request as reelfarm_request_impl,
-    video_identifier as video_identifier_impl,
 )
 from server_modules.reelfarm_lifecycle import (
     active_tiktok_automation_account_ids as active_tiktok_automation_account_ids_impl,
     cleanup_reelfarm_product_from_latest_automations as cleanup_reelfarm_product_from_latest_automations_impl,
     mark_missing_reelfarm_automations as mark_missing_reelfarm_automations_impl,
-    mark_missing_reelfarm_product_automations as mark_missing_reelfarm_product_automations_impl,
 )
 from server_modules.automation_naming import (
     build_automation_prefix,
@@ -127,9 +118,7 @@ from server_modules.api_keys import (
     create_external_api_key_from_state,
     external_api_key_authorized_from_state,
     list_external_api_keys_from_state,
-    load_external_api_keys_from_state,
     revoke_external_api_key_from_state,
-    save_external_api_keys_to_state,
 )
 from server_modules.account_issues import (
     ZERO_PLAY_ISSUE,
@@ -140,7 +129,6 @@ from server_modules.account_issues import (
     add_account_issue as add_account_issue_impl,
     apply_zero_play_issues as apply_zero_play_issues_impl,
     attach_account_issues as attach_account_issues_impl,
-    cleanup_zero_play_issues_for_non_active_tiktok as cleanup_zero_play_issues_impl,
     collect_zero_play_issue_candidate as collect_zero_play_issue_candidate_impl,
     daily_reelfarm_account_alerts as daily_reelfarm_account_alerts_impl,
     delete_account_issue as delete_account_issue_impl,
@@ -218,7 +206,6 @@ from server_modules.state_helpers import (
     clean_publish_check_state,
     data_source_channel_code as data_source_channel_code_impl,
     default_data as default_data_impl,
-    default_publish_check_state as default_publish_check_state_impl,
     initial_data as initial_data_impl,
     parse_publish_check_state,
     strip_reelfarm_state as strip_reelfarm_state_impl,
@@ -322,10 +309,6 @@ def save_data(data, conn=None):
     save_app_value(STATE_KEY, payload, conn)
 
 
-def default_publish_check_state():
-    return default_publish_check_state_impl()
-
-
 def load_publish_check_state():
     return parse_publish_check_state(load_app_value(PUBLISH_CHECK_STATE_KEY))
 
@@ -409,10 +392,6 @@ def active_tiktok_automation_account_ids(conn, account_ids):
 
 def mark_missing_reelfarm_automations(conn, product_market_channel_id, seen_reelfarm_ids, synced_at):
     return mark_missing_reelfarm_automations_impl(conn, product_market_channel_id, seen_reelfarm_ids, synced_at)
-
-
-def mark_missing_reelfarm_product_automations(conn, product_code, seen_reelfarm_ids, synced_at):
-    return mark_missing_reelfarm_product_automations_impl(conn, product_code, seen_reelfarm_ids, synced_at)
 
 
 def cleanup_reelfarm_product_from_latest_automations(product_code, automations, synced_at):
@@ -3261,6 +3240,15 @@ def query_reelfarm_accounts(query):
         rows = conn.execute(
             f"""
             SELECT
+                p.id AS product_id,
+                p.code AS product_code,
+                p.name AS product_name,
+                m.id AS country_id,
+                m.id AS market_id,
+                m.code AS country_code,
+                m.code AS market_code,
+                m.name AS country_name,
+                pmc.id AS product_market_channel_id,
                 acc.id AS account_id,
                 acc.reelfarm_account_id,
                 acc.username,
@@ -3292,7 +3280,19 @@ def query_reelfarm_accounts(query):
                 MAX(COALESCE(post.synced_at, mat.synced_at, a.synced_at)) AS last_synced_at
             {relational_base_from()}
             WHERE {where_sql}{visibility_sql} AND acc.id IS NOT NULL
-            GROUP BY acc.id, acc.reelfarm_account_id, acc.username, acc.display_name, acc.avatar_url
+            GROUP BY
+                p.id,
+                p.code,
+                p.name,
+                m.id,
+                m.code,
+                m.name,
+                pmc.id,
+                acc.id,
+                acc.reelfarm_account_id,
+                acc.username,
+                acc.display_name,
+                acc.avatar_url
             ORDER BY total_views DESC, post_count DESC
             """,
             tuple(metric_params * metric_condition_count + params),

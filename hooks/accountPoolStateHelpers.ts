@@ -34,6 +34,25 @@ export function buildAccountPoolQueryParams({
   return params;
 }
 
+export function buildProductAccountPoolQueryParams({
+  productCode,
+  dateFrom,
+  dateTo,
+  dataSource
+}: {
+  productCode: string;
+  dateFrom: string;
+  dateTo: string;
+  dataSource: AccountPoolDataSource;
+}) {
+  const params = addAccountPoolDateFilters(new URLSearchParams({
+    resource: 'accounts',
+    product_code: productCode
+  }), dateFrom, dateTo);
+  if (dataSource !== 'reelfarm') params.set('source', dataSource);
+  return params;
+}
+
 export function buildAccountPostsQueryParams({
   productCode,
   country,

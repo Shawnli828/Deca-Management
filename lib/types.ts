@@ -237,6 +237,15 @@ export type ProductRollup = {
 
 export type AccountSummary = {
   account_id: string;
+  product_id?: string;
+  product_code?: string;
+  product_name?: string;
+  country_id?: string;
+  market_id?: string;
+  country_code?: string;
+  market_code?: string;
+  country_name?: string;
+  product_market_channel_id?: string;
   reelfarm_account_id?: string;
   museon_account_id?: string;
   username?: string;

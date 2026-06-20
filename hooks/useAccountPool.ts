@@ -20,8 +20,8 @@ import { getCountryReelFarmCode, getProductReelFarmCode } from '@/lib/utils';
 import {
   addTagToRows,
   attachAccountTagsAndIssues,
-  buildAccountPoolQueryParams,
   buildAccountPostsQueryParams,
+  buildProductAccountPoolQueryParams,
   fetchAccountTagsAndIssues,
   removeProductTagFromFilters,
   removeProductTagFromRows,
@@ -41,6 +41,7 @@ export function useAccountPool({
 }) {
   const [rows, setRows] = useState<AccountPoolRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [countryFilter, setCountryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -60,6 +61,7 @@ export function useAccountPool({
 
   async function loadAccountPool() {
     setLoading(true);
+    setError('');
     try {
       const productCode = getProductReelFarmCode(product);
       const productTagsRequest = api.productTags(productCode).catch(() => ({
@@ -74,17 +76,26 @@ export function useAccountPool({
         return;
       }
 
-      const accountResults = await Promise.allSettled(countries.map(async country => {
-        const params = buildAccountPoolQueryParams({ productCode, country, dateFrom, dateTo, dataSource });
-        const payload = await api.dataQuery<{ ok: boolean; data: AccountSummary[] }>(params);
-        return (payload.data || []).map(account => ({ ...account, country }));
-      }));
-      const chunks = accountResults.flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
+      const countryByCode = new Map(
+        countries.map(country => [getCountryReelFarmCode(country).toUpperCase(), country])
+      );
+      const params = buildProductAccountPoolQueryParams({ productCode, dateFrom, dateTo, dataSource });
+      const payload = await api.dataQuery<{ ok: boolean; data: AccountSummary[] }>(params);
       setProductTagOptions(productTagsPayload.tags || []);
-      const accounts = chunks.flat();
+      const accounts = (payload.data || [])
+        .map(account => {
+          const countryCode = String(account.country_code || account.market_code || '').toUpperCase();
+          const country = countryByCode.get(countryCode) || (countries.length === 1 ? countries[0] : undefined);
+          return country ? { ...account, country } : null;
+        })
+        .filter((account): account is AccountSummary & { country: Country } => Boolean(account));
       const accountIds = accounts.map(account => account.account_id).filter(Boolean);
       const { tagMap, issueMap } = await fetchAccountTagsAndIssues(accountIds);
       setRows(attachAccountTagsAndIssues(accounts, tagMap, issueMap));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown account pool loading error.';
+      setRows([]);
+      setError(`数据库账号池读取失败：${message}`);
     } finally {
       setLoading(false);
     }
@@ -240,6 +251,7 @@ export function useAccountPool({
   return {
     rows,
     loading,
+    error,
     search,
     setSearch,
     countryFilter,
