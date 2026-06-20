@@ -4212,6 +4212,39 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
         except RuntimeError as error:
             self.send_error_json(502, error)
 
+    def handle_daily_feishu_send(self):
+        query = self.query_params()
+        try:
+            include_ai = self.query_bool(query, "include_ai")
+            result = send_daily_feishu_report(
+                query.get("date", [""])[0],
+                include_ai=include_ai,
+                model=query.get("model", [""])[0],
+            )
+            status = 200 if result.get("ok") else 400
+            self.send_json(status, result)
+        except ValueError as error:
+            self.send_error_json(400, error, include_ok=True)
+
+    def handle_daily_feishu_analysis(self):
+        query = self.query_params()
+        try:
+            self.send_json(200, daily_feishu_ai_analysis(query.get("date", [""])[0], query.get("model", [""])[0]))
+        except ValueError as error:
+            self.send_error_json(400, error, include_ok=True)
+        except RuntimeError as error:
+            self.send_error_json(502, error, include_ok=True)
+
+    def handle_reelfarm_sync_all(self):
+        if not cron_authorized(self.headers):
+            self.send_error_json(401, "Unauthorized")
+            return
+
+        try:
+            self.send_json(200, sync_all_reelfarm_records())
+        except RuntimeError as error:
+            self.send_error_json(502, error)
+
     def read_json_body(self):
         length = int(self.headers.get("Content-Length", "0"))
         if length <= 0:
@@ -4509,34 +4542,15 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/reports/daily-feishu":
-            query = self.query_params()
-            try:
-                include_ai = self.query_bool(query, "include_ai")
-                result = send_daily_feishu_report(query.get("date", [""])[0], include_ai=include_ai, model=query.get("model", [""])[0])
-                status = 200 if result.get("ok") else 400
-                self.send_json(status, result)
-            except ValueError as error:
-                self.send_error_json(400, error, include_ok=True)
+            self.handle_daily_feishu_send()
             return
 
         if path == "/api/reports/daily-feishu-analysis":
-            query = self.query_params()
-            try:
-                self.send_json(200, daily_feishu_ai_analysis(query.get("date", [""])[0], query.get("model", [""])[0]))
-            except ValueError as error:
-                self.send_error_json(400, error, include_ok=True)
-            except RuntimeError as error:
-                self.send_error_json(502, error, include_ok=True)
+            self.handle_daily_feishu_analysis()
             return
 
         if path == "/api/reelfarm/sync-all":
-            if not cron_authorized(self.headers):
-                self.send_error_json(401, "Unauthorized")
-                return
-            try:
-                self.send_json(200, sync_all_reelfarm_records())
-            except RuntimeError as error:
-                self.send_error_json(502, error)
+            self.handle_reelfarm_sync_all()
             return
 
         self.send_error_json(404, "Not found")
