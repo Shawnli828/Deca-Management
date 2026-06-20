@@ -2,6 +2,8 @@ import json
 import time
 from datetime import datetime, timezone
 
+from server_modules.sync_result import error_sync_result, normalized_sync_result
+
 
 def sync_all_reelfarm_records(
     *,
@@ -52,7 +54,7 @@ def sync_all_reelfarm_records(
                 errors.append({"product_code": product_code, "error": str(error)})
 
     save_data(data)
-    return {
+    return normalized_sync_result("reelfarm", {
         "ok": True,
         "synced_at": synced_at,
         "synced_count": successes,
@@ -60,7 +62,7 @@ def sync_all_reelfarm_records(
         "errors": errors[:20],
         "product_cleanups": product_cleanups,
         "relational_projection": relational_projection,
-    }
+    }, records_count=successes)
 
 
 def sync_all_museon_clone_records(
@@ -107,14 +109,14 @@ def sync_all_museon_clone_records(
             except RuntimeError as error:
                 errors.append({"product_code": product_code, "country_code": country_code, "error": str(error)})
 
-    return {
+    return normalized_sync_result("museon_clone", {
         "ok": True,
         "synced_count": successes,
         "skipped_count": skipped,
         "error_count": len(errors),
         "errors": errors[:20],
         "records": records[:50],
-    }
+    }, records_count=successes)
 
 
 def sync_all_growth_snapshots(*, configured_product_codes, sync_product_growth_snapshots, days=30):
@@ -131,13 +133,13 @@ def sync_all_growth_snapshots(*, configured_product_codes, sync_product_growth_s
         except (RuntimeError, ValueError) as error:
             errors.append({"product_code": product_code, "error": str(error)})
 
-    return {
+    return normalized_sync_result("growth_mixpanel", {
         "ok": True,
         "synced_count": successes,
         "error_count": len(errors),
         "errors": errors[:20],
         "records": records,
-    }
+    }, records_count=successes)
 
 
 def sync_daily_all_records(
@@ -166,7 +168,13 @@ def sync_daily_all_records(
             payload = runner()
             duration = round(time.perf_counter() - stage_started, 3)
             stage_finished_at = datetime.now(timezone.utc).isoformat()
-            payload["duration_total_seconds"] = duration
+            payload = normalized_sync_result(
+                stage_name,
+                payload,
+                started_at=stage_started_at,
+                finished_at=stage_finished_at,
+                duration_seconds=duration,
+            )
             safe_record_sync_run(
                 stage_name,
                 "success" if payload.get("ok") else "error",
@@ -191,22 +199,26 @@ def sync_daily_all_records(
                 meta={"error": str(error)},
             )
             stages[stage_name] = {
-                "ok": False,
-                "error": str(error),
-                "duration_total_seconds": duration,
+                **error_sync_result(
+                    stage_name,
+                    error,
+                    started_at=stage_started_at,
+                    finished_at=stage_finished_at,
+                    duration_seconds=duration,
+                )
             }
 
     ok = all(stage.get("ok") for stage in stages.values())
     duration_total = round(time.perf_counter() - started, 3)
     finished_at = datetime.now(timezone.utc).isoformat()
-    result = {
+    result = normalized_sync_result("daily_all", {
         "ok": ok,
         "synced_at": synced_at,
         "timezone": "Asia/Shanghai",
         "schedule": "08:30 BJT",
         "duration_total_seconds": duration_total,
         "stages": stages,
-    }
+    }, started_at=started_at, finished_at=finished_at, duration_seconds=duration_total)
     safe_record_sync_run(
         "daily_all",
         "success" if ok else "error",

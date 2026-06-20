@@ -1,4 +1,5 @@
 import { api } from '@/lib/api';
+import type { AccountQueryResponse } from '@/lib/api/types';
 import type { AccountPoolDataSource } from '@/lib/domain/accountPool';
 import type { AccountSummary, Country } from '@/lib/types';
 import {
@@ -40,7 +41,7 @@ export async function loadAccountPoolRows({
   const countryPayloads = await Promise.allSettled(
     countries.map(async country => {
       const params = buildAccountPoolQueryParams({ productCode, country, dateFrom, dateTo, dataSource });
-      const payload = await api.dataQuery<{ ok: boolean; data: AccountSummary[] }>(params);
+      const payload = await api.dataQuery<AccountQueryResponse>(params);
       return (payload.data || []).map(account => ({ ...account, country }));
     })
   );

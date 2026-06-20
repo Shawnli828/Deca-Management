@@ -20,6 +20,7 @@ from server_modules.sync_orchestrator import (
     sync_all_reelfarm_records as sync_all_reelfarm_records_impl,
     sync_daily_all_records as sync_daily_all_records_impl,
 )
+from server_modules.sync_result import normalized_sync_result
 from server_modules.sync_status import (
     compact_sync_run_meta,
     record_sync_run_in_db,
@@ -129,7 +130,7 @@ def sync_reelfarm_country(prefix, product_id="", country_id="", product_code="",
                 synced_at,
             )
             save_data(data)
-            return {
+            return normalized_sync_result("reelfarm", {
                 "ok": True,
                 "prefix": clean_prefix,
                 "synced_at": synced_at,
@@ -137,7 +138,7 @@ def sync_reelfarm_country(prefix, product_id="", country_id="", product_code="",
                 "material_count": country["materialCount"],
                 "product_cleanup": product_cleanup,
                 "relational_projection": relational_projection,
-            }
+            }, product_code=effective_product_code, country_code=country_code_for(country), records_count=1)
 
     raise ValueError("No matching country found for this prefix.")
 
@@ -173,18 +174,25 @@ def sync_reelfarm_prefix(prefix, product_id="", country_id="", concept_id="", pr
                 concept["reelFarmSyncedAt"] = synced_at
                 concept["count"] = reelfarm_runtime.creator_count(result)
                 save_data(data)
-                return {
+                return normalized_sync_result("reelfarm", {
                     "ok": True,
                     "prefix": clean_prefix,
                     "synced_at": synced_at,
                     "creator_count": concept["count"],
-                }
+                }, product_code=product_code_for(product), country_code=country_code_for(country), records_count=1)
 
     raise ValueError("No matching Format found for this prefix.")
 
 
 def sync_museon_clone_country(product_id="", country_id="", product_code="", country_code=""):
-    return museon_runtime.sync_clone_country(product_id, country_id, product_code, country_code)
+    result = museon_runtime.sync_clone_country(product_id, country_id, product_code, country_code)
+    return normalized_sync_result(
+        "museon_clone",
+        result,
+        product_code=product_code,
+        country_code=country_code,
+        records_count=0 if result.get("skipped") else 1,
+    )
 
 
 def sync_product_growth_snapshots(product_code, days=30):
