@@ -4465,13 +4465,8 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
         except ValueError as error:
             self.send_error_json(400, error)
 
-    def do_GET(self):
-        path = urlparse(self.path).path
-        if self.auth_required(path) and not self.is_authenticated():
-            self.send_error_json(401, "Unauthorized")
-            return
-
-        get_handlers = {
+    def get_route_handlers(self):
+        return {
             "/api/health": self.handle_health_get,
             "/api/auth/status": self.handle_auth_status_get,
             "/api/data": self.handle_data_get,
@@ -4491,7 +4486,31 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             "/api/reelfarm/matches": self.handle_reelfarm_matches_get,
             "/api/reelfarm/stored-country": self.handle_reelfarm_stored_country_get,
         }
-        handler = get_handlers.get(path)
+
+    def post_route_handlers(self):
+        return {
+            "/api/data": self.handle_data_save,
+            "/api/reset": self.handle_data_reset,
+            "/api/reelfarm/config": self.handle_reelfarm_config_save,
+            "/api/api-keys": self.handle_api_key_create,
+            "/api/api-keys/revoke": self.handle_api_key_revoke,
+            "/api/reelfarm/sync-prefix": self.handle_reelfarm_sync_prefix,
+            "/api/reelfarm/sync-country": self.handle_reelfarm_sync_country,
+            "/api/museon/sync-country": self.handle_museon_sync_country,
+            "/api/growth/sync-product": self.handle_growth_sync_product,
+            "/api/sync/daily-all": self.handle_daily_sync_all,
+            "/api/reports/daily-feishu": self.handle_daily_feishu_send,
+            "/api/reports/daily-feishu-analysis": self.handle_daily_feishu_analysis,
+            "/api/reelfarm/sync-all": self.handle_reelfarm_sync_all,
+        }
+
+    def do_GET(self):
+        path = urlparse(self.path).path
+        if self.auth_required(path) and not self.is_authenticated():
+            self.send_error_json(401, "Unauthorized")
+            return
+
+        handler = self.get_route_handlers().get(path)
         if handler:
             handler()
             return
@@ -4517,22 +4536,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             self.send_error_json(401, "Unauthorized")
             return
 
-        post_handlers = {
-            "/api/data": self.handle_data_save,
-            "/api/reset": self.handle_data_reset,
-            "/api/reelfarm/config": self.handle_reelfarm_config_save,
-            "/api/api-keys": self.handle_api_key_create,
-            "/api/api-keys/revoke": self.handle_api_key_revoke,
-            "/api/reelfarm/sync-prefix": self.handle_reelfarm_sync_prefix,
-            "/api/reelfarm/sync-country": self.handle_reelfarm_sync_country,
-            "/api/museon/sync-country": self.handle_museon_sync_country,
-            "/api/growth/sync-product": self.handle_growth_sync_product,
-            "/api/sync/daily-all": self.handle_daily_sync_all,
-            "/api/reports/daily-feishu": self.handle_daily_feishu_send,
-            "/api/reports/daily-feishu-analysis": self.handle_daily_feishu_analysis,
-            "/api/reelfarm/sync-all": self.handle_reelfarm_sync_all,
-        }
-        handler = post_handlers.get(path)
+        handler = self.post_route_handlers().get(path)
         if handler:
             handler()
             return
