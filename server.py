@@ -4063,6 +4063,64 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             {"Set-Cookie": cookie_header(SESSION_COOKIE, "", 0)},
         )
 
+    def handle_data_save(self):
+        payload, ok = self.read_json_payload()
+        if not ok:
+            return
+
+        data = self.payload_value(payload, "data")
+        if not isinstance(data, list):
+            self.send_error_json(400, "Expected { data: [...] }")
+            return
+
+        save_data(data)
+        self.send_json(200, {"ok": True, "data": data})
+
+    def handle_data_reset(self):
+        data = default_data()
+        save_data(data)
+        self.send_json(200, {"ok": True, "data": data})
+
+    def handle_reelfarm_config_save(self):
+        payload, ok = self.read_json_payload()
+        if not ok:
+            return
+
+        api_key = self.payload_text(payload, "api_key")
+        if api_key:
+            save_app_value(REELFARM_API_KEY, api_key)
+        else:
+            delete_app_value(REELFARM_API_KEY)
+
+        self.send_json(
+            200,
+            {
+                "ok": True,
+                "configured": bool(api_key),
+                "base_url": REELFARM_BASE_URL,
+            },
+        )
+
+    def handle_api_key_create(self):
+        payload, ok = self.read_json_payload({})
+        if not ok:
+            return
+
+        name = self.payload_text(payload, "name")
+        created = create_external_api_key(name, ["materials:read"])
+        self.send_json(200, {"ok": True, **created})
+
+    def handle_api_key_revoke(self):
+        payload, ok = self.read_json_payload({})
+        if not ok:
+            return
+
+        key_id = self.payload_text(payload, "id")
+        try:
+            self.send_json(200, {"ok": True, "record": revoke_external_api_key(key_id)})
+        except ValueError as error:
+            self.send_error_json(404, error)
+
     def read_json_body(self):
         length = int(self.headers.get("Content-Length", "0"))
         if length <= 0:
@@ -4320,66 +4378,23 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/data":
-            payload, ok = self.read_json_payload()
-            if not ok:
-                return
-
-            data = self.payload_value(payload, "data")
-            if not isinstance(data, list):
-                self.send_error_json(400, "Expected { data: [...] }")
-                return
-
-            save_data(data)
-            self.send_json(200, {"ok": True, "data": data})
+            self.handle_data_save()
             return
 
         if path == "/api/reset":
-            data = default_data()
-            save_data(data)
-            self.send_json(200, {"ok": True, "data": data})
+            self.handle_data_reset()
             return
 
         if path == "/api/reelfarm/config":
-            payload, ok = self.read_json_payload()
-            if not ok:
-                return
-
-            api_key = self.payload_text(payload, "api_key")
-            if api_key:
-                save_app_value(REELFARM_API_KEY, api_key)
-            else:
-                delete_app_value(REELFARM_API_KEY)
-
-            self.send_json(
-                200,
-                {
-                    "ok": True,
-                    "configured": bool(api_key),
-                    "base_url": REELFARM_BASE_URL,
-                },
-            )
+            self.handle_reelfarm_config_save()
             return
 
         if path == "/api/api-keys":
-            payload, ok = self.read_json_payload({})
-            if not ok:
-                return
-
-            name = self.payload_text(payload, "name")
-            created = create_external_api_key(name, ["materials:read"])
-            self.send_json(200, {"ok": True, **created})
+            self.handle_api_key_create()
             return
 
         if path == "/api/api-keys/revoke":
-            payload, ok = self.read_json_payload({})
-            if not ok:
-                return
-
-            key_id = self.payload_text(payload, "id")
-            try:
-                self.send_json(200, {"ok": True, "record": revoke_external_api_key(key_id)})
-            except ValueError as error:
-                self.send_error_json(404, error)
+            self.handle_api_key_revoke()
             return
 
         if path == "/api/reelfarm/sync-prefix":
