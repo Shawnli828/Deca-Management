@@ -1,7 +1,6 @@
-from typing import Any
-
 from fastapi import APIRouter, Body, Header, HTTPException, Request
 
+from api.schemas.requests import DataUpdateRequest, GrowthSyncProductRequest
 from server import (
     ai_materials_payload,
     business_material_report_payload,
@@ -37,9 +36,9 @@ def get_data(request: Request):
 
 
 @router.post("/api/data")
-def post_data(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
+def post_data(request: Request, payload: DataUpdateRequest = Body(default_factory=DataUpdateRequest)):
     require_dashboard_auth(request)
-    data = payload.get("data")
+    data = payload.data
     if not isinstance(data, list):
         raise HTTPException(status_code=400, detail="Expected { data: [...] }")
 
@@ -113,12 +112,12 @@ def get_business_material_report(request: Request):
 
 
 @router.post("/api/growth/sync-product")
-def post_growth_sync_product(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
+def post_growth_sync_product(request: Request, payload: GrowthSyncProductRequest = Body(default_factory=GrowthSyncProductRequest)):
     require_dashboard_auth(request)
     try:
         records = sync_product_growth_snapshots(
-            str(payload.get("product_code", "")).strip(),
-            payload.get("days", 30),
+            payload.product_code.strip(),
+            payload.days,
         )
         return {"ok": True, "count": len(records), "records": records}
     except ValueError as error:

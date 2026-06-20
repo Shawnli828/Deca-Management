@@ -1,7 +1,6 @@
-from typing import Any
-
 from fastapi import APIRouter, Body, HTTPException, Request
 
+from api.schemas.requests import AccountIssueRequest, AccountTagRequest, ProductTagRequest
 from server import (
     account_issues_payload,
     account_tags_payload,
@@ -28,19 +27,19 @@ def get_account_tags(request: Request, account_ids: str = ""):
 
 
 @router.post("/api/account-tags")
-def post_account_tags(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
+def post_account_tags(request: Request, payload: AccountTagRequest = Body(default_factory=AccountTagRequest)):
     require_dashboard_auth(request)
     try:
-        return add_account_tag(payload.get("account_id"), payload.get("tag"))
+        return add_account_tag(payload.account_id, payload.tag)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @router.post("/api/account-tags/delete")
-def post_account_tags_delete(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
+def post_account_tags_delete(request: Request, payload: AccountTagRequest = Body(default_factory=AccountTagRequest)):
     require_dashboard_auth(request)
     try:
-        return delete_account_tag(payload.get("account_id"), payload.get("tag"))
+        return delete_account_tag(payload.account_id, payload.tag)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
@@ -53,19 +52,19 @@ def get_account_issues(request: Request, account_ids: str = ""):
 
 
 @router.post("/api/account-issues")
-def post_account_issues(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
+def post_account_issues(request: Request, payload: AccountIssueRequest = Body(default_factory=AccountIssueRequest)):
     require_dashboard_auth(request)
     try:
-        return add_account_issue(payload.get("account_id"), payload.get("issue"))
+        return add_account_issue(payload.account_id, payload.issue)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @router.post("/api/account-issues/delete")
-def post_account_issues_delete(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
+def post_account_issues_delete(request: Request, payload: AccountIssueRequest = Body(default_factory=AccountIssueRequest)):
     require_dashboard_auth(request)
     try:
-        return delete_account_issue(payload.get("account_id"), payload.get("issue"))
+        return delete_account_issue(payload.account_id, payload.issue)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
@@ -80,18 +79,18 @@ def get_product_tags(request: Request, product_code: str = ""):
 
 
 @router.post("/api/product-tags")
-def post_product_tags(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
+def post_product_tags(request: Request, payload: ProductTagRequest = Body(default_factory=ProductTagRequest)):
     require_dashboard_auth(request)
     try:
-        return create_product_tag(payload.get("product_code"), payload.get("tag"))
+        return create_product_tag(payload.product_code, payload.tag)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @router.post("/api/product-tags/delete")
-def post_product_tags_delete(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
+def post_product_tags_delete(request: Request, payload: ProductTagRequest = Body(default_factory=ProductTagRequest)):
     require_dashboard_auth(request)
     try:
-        return delete_product_tag(payload.get("product_code"), payload.get("tag"), payload.get("remove_assignments", True))
+        return delete_product_tag(payload.product_code, payload.tag, payload.remove_assignments)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error

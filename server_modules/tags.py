@@ -2,6 +2,7 @@ import re
 from datetime import datetime, timezone
 
 from server_modules.common import stable_id
+from server_modules.repositories.tag_repository import fetch_account_tag_rows, fetch_product_tag_values
 
 
 def clean_tag(value):
@@ -28,16 +29,13 @@ def account_tags_payload(account_ids, *, connect_db, init_relational_schema, pla
     ids = [str(item or "").strip() for item in account_ids if str(item or "").strip()]
     if not ids:
         return {"ok": True, "tags": {}}
-    placeholders = ",".join([placeholder] * len(ids))
-    with connect_db() as conn:
-        init_relational_schema(conn)
-        rows = conn.execute(
-            f"SELECT account_id, tag FROM account_tags WHERE account_id IN ({placeholders}) ORDER BY tag",
-            tuple(ids),
-        ).fetchall()
     tags = {}
-    for row in rows:
-        data = dict(row)
+    for data in fetch_account_tag_rows(
+        ids,
+        connect_db=connect_db,
+        init_relational_schema=init_relational_schema,
+        placeholder=placeholder,
+    ):
         tags.setdefault(data.get("account_id"), []).append(data.get("tag"))
     return {"ok": True, "tags": tags}
 
@@ -46,28 +44,15 @@ def product_tags_payload(product_code, *, connect_db, init_relational_schema, pl
     product_code = str(product_code or "").strip().upper()
     if not product_code:
         raise ValueError("product_code is required.")
-    with connect_db() as conn:
-        init_relational_schema(conn)
-        option_rows = conn.execute(
-            f"SELECT tag FROM product_tags WHERE product_code = {placeholder}",
-            (product_code,),
-        ).fetchall()
-        used_rows = conn.execute(
-            f"""
-            SELECT DISTINCT tag.tag
-            FROM account_tags tag
-            JOIN accounts acc ON acc.id = tag.account_id
-            JOIN product_market_channels pmc ON pmc.id = acc.product_market_channel_id
-            JOIN product_markets pm ON pm.id = pmc.product_market_id
-            JOIN products p ON p.id = pm.product_id
-            WHERE p.code = {placeholder}
-            """,
-            (product_code,),
-        ).fetchall()
     tags = sorted({
-        clean_tag(dict(row).get("tag"))
-        for row in [*option_rows, *used_rows]
-        if clean_tag(dict(row).get("tag"))
+        clean_tag(tag)
+        for tag in fetch_product_tag_values(
+            product_code,
+            connect_db=connect_db,
+            init_relational_schema=init_relational_schema,
+            placeholder=placeholder,
+        )
+        if clean_tag(tag)
     }, key=lambda value: value.lower())
     return {"ok": True, "product_code": product_code, "tags": tags}
 

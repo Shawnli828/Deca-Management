@@ -109,6 +109,30 @@ def main():
         assert_true(len(account_rows) == 1, "account query should return seeded account")
         assert_true(account_rows[0].get("total_views") == 1234, "account query should return seeded views")
 
+        posts = client.get("/api/data/query", params={
+            "resource": "posts",
+            "product_code": "DM",
+            "country_code": "GE",
+            "date_from": "2026-06-13",
+            "date_to": "2026-06-19",
+        })
+        assert_status(posts, 200, "post query")
+        post_rows = posts.json().get("data") or []
+        assert_true(len(post_rows) == 1, "post query should return seeded post")
+        assert_true((post_rows[0].get("metrics") or {}).get("view_count") == 1234, "post query should return seeded metrics")
+
+        materials = client.get("/api/data/query", params={
+            "resource": "materials",
+            "product_code": "DM",
+            "country_code": "GE",
+            "date_from": "2026-06-13",
+            "date_to": "2026-06-19",
+        })
+        assert_status(materials, 200, "material query")
+        material_rows = materials.json().get("data") or []
+        assert_true(len(material_rows) == 1, "material query should return seeded material")
+        assert_true((material_rows[0].get("material") or {}).get("hook") == "contract hook", "material query should return seeded material fields")
+
         product_tag = client.post("/api/product-tags", json={"product_code": "DM", "tag": "Test Tag"})
         assert_status(product_tag, 200, "create product tag")
         assert_true("Test Tag" in product_tag.json().get("tags", []), "product tag should round trip")
@@ -124,6 +148,45 @@ def main():
         account_issues = client.get("/api/account-issues", params={"account_ids": "account-dm-ge-1"})
         assert_status(account_issues, 200, "get account issues")
         assert_true("Manual issue" in account_issues.json().get("issues", {}).get("account-dm-ge-1", []), "account issue should round trip")
+
+        api_key = client.post("/api/api-keys", json={"name": "Contract Key"})
+        assert_status(api_key, 200, "create api key")
+        api_key_body = api_key.json()
+        assert_true(api_key_body.get("key", "").startswith("deca_"), "api key should return raw key once")
+        key_id = (api_key_body.get("record") or {}).get("id")
+        key_list = client.get("/api/api-keys")
+        assert_status(key_list, 200, "list api keys")
+        assert_true(any(item.get("id") == key_id for item in key_list.json().get("keys", [])), "created api key should be listed")
+        revoked = client.post("/api/api-keys/revoke", json={"id": key_id})
+        assert_status(revoked, 200, "revoke api key")
+        assert_true((revoked.json().get("record") or {}).get("active") is False, "revoked api key should be inactive")
+
+        reelfarm_config = client.post("/api/reelfarm/config", json={"api_key": "contract-rf-key"})
+        assert_status(reelfarm_config, 200, "set reelfarm config")
+        assert_true(reelfarm_config.json().get("configured") is True, "reelfarm config should accept api key")
+        reelfarm_config_get = client.get("/api/reelfarm/config")
+        assert_status(reelfarm_config_get, 200, "get reelfarm config")
+        assert_true(reelfarm_config_get.json().get("configured") is True, "reelfarm config should round trip")
+        reelfarm_config_clear = client.post("/api/reelfarm/config", json={"api_key": ""})
+        assert_status(reelfarm_config_clear, 200, "clear reelfarm config")
+        assert_true(reelfarm_config_clear.json().get("configured") is False, "reelfarm config should clear api key")
+
+        publish_state = {
+            "assignments": [
+                {
+                    "id": "assignment-1",
+                    "person_id": "person-1",
+                    "person_name": "Owner",
+                    "product_id": "product-demi",
+                    "country_id": "country-germany",
+                }
+            ]
+        }
+        publish_post = client.post("/api/publish-check", json={"state": publish_state})
+        assert_status(publish_post, 200, "save publish check state")
+        publish_get = client.get("/api/publish-check")
+        assert_status(publish_get, 200, "get publish check state")
+        assert_true((publish_get.json().get("state") or {}).get("assignments") == publish_state["assignments"], "publish check state should round trip")
 
         stored_country = client.get("/api/reelfarm/stored-country", params={"product_code": "DM", "country_code": "GE"})
         assert_status(stored_country, 200, "stored country")
