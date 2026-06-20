@@ -47,6 +47,24 @@ export type SyncResultResponse = ApiResponseBase & {
   errors?: Array<Record<string, unknown>>;
 };
 
+export type SyncFreshnessSource = {
+  label?: string;
+  state?: 'fresh' | 'error' | 'missing' | string;
+  last_finished_at?: string;
+  last_success_at?: string | null;
+  status?: string;
+  records_count?: number;
+  error?: string;
+};
+
+export type SyncStatusResponse = ApiResponseBase & {
+  sources: Record<string, SyncFreshnessSource>;
+  freshness?: {
+    ok: boolean;
+    sources: Record<string, SyncFreshnessSource>;
+  };
+};
+
 export type ReelfarmSyncCountryResponse = SyncResultResponse & {
   creator_count: number;
   material_count: number;

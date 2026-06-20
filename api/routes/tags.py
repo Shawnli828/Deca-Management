@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Body, HTTPException, Request
 
 from api.schemas.requests import AccountIssueRequest, AccountTagRequest, ProductTagRequest
+from api.schemas.responses import FlexibleResponse
 from server_modules.services.tag_runtime import (
     account_issues_payload,
     account_tags_payload,
@@ -19,14 +20,14 @@ from .shared import require_dashboard_auth
 router = APIRouter()
 
 
-@router.get("/api/account-tags")
+@router.get("/api/account-tags", response_model=FlexibleResponse)
 def get_account_tags(request: Request, account_ids: str = ""):
     require_dashboard_auth(request)
     ids = [item.strip() for item in account_ids.split(",") if item.strip()]
     return account_tags_payload(ids)
 
 
-@router.post("/api/account-tags")
+@router.post("/api/account-tags", response_model=FlexibleResponse)
 def post_account_tags(request: Request, payload: AccountTagRequest = Body(default_factory=AccountTagRequest)):
     require_dashboard_auth(request)
     try:
@@ -35,7 +36,7 @@ def post_account_tags(request: Request, payload: AccountTagRequest = Body(defaul
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 
-@router.post("/api/account-tags/delete")
+@router.post("/api/account-tags/delete", response_model=FlexibleResponse)
 def post_account_tags_delete(request: Request, payload: AccountTagRequest = Body(default_factory=AccountTagRequest)):
     require_dashboard_auth(request)
     try:
@@ -44,14 +45,14 @@ def post_account_tags_delete(request: Request, payload: AccountTagRequest = Body
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 
-@router.get("/api/account-issues")
+@router.get("/api/account-issues", response_model=FlexibleResponse)
 def get_account_issues(request: Request, account_ids: str = ""):
     require_dashboard_auth(request)
     ids = [item.strip() for item in account_ids.split(",") if item.strip()]
     return account_issues_payload(ids)
 
 
-@router.post("/api/account-issues")
+@router.post("/api/account-issues", response_model=FlexibleResponse)
 def post_account_issues(request: Request, payload: AccountIssueRequest = Body(default_factory=AccountIssueRequest)):
     require_dashboard_auth(request)
     try:
@@ -60,7 +61,7 @@ def post_account_issues(request: Request, payload: AccountIssueRequest = Body(de
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 
-@router.post("/api/account-issues/delete")
+@router.post("/api/account-issues/delete", response_model=FlexibleResponse)
 def post_account_issues_delete(request: Request, payload: AccountIssueRequest = Body(default_factory=AccountIssueRequest)):
     require_dashboard_auth(request)
     try:
@@ -69,7 +70,7 @@ def post_account_issues_delete(request: Request, payload: AccountIssueRequest = 
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 
-@router.get("/api/product-tags")
+@router.get("/api/product-tags", response_model=FlexibleResponse)
 def get_product_tags(request: Request, product_code: str = ""):
     require_dashboard_auth(request)
     try:
@@ -78,7 +79,7 @@ def get_product_tags(request: Request, product_code: str = ""):
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 
-@router.post("/api/product-tags")
+@router.post("/api/product-tags", response_model=FlexibleResponse)
 def post_product_tags(request: Request, payload: ProductTagRequest = Body(default_factory=ProductTagRequest)):
     require_dashboard_auth(request)
     try:
@@ -87,7 +88,7 @@ def post_product_tags(request: Request, payload: ProductTagRequest = Body(defaul
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 
-@router.post("/api/product-tags/delete")
+@router.post("/api/product-tags/delete", response_model=FlexibleResponse)
 def post_product_tags_delete(request: Request, payload: ProductTagRequest = Body(default_factory=ProductTagRequest)):
     require_dashboard_auth(request)
     try:

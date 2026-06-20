@@ -42,6 +42,38 @@ def assert_has_keys(mapping, keys, label):
         raise AssertionError(f"{label}: missing keys {', '.join(missing)}")
 
 
+def assert_openapi_response_schemas(client):
+    response = client.get("/api/openapi.json")
+    assert_status(response, 200, "openapi")
+    paths = response.json().get("paths") or {}
+    required = [
+        ("get", "/api/health"),
+        ("get", "/api/data"),
+        ("post", "/api/data"),
+        ("get", "/api/data/query"),
+        ("get", "/api/growth"),
+        ("get", "/api/business-material-report"),
+        ("get", "/api/reports/daily-feishu-preview"),
+        ("get", "/api/account-tags"),
+        ("post", "/api/account-tags"),
+        ("get", "/api/api-keys"),
+        ("post", "/api/api-keys"),
+        ("get", "/api/sync/status"),
+        ("post", "/api/reelfarm/sync-country"),
+        ("post", "/api/museon/sync-country"),
+    ]
+    for method, path in required:
+        operation = (paths.get(path) or {}).get(method) or {}
+        schema = (
+            operation.get("responses", {})
+            .get("200", {})
+            .get("content", {})
+            .get("application/json", {})
+            .get("schema")
+        )
+        assert_true(schema, f"{method.upper()} {path} should declare a 200 response schema")
+
+
 def seed_contract_database(app_runtime):
     from server_modules.db_core import upsert_row
 
@@ -94,10 +126,14 @@ def main():
         seed_contract_database(app_runtime)
 
         client = TestClient(app)
+        assert_openapi_response_schemas(client)
 
         health = client.get("/api/health")
         assert_status(health, 200, "health")
         assert_true(health.json().get("database_backend") == "sqlite", "health should use sqlite test database")
+
+        sync_status = client.get("/api/sync/status")
+        assert_status(sync_status, 401, "sync status auth gate")
 
         unauthenticated = client.get("/api/data")
         assert_status(unauthenticated, 401, "dashboard auth gate")
@@ -105,6 +141,11 @@ def main():
         login = client.post("/api/auth/login", json={"username": ADMIN_USERNAME, "password": ADMIN_PASSWORD})
         assert_status(login, 200, "login")
         assert_true(login.json().get("authenticated") is True, "login should authenticate")
+
+        sync_status = client.get("/api/sync/status")
+        assert_status(sync_status, 200, "sync status")
+        assert_has_keys(sync_status.json(), ["ok", "sources", "freshness", "generated_at"], "sync status contract")
+        assert_has_keys(sync_status.json().get("freshness") or {}, ["ok", "sources"], "sync freshness contract")
 
         data = client.get("/api/data")
         assert_status(data, 200, "data")

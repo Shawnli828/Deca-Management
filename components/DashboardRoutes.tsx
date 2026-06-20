@@ -7,6 +7,7 @@ import { FeishuReportPage } from '@/components/FeishuReportPage';
 import { GrowthDashboard } from '@/components/GrowthDashboard';
 import { PublishCheckBoard } from '@/components/PublishCheckBoard';
 import { CloneSlideshowToolPanel, SlideshowToolPanel } from '@/components/SlideshowToolPanels';
+import type { SyncStatusResponse } from '@/lib/api/types';
 import type {
   Country,
   ExternalApiKey,
@@ -49,6 +50,8 @@ type DashboardRoutesProps = {
   postLoading: Record<string, boolean>;
   slideIndexes: Record<string, number>;
   productTags: Record<string, string[]>;
+  syncStatus: SyncStatusResponse | null;
+  syncStatusLoading: boolean;
   publishCheck: PublishCheckState | null;
   publishCheckRunning: boolean;
   publishReminderSending: boolean;
@@ -69,6 +72,7 @@ type DashboardRoutesProps = {
   moveSlide: (videoId: string, direction: number, total: number) => void;
   addCardTag: (card: ReelFarmCard, tag: string) => void | Promise<void>;
   removeCardTag: (card: ReelFarmCard, tag: string) => void | Promise<void>;
+  loadSyncStatus: () => void | Promise<unknown>;
   savePublishCheck: (state: PublishCheckState) => Promise<void>;
   runPublishCheckNow: () => Promise<void>;
   sendPublishReminderNow: () => Promise<void>;
@@ -97,6 +101,8 @@ export function DashboardRoutes({
   postLoading,
   slideIndexes,
   productTags,
+  syncStatus,
+  syncStatusLoading,
   publishCheck,
   publishCheckRunning,
   publishReminderSending,
@@ -117,6 +123,7 @@ export function DashboardRoutes({
   moveSlide,
   addCardTag,
   removeCardTag,
+  loadSyncStatus,
   savePublishCheck,
   runPublishCheckNow,
   sendPublishReminderNow,
@@ -152,6 +159,8 @@ export function DashboardRoutes({
           postLoading={postLoading}
           slideIndexes={slideIndexes}
           productTags={productTags}
+          syncStatus={syncStatus}
+          syncStatusLoading={syncStatusLoading}
           setPage={setPage}
           setEditingProductId={setEditingProductId}
           setCountrySettingsOpen={setCountrySettingsOpen}
@@ -166,6 +175,7 @@ export function DashboardRoutes({
           moveSlide={moveSlide}
           addCardTag={addCardTag}
           removeCardTag={removeCardTag}
+          loadSyncStatus={loadSyncStatus}
         />
       </section>
       <section className={`tool-page ${tool === 'cloneSlideshow' ? 'active' : ''}`}>
@@ -176,6 +186,8 @@ export function DashboardRoutes({
           selectedProduct={selectedProduct}
           selectedCloneProduct={selectedCloneProduct}
           syncProductId={syncProductId}
+          syncStatus={syncStatus}
+          syncStatusLoading={syncStatusLoading}
           setPage={setPage}
           setEditingProductId={setEditingProductId}
           setCountrySettingsOpen={setCountrySettingsOpen}
@@ -183,6 +195,7 @@ export function DashboardRoutes({
           selectCountry={selectCountry}
           addProduct={addProduct}
           syncCloneProductCountries={syncCloneProductCountries}
+          loadSyncStatus={loadSyncStatus}
         />
       </section>
       <section className={`tool-page ${tool === 'cloudPhones' ? 'active' : ''}`}>

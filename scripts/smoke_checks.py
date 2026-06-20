@@ -26,7 +26,7 @@ from server_modules.metrics_service import (  # noqa: E402
     summarize_business_report_rows,
     summarize_daily_report_products,
 )
-from server_modules.sync_status import format_sync_readiness_line, sync_status_from_runs  # noqa: E402
+from server_modules.sync_status import format_sync_readiness_line, sync_freshness_from_runs, sync_status_from_runs  # noqa: E402
 from server_modules.sync_result import error_sync_result, normalized_sync_result  # noqa: E402
 
 
@@ -110,6 +110,20 @@ def main():
     })
     assert_equal(sync_status["sources"]["reelfarm"]["label"], "RF", "sync status label")
     assert_equal(sync_status["sources"]["reelfarm"]["records_count"], 12, "sync status record count")
+    freshness = sync_freshness_from_runs({
+        "reelfarm": {
+            "status": "success",
+            "finished_at": "2026-06-14T00:30:00+00:00",
+            "records_count": 12,
+        },
+        "museon_clone": {
+            "status": "error",
+            "finished_at": "2026-06-14T00:31:00+00:00",
+            "error": "timeout",
+        },
+    })
+    assert_equal(freshness["sources"]["reelfarm"]["state"], "fresh", "sync freshness fresh state")
+    assert_equal(freshness["sources"]["museon_clone"]["state"], "error", "sync freshness error state")
 
     before_material_cutoff = parse_iso_datetime("2026-06-13T15:58:59+00:00")
     at_material_cutoff = parse_iso_datetime("2026-06-13T15:59:00+00:00")

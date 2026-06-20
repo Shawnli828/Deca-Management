@@ -1,7 +1,13 @@
 import { apiFetch, jsonPostInit } from './client';
-import type { MuseonSyncCountryResponse, ReelfarmSyncCountryResponse } from './types';
+import type { MuseonSyncCountryResponse, ReelfarmSyncCountryResponse, SyncStatusResponse } from './types';
 
 export const syncApi = {
+  getSyncStatus: () =>
+    apiFetch<SyncStatusResponse>(
+      '/api/sync/status',
+      undefined,
+      'Failed to load sync status'
+    ),
   syncCountry: (payload: Record<string, unknown>) =>
     apiFetch<ReelfarmSyncCountryResponse>(
       '/api/reelfarm/sync-country',

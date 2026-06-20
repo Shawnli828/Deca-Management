@@ -42,6 +42,8 @@ export default function DashboardPage() {
           postLoading={dashboard.postLoading}
           slideIndexes={dashboard.slideIndexes}
           productTags={dashboard.productTags}
+          syncStatus={dashboard.syncStatus}
+          syncStatusLoading={dashboard.syncStatusLoading}
           publishCheck={dashboard.publishCheck}
           publishCheckRunning={dashboard.publishCheckRunning}
           publishReminderSending={dashboard.publishReminderSending}
@@ -62,6 +64,7 @@ export default function DashboardPage() {
           moveSlide={dashboard.moveSlide}
           addCardTag={dashboard.addCardTag}
           removeCardTag={dashboard.removeCardTag}
+          loadSyncStatus={dashboard.loadSyncStatus}
           savePublishCheck={dashboard.savePublishCheck}
           runPublishCheckNow={dashboard.runPublishCheckNow}
           sendPublishReminderNow={dashboard.sendPublishReminderNow}

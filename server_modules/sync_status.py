@@ -149,8 +149,37 @@ def sync_status_from_runs(runs):
     }
 
 
+def sync_freshness_from_runs(runs):
+    runs = runs or {}
+    sources = {}
+    for source, run in runs.items():
+        run = run or {}
+        status = run.get("status")
+        finished_at = run.get("finished_at")
+        state = "missing"
+        if finished_at and status == "success":
+            state = "fresh"
+        elif finished_at:
+            state = "error"
+        sources[source] = {
+            "label": SYNC_RUN_SOURCE_LABELS.get(source, source),
+            "state": state,
+            "last_finished_at": finished_at,
+            "last_success_at": finished_at if status == "success" else None,
+            "status": status,
+            "records_count": run.get("records_count"),
+            "error": run.get("error"),
+        }
+    return {
+        "ok": all(item.get("state") == "fresh" for item in sources.values()) if sources else False,
+        "sources": sources,
+    }
+
+
 def sync_status_payload_from_runs(runs, generated_at):
     payload = sync_status_from_runs(runs)
+    payload["freshness"] = sync_freshness_from_runs(runs)
+    payload["ok"] = payload["freshness"]["ok"]
     payload["generated_at"] = generated_at
     return payload
 

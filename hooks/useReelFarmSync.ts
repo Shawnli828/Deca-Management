@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { api } from '@/lib/api';
+import type { SyncStatusResponse } from '@/lib/api/types';
 import {
   applyCountrySyncPayload,
   SYNC_ALL_COUNTRY_DELAY_MS,
@@ -55,6 +56,19 @@ export function useReelFarmSync({
   const [syncProductId, setSyncProductId] = useState('');
   const [syncAllRunning, setSyncAllRunning] = useState(false);
   const [syncAllProgress, setSyncAllProgress] = useState('');
+  const [syncStatus, setSyncStatus] = useState<SyncStatusResponse | null>(null);
+  const [syncStatusLoading, setSyncStatusLoading] = useState(false);
+
+  const loadSyncStatus = useCallback(async () => {
+    setSyncStatusLoading(true);
+    try {
+      const payload = await api.getSyncStatus();
+      setSyncStatus(payload);
+      return payload;
+    } finally {
+      setSyncStatusLoading(false);
+    }
+  }, []);
 
   function applySyncResult(productId: string, countryId: string, payload: CountrySyncResult) {
     setProducts(prev => applyCountrySyncPayload(prev, productId, countryId, payload));
@@ -77,6 +91,7 @@ export function useReelFarmSync({
       await loadAccounts(selectedProduct, selectedCountry, true);
       await loadProductKpis(selectedProduct);
       await loadCountryKpis(selectedProduct, selectedCountry);
+      await loadSyncStatus().catch(() => null);
       onStatus(`当前区同步完成：${payload.creator_count} 个账号，${payload.material_count} 个素材`);
     } catch (error: any) {
       onStatus(error?.message || 'ReelFarm 同步失败', true);
@@ -112,6 +127,7 @@ export function useReelFarmSync({
         if (index < countries.length - 1) await wait(SYNC_PRODUCT_COUNTRY_DELAY_MS);
       }
       await loadProductKpis(product);
+      await loadSyncStatus().catch(() => null);
       if (selectedProductId === product.id && page === 'country') {
         await loadCountryKpis(selectedProduct, selectedCountry);
         await loadAccounts(selectedProduct, selectedCountry, true);
@@ -147,6 +163,7 @@ export function useReelFarmSync({
         if (index < countries.length - 1) await wait(SYNC_CLONE_COUNTRY_DELAY_MS);
       }
       await loadCloneProductData(products);
+      await loadSyncStatus().catch(() => null);
       onStatus(failed ? `Clone ${product.name} 同步完成：${failed} 个地区失败` : `Clone ${product.name} 已同步完成`, Boolean(failed));
     } finally {
       setSyncPrefix('');
@@ -185,6 +202,7 @@ export function useReelFarmSync({
       }
       onStatus(failed ? `同步全部完成：${failed} 个地区失败，可单独重试` : '同步全部完成', Boolean(failed));
       await Promise.all(products.map(product => loadProductKpis(product)));
+      await loadSyncStatus().catch(() => null);
       if (page === 'country') await loadCountryKpis(selectedProduct, selectedCountry);
       if (page === 'country') {
         await loadAccounts(selectedProduct, selectedCountry, true);
@@ -201,6 +219,9 @@ export function useReelFarmSync({
     syncProductId,
     syncAllRunning,
     syncAllProgress,
+    syncStatus,
+    syncStatusLoading,
+    loadSyncStatus,
     syncCountry,
     syncProductCountries,
     syncCloneProductCountries,

@@ -12,7 +12,15 @@ from server_modules.common import (
     stable_id,
     utc_snapshot_date,
 )
-from server_modules.data_query_helpers import post_datetime_bound as post_datetime_bound_impl
+from server_modules.data_query_helpers import (
+    pagination_payload,
+    post_datetime_bound as post_datetime_bound_impl,
+    query_days_window,
+    query_limit_offset,
+    query_value,
+    relational_base_from,
+)
+from server_modules.detailed_rows import detailed_row, detailed_select
 from server_modules.db_core import upsert_row as upsert_row_impl
 from server_modules.museon_client import (
     museon_all_posts as museon_all_posts_impl,
@@ -31,7 +39,7 @@ from server_modules.museon_utils import (
 )
 from server_modules.product_config import COUNTRY_CODES, country_code_for, product_code_for
 from server_modules.settings import MUSEON_API_KEY, MUSEON_BASE_URL, MUSEON_USER_AGENT, MUSEON_WORKSPACE_ID
-from server_modules.time_windows import business_material_day_window
+from server_modules.time_windows import business_material_day_window, parse_iso_datetime
 
 
 def upsert_row(conn, table, values, conflict_cols, update_cols=None):
@@ -391,3 +399,229 @@ def sync_clone_country(product_id="", country_id="", product_code="", country_co
         "synced_at": synced_at,
         "duration_total_seconds": round(time.perf_counter() - started, 3),
     }
+
+
+def local_product_country_context(product_code, country_code):
+    products = load_data()
+    product_context = {"id": None, "code": product_code, "name": product_code}
+    country_context = {"id": None, "code": country_code, "name": country_code}
+    for product in products if isinstance(products, list) else []:
+        code = product_code_for(product)
+        if code != product_code:
+            continue
+        product_context = {"id": product.get("id"), "code": code, "name": product.get("name") or product_code}
+        for country in product.get("countries") or []:
+            ccode = country_code_for(country)
+            if ccode == country_code:
+                country_context = {"id": country.get("id"), "code": ccode, "name": country.get("name") or country_code}
+                break
+        break
+    return product_context, country_context
+
+
+def reelfarm_account_lookup(product_code, country_code, query_reelfarm_accounts_fn):
+    lookup = {}
+    query = {"product_code": [product_code], "country_code": [country_code]}
+    for row in query_reelfarm_accounts_fn(query):
+        username = normalize_username(row.get("username") or row.get("display_name"))
+        if username:
+            lookup[username] = row
+    return lookup
+
+
+def query_clone_accounts(query, attach_account_issues_fn=lambda rows: rows):
+    product_code = query_value(query, "product_code").upper()
+    country_code = (query_value(query, "country_code") or query_value(query, "market_code")).upper()
+    date_from = query_value(query, "date_from")
+    date_to = query_value(query, "date_to")
+    if not date_from and not date_to:
+        date_from, date_to = query_days_window(query)
+    campaign = clone_campaign(product_code, country_code)
+    if not campaign:
+        return []
+
+    campaign_id = campaign.get("id")
+    posts = all_posts(campaign_id, date_from, date_to)
+    grouped = {}
+    for post in posts:
+        account = museon_account_from_post(post)
+        username_key = normalize_username(account.get("username"))
+        if not username_key:
+            continue
+        row = grouped.setdefault(username_key, {
+            "account": account,
+            "posts": 0,
+            "views": 0,
+            "likes": 0,
+            "comments": 0,
+            "shares": 0,
+            "bookmarks": 0,
+            "latest_post_at": "",
+        })
+        row["posts"] += 1
+        metrics = museon_post_metrics(post)
+        row["views"] += metrics["view_count"]
+        row["likes"] += metrics["like_count"]
+        row["comments"] += metrics["comment_count"]
+        row["shares"] += metrics["share_count"]
+        row["bookmarks"] += metrics["bookmark_count"]
+        published_at = post.get("published_at") or post.get("created_at") or ""
+        if published_at and published_at > row["latest_post_at"]:
+            row["latest_post_at"] = published_at
+
+    rows = []
+    for username_key, grouped_row in grouped.items():
+        account = grouped_row["account"]
+        synthetic_id = f"museon:{product_code}:{country_code}:{username_key}"
+        rows.append({
+            "account_id": synthetic_id,
+            "reelfarm_account_id": None,
+            "museon_account_id": account.get("id"),
+            "username": account.get("username"),
+            "display_name": account.get("display_name") or account.get("username"),
+            "avatar_url": account.get("avatar_url"),
+            "status": campaign.get("status") or "active",
+            "automation_count": 1,
+            "automation_name": campaign.get("name") or campaign.get("title"),
+            "automation_names": campaign.get("name") or campaign.get("title"),
+            "publish_method": "rpa",
+            "material_count": grouped_row["posts"],
+            "post_count": grouped_row["posts"],
+            "total_views": grouped_row["views"],
+            "total_likes": grouped_row["likes"],
+            "total_comments": grouped_row["comments"],
+            "total_shares": grouped_row["shares"],
+            "total_bookmarks": grouped_row["bookmarks"],
+            "latest_post_at": grouped_row["latest_post_at"],
+            "last_synced_at": grouped_row["latest_post_at"],
+            "data_source": "museon_clone",
+            "campaign_id": campaign_id,
+            "campaign_name": campaign.get("name") or campaign.get("title"),
+        })
+    sorted_rows = sorted(
+        rows,
+        key=lambda row: (int(row.get("total_views") or 0), int(row.get("post_count") or 0)),
+        reverse=True,
+    )
+    return attach_account_issues_fn(sorted_rows)
+
+
+def reelfarm_detailed_rows_for_username(product_code, country_code, username):
+    username_key = normalize_username(username)
+    if not username_key:
+        return []
+    placeholder = db_placeholder()
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        rows = conn.execute(
+            f"""
+            SELECT {detailed_select()}
+            {relational_base_from()}
+            WHERE ch.code = {placeholder}
+              AND p.code = {placeholder}
+              AND m.code = {placeholder}
+              AND LOWER(REPLACE(acc.username, '@', '')) = {placeholder}
+              AND post.id IS NOT NULL
+            ORDER BY post.published_at DESC
+            LIMIT 500
+            """,
+            ("TIKTOK", product_code, country_code, username_key),
+        ).fetchall()
+    return [detailed_row(row) for row in rows]
+
+
+def nearest_reelfarm_row(museon_post, rf_rows):
+    published = parse_iso_datetime(museon_post.get("published_at"))
+    if not published:
+        return None
+    best = None
+    best_delta = 10**9
+    for row in rf_rows:
+        candidate = parse_iso_datetime((row.get("post") or {}).get("published_at"))
+        if not candidate:
+            continue
+        delta = abs((candidate - published).total_seconds())
+        if delta < best_delta:
+            best_delta = delta
+            best = row
+    return best if best and best_delta <= 15 * 60 else None
+
+
+def post_to_detailed_row(post, product, country, rf_match=None):
+    account = museon_account_from_post(post)
+    metrics = museon_post_metrics(post)
+    published_at = post.get("published_at") or post.get("created_at") or ""
+    content_id = post.get("content_id") or post.get("id")
+    images = museon_post_images(post)
+    if not images and content_id:
+        images = content_download_images(content_id)
+    base = rf_match or {
+        "product": product,
+        "country": country,
+        "market": country,
+        "account": {},
+        "automation": {},
+        "material": {},
+        "post": {},
+        "metrics": {},
+    }
+    material = dict(base.get("material") or {})
+    material.update({
+        "id": material.get("id") or post.get("content_id") or post.get("id"),
+        "reelfarm_video_id": material.get("reelfarm_video_id") or post.get("content_id"),
+        "video_type": material.get("video_type") or post.get("content_type") or "slideshow",
+        "hook": material.get("hook") or post.get("title") or post.get("description"),
+        "prompt": material.get("prompt") or post.get("description"),
+        "slideshow_images": material.get("slideshow_images") or images,
+        "slide_count": material.get("slide_count") or len(images),
+        "status": material.get("status") or post.get("status"),
+    })
+    return {
+        "product": product,
+        "country": country,
+        "market": country,
+        "account": {
+            "id": (base.get("account") or {}).get("id") or f"museon:{product.get('code')}:{country.get('code')}:{normalize_username(account.get('username'))}",
+            "reelfarm_account_id": (base.get("account") or {}).get("reelfarm_account_id"),
+            "museon_account_id": account.get("id"),
+            "username": account.get("username"),
+            "display_name": account.get("display_name"),
+            "avatar_url": account.get("avatar_url") or (base.get("account") or {}).get("avatar_url"),
+            "status": account.get("status"),
+        },
+        "automation": base.get("automation") or {},
+        "material": material,
+        "post": {
+            "id": post.get("id"),
+            "reelfarm_post_id": (base.get("post") or {}).get("reelfarm_post_id"),
+            "museon_post_id": post.get("id"),
+            "status": post.get("status"),
+            "title": post.get("title") or post.get("description"),
+            "published_at": published_at,
+            "published_at_readable": readable_utc_datetime(published_at),
+            "synced_at": post.get("synced_at") or post.get("updated_at"),
+        },
+        "metrics": metrics,
+    }
+
+
+def query_clone_account_posts(query):
+    product_code = query_value(query, "product_code").upper()
+    country_code = (query_value(query, "country_code") or query_value(query, "market_code")).upper()
+    account_id = query_value(query, "account_id")
+    date_from = query_value(query, "date_from")
+    date_to = query_value(query, "date_to")
+    if not date_from and not date_to:
+        date_from, date_to = query_days_window(query)
+    limit, offset = query_limit_offset(query)
+    campaign = clone_campaign(product_code, country_code)
+    if not campaign:
+        return [], pagination_payload(limit, offset, [], 0)
+    username = account_id
+    if account_id.startswith("museon:"):
+        username = account_id.split(":")[-1]
+    page = (offset // limit) + 1
+    post_rows, total = posts(campaign.get("id"), date_from, date_to, username=username, page=page, page_size=limit)
+    product, country = local_product_country_context(product_code, country_code)
+    rows = [post_to_detailed_row(post, product, country) for post in post_rows]
+    return rows, pagination_payload(limit, offset, rows, total)

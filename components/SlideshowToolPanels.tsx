@@ -3,6 +3,8 @@
 import { CountryList } from '@/components/CountryList';
 import { CountryWorkspace } from '@/components/CountryWorkspace';
 import { ProductList } from '@/components/ProductList';
+import { SyncStatusStrip } from '@/components/SyncStatusStrip';
+import type { SyncStatusResponse } from '@/lib/api/types';
 import type {
   Country,
   Product,
@@ -29,6 +31,8 @@ type SlideshowToolPanelProps = {
   postLoading: Record<string, boolean>;
   slideIndexes: Record<string, number>;
   productTags: Record<string, string[]>;
+  syncStatus: SyncStatusResponse | null;
+  syncStatusLoading: boolean;
   setPage: (page: DashboardPageState) => void;
   setEditingProductId: (id: string) => void;
   setCountrySettingsOpen: (open: boolean) => void;
@@ -43,6 +47,7 @@ type SlideshowToolPanelProps = {
   moveSlide: (videoId: string, direction: number, total: number) => void;
   addCardTag: (card: ReelFarmCard, tag: string) => void | Promise<void>;
   removeCardTag: (card: ReelFarmCard, tag: string) => void | Promise<void>;
+  loadSyncStatus: () => void | Promise<unknown>;
 };
 
 type CloneSlideshowToolPanelProps = {
@@ -52,6 +57,8 @@ type CloneSlideshowToolPanelProps = {
   selectedProduct: Product | null;
   selectedCloneProduct: Product | null;
   syncProductId: string;
+  syncStatus: SyncStatusResponse | null;
+  syncStatusLoading: boolean;
   setPage: (page: DashboardPageState) => void;
   setEditingProductId: (id: string) => void;
   setCountrySettingsOpen: (open: boolean) => void;
@@ -59,6 +66,7 @@ type CloneSlideshowToolPanelProps = {
   selectCountry: (country: Country) => void;
   addProduct: () => void | Promise<void>;
   syncCloneProductCountries: (product: Product) => void | Promise<void>;
+  loadSyncStatus: () => void | Promise<unknown>;
 };
 
 export function SlideshowToolPanel({
@@ -77,6 +85,8 @@ export function SlideshowToolPanel({
   postLoading,
   slideIndexes,
   productTags,
+  syncStatus,
+  syncStatusLoading,
   setPage,
   setEditingProductId,
   setCountrySettingsOpen,
@@ -90,10 +100,12 @@ export function SlideshowToolPanel({
   pagePosts,
   moveSlide,
   addCardTag,
-  removeCardTag
+  removeCardTag,
+  loadSyncStatus
 }: SlideshowToolPanelProps) {
   return (
     <section className="page-shell slideshow-shell">
+      <SyncStatusStrip syncStatus={syncStatus} loading={syncStatusLoading} onRefresh={loadSyncStatus} />
       {page === 'products' ? (
         <ProductList
           products={products}
@@ -147,16 +159,20 @@ export function CloneSlideshowToolPanel({
   selectedProduct,
   selectedCloneProduct,
   syncProductId,
+  syncStatus,
+  syncStatusLoading,
   setPage,
   setEditingProductId,
   setCountrySettingsOpen,
   selectProduct,
   selectCountry,
   addProduct,
-  syncCloneProductCountries
+  syncCloneProductCountries,
+  loadSyncStatus
 }: CloneSlideshowToolPanelProps) {
   return (
     <section className="page-shell slideshow-shell">
+      <SyncStatusStrip syncStatus={syncStatus} loading={syncStatusLoading} onRefresh={loadSyncStatus} />
       {page === 'products' ? (
         <ProductList
           products={cloneDisplayProducts}
