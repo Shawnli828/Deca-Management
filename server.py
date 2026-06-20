@@ -166,6 +166,11 @@ from server_modules.data_query_helpers import (
     row_dict as row_dict_impl,
 )
 from server_modules.data_query_router import data_query_payload as data_query_payload_impl
+from server_modules.queries.account_queries import query_reelfarm_accounts as query_reelfarm_accounts_impl
+from server_modules.queries.post_queries import (
+    query_materials as query_materials_impl,
+    query_posts as query_posts_impl,
+)
 from server_modules.detailed_rows import (
     detailed_row as detailed_row_impl,
     detailed_select as detailed_select_impl,
@@ -3023,172 +3028,23 @@ def query_museon_clone_account_posts(query):
 
 
 def query_reelfarm_accounts(query):
-    channel_code = data_source_channel_code(query_value(query, "source"))
-    date_from = query_value(query, "date_from")
-    date_to = query_value(query, "date_to")
-    if not date_from and not date_to:
-        date_from, date_to = query_days_window(query)
-    metric_date_column = "mat.created_at" if channel_code == "TIKTOK" else "post.published_at"
-    placeholder = db_placeholder()
-
-    account_where = ["ch.code = " + placeholder]
-    account_params = [channel_code]
-    product_code = query_value(query, "product_code").upper()
-    market_code = (query_value(query, "country_code") or query_value(query, "market_code")).upper()
-    account_id = query_value(query, "account_id")
-    automation_id = query_value(query, "automation_id")
-    if product_code:
-        account_where.append("p.code = " + placeholder)
-        account_params.append(product_code)
-    if market_code:
-        account_where.append("m.code = " + placeholder)
-        account_params.append(market_code)
-    if account_id:
-        account_where.append(f"(acc.id = {placeholder} OR acc.reelfarm_account_id = {placeholder} OR acc.username = {placeholder})")
-        account_params.extend([account_id, account_id, account_id.lstrip("@")])
-    if automation_id:
-        account_where.append(f"(a.id = {placeholder} OR a.reelfarm_automation_id = {placeholder})")
-        account_params.extend([automation_id, automation_id])
-    if channel_code == "TIKTOK":
-        account_where.append(reelfarm_dashboard_automation_condition("a"))
-    account_where.append("acc.id IS NOT NULL")
-    account_where_sql = " AND ".join(account_where)
-
-    metric_where_sql, metric_params = common_where(query, include_post_dates=False)
-    metric_where = [metric_where_sql, "acc.id IS NOT NULL", "post.id IS NOT NULL"]
-    if channel_code == "TIKTOK":
-        metric_where.append(reelfarm_expected_automation_condition("a"))
-    if date_from:
-        metric_where.append(f"{metric_date_column} >= {placeholder}")
-        metric_params.append(post_datetime_bound(date_from))
-    if date_to:
-        metric_where.append(f"{metric_date_column} <= {placeholder}")
-        metric_params.append(post_datetime_bound(date_to, end=True))
-    metric_where_sql = " AND ".join(metric_where)
-
-    automation_names_sql = (
-        "STRING_AGG(DISTINCT a.name, ' | ')"
-        if using_postgres()
-        else "GROUP_CONCAT(DISTINCT a.name)"
+    return query_reelfarm_accounts_impl(
+        query,
+        data_source_channel_code=data_source_channel_code,
+        query_value=query_value,
+        query_days_window=query_days_window,
+        post_datetime_bound=post_datetime_bound,
+        db_placeholder=db_placeholder,
+        common_where=common_where,
+        reelfarm_dashboard_automation_condition=reelfarm_dashboard_automation_condition,
+        reelfarm_expected_automation_condition=reelfarm_expected_automation_condition,
+        using_postgres=using_postgres,
+        connect_db=connect_db,
+        init_relational_schema=init_relational_schema,
+        relational_base_from=relational_base_from,
+        row_dict=row_dict,
+        normalize_reelfarm_account_row=normalize_reelfarm_account_row,
     )
-    expected_account_sql = (
-        f"CASE WHEN SUM(CASE WHEN {reelfarm_expected_automation_condition('a')} THEN 1 ELSE 0 END) > 0 THEN 1 ELSE 0 END"
-        if channel_code == "TIKTOK"
-        else "1"
-    )
-    with connect_db() as conn:
-        init_relational_schema(conn)
-        rows = conn.execute(
-            f"""
-            WITH account_base AS (
-                SELECT
-                    p.id AS product_id,
-                    p.code AS product_code,
-                    p.name AS product_name,
-                    m.id AS country_id,
-                    m.id AS market_id,
-                    m.code AS country_code,
-                    m.code AS market_code,
-                    m.name AS country_name,
-                    pmc.id AS product_market_channel_id,
-                    acc.id AS account_id,
-                    acc.reelfarm_account_id,
-                    acc.username,
-                    acc.display_name,
-                    acc.avatar_url,
-                    CASE
-                        WHEN SUM(CASE WHEN LOWER(COALESCE(a.status, '')) = 'active' THEN 1 ELSE 0 END) > 0 THEN 'active'
-                        ELSE COALESCE(MAX(NULLIF(a.status, '')), '')
-                    END AS status,
-                    COUNT(DISTINCT a.id) AS automation_count,
-                    MAX(a.name) AS automation_name,
-                    {automation_names_sql} AS automation_names,
-                    MAX(a.post_mode) AS post_mode,
-                    CASE
-                        WHEN SUM(CASE WHEN a.publish_method = 'manual' THEN 1 ELSE 0 END) > 0 THEN 'manual'
-                        WHEN SUM(CASE WHEN a.publish_method = 'rpa' THEN 1 ELSE 0 END) > 0 THEN 'rpa'
-                        ELSE 'api'
-                    END AS publish_method,
-                    {expected_account_sql} AS expected_account_count,
-                    MAX(a.synced_at) AS base_synced_at
-                FROM products p
-                JOIN product_markets pm ON pm.product_id = p.id
-                JOIN markets m ON m.id = pm.market_id
-                JOIN product_market_channels pmc ON pmc.product_market_id = pm.id
-                JOIN channels ch ON ch.id = pmc.channel_id
-                LEFT JOIN automations a ON a.product_market_channel_id = pmc.id
-                LEFT JOIN accounts acc ON acc.id = a.account_id
-                WHERE {account_where_sql}
-                GROUP BY
-                    p.id,
-                    p.code,
-                    p.name,
-                    m.id,
-                    m.code,
-                    m.name,
-                    pmc.id,
-                    acc.id,
-                    acc.reelfarm_account_id,
-                    acc.username,
-                    acc.display_name,
-                    acc.avatar_url
-            ),
-            metrics AS (
-                SELECT
-                    acc.id AS account_id,
-                    COUNT(DISTINCT mat.id) AS material_count,
-                    COUNT(DISTINCT post.id) AS post_count,
-                    CASE WHEN COUNT(DISTINCT post.id) > 0 THEN 1 ELSE 0 END AS posted_account_count,
-                    COALESCE(SUM(post.view_count), 0) AS total_views,
-                    COALESCE(SUM(post.like_count), 0) AS total_likes,
-                    COALESCE(SUM(post.comment_count), 0) AS total_comments,
-                    COALESCE(SUM(post.share_count), 0) AS total_shares,
-                    COALESCE(SUM(post.bookmark_count), 0) AS total_bookmarks,
-                    MAX(post.published_at) AS latest_post_at,
-                    MAX(COALESCE(post.synced_at, mat.synced_at, a.synced_at)) AS metric_synced_at
-                {relational_base_from()}
-                WHERE {metric_where_sql}
-                GROUP BY acc.id
-            )
-            SELECT
-                account_base.product_id,
-                account_base.product_code,
-                account_base.product_name,
-                account_base.country_id,
-                account_base.market_id,
-                account_base.country_code,
-                account_base.market_code,
-                account_base.country_name,
-                account_base.product_market_channel_id,
-                account_base.account_id,
-                account_base.reelfarm_account_id,
-                account_base.username,
-                account_base.display_name,
-                account_base.avatar_url,
-                account_base.status,
-                account_base.automation_count,
-                account_base.automation_name,
-                account_base.automation_names,
-                account_base.post_mode,
-                account_base.publish_method,
-                COALESCE(metrics.material_count, 0) AS material_count,
-                COALESCE(metrics.post_count, 0) AS post_count,
-                COALESCE(metrics.posted_account_count, 0) AS posted_account_count,
-                account_base.expected_account_count,
-                COALESCE(metrics.total_views, 0) AS total_views,
-                COALESCE(metrics.total_likes, 0) AS total_likes,
-                COALESCE(metrics.total_comments, 0) AS total_comments,
-                COALESCE(metrics.total_shares, 0) AS total_shares,
-                COALESCE(metrics.total_bookmarks, 0) AS total_bookmarks,
-                COALESCE(metrics.latest_post_at, '') AS latest_post_at,
-                COALESCE(metrics.metric_synced_at, account_base.base_synced_at, '') AS last_synced_at
-            FROM account_base
-            LEFT JOIN metrics ON metrics.account_id = account_base.account_id
-            ORDER BY total_views DESC, post_count DESC
-            """,
-            tuple(account_params + metric_params),
-        ).fetchall()
-    return [normalize_reelfarm_account_row(row_dict(row)) for row in rows]
 
 
 def query_accounts(query):
@@ -3567,65 +3423,39 @@ def detailed_row(row):
 
 
 def query_posts(query, top_metric=""):
-    max_limit = 100 if top_metric else 500
-    limit, offset = query_limit_offset(query, max_limit=max_limit)
-    where_sql, params = common_where(query)
-    order_sql = f"post.{top_metric} DESC, post.published_at DESC" if top_metric else "post.published_at DESC"
-    placeholder = db_placeholder()
-    with connect_db() as conn:
-        init_relational_schema(conn)
-        total_row = conn.execute(
-            f"""
-            SELECT COUNT(DISTINCT post.id) AS total
-            {relational_base_from()}
-            WHERE {where_sql} AND post.id IS NOT NULL
-            """,
-            tuple(params),
-        ).fetchone()
-        rows = conn.execute(
-            f"""
-            SELECT {detailed_select()}
-            {relational_base_from()}
-            WHERE {where_sql} AND post.id IS NOT NULL
-            ORDER BY {order_sql}
-            LIMIT {placeholder} OFFSET {placeholder}
-            """,
-            tuple(params + [limit, offset]),
-        ).fetchall()
-        row_data = [row_dict(row) for row in rows]
-        if (
-            query_value(query, "resource").lower() == "account_posts"
-            and data_source_channel_code(query_value(query, "source")) == "MUSEON_CLONE"
-        ):
-            row_data = hydrate_museon_images_for_rows(conn, row_data)
-    return [detailed_row(row) for row in row_data], pagination_payload(limit, offset, row_data, row_dict(total_row).get("total", 0))
+    return query_posts_impl(
+        query,
+        top_metric=top_metric,
+        query_limit_offset=query_limit_offset,
+        common_where=common_where,
+        db_placeholder=db_placeholder,
+        connect_db=connect_db,
+        init_relational_schema=init_relational_schema,
+        relational_base_from=relational_base_from,
+        detailed_select=detailed_select,
+        row_dict=row_dict,
+        query_value=query_value,
+        data_source_channel_code=data_source_channel_code,
+        hydrate_museon_images_for_rows=hydrate_museon_images_for_rows,
+        detailed_row=detailed_row,
+        pagination_payload=pagination_payload,
+    )
 
 
 def query_materials(query):
-    limit, offset = query_limit_offset(query)
-    where_sql, params = common_where(query)
-    placeholder = db_placeholder()
-    with connect_db() as conn:
-        init_relational_schema(conn)
-        total_row = conn.execute(
-            f"""
-            SELECT COUNT(DISTINCT mat.id) AS total
-            {relational_base_from()}
-            WHERE {where_sql} AND mat.id IS NOT NULL
-            """,
-            tuple(params),
-        ).fetchone()
-        rows = conn.execute(
-            f"""
-            SELECT {detailed_select()}
-            {relational_base_from()}
-            WHERE {where_sql} AND mat.id IS NOT NULL
-            ORDER BY mat.created_at DESC, post.published_at DESC
-            LIMIT {placeholder} OFFSET {placeholder}
-            """,
-            tuple(params + [limit, offset]),
-        ).fetchall()
-    return [detailed_row(row) for row in rows], pagination_payload(limit, offset, rows, row_dict(total_row).get("total", 0))
+    return query_materials_impl(
+        query,
+        query_limit_offset=query_limit_offset,
+        common_where=common_where,
+        db_placeholder=db_placeholder,
+        connect_db=connect_db,
+        init_relational_schema=init_relational_schema,
+        relational_base_from=relational_base_from,
+        detailed_select=detailed_select,
+        detailed_row=detailed_row,
+        pagination_payload=pagination_payload,
+        row_dict=row_dict,
+    )
 
 
 def query_daily_metrics(query):

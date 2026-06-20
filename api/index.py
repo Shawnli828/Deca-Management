@@ -6,9 +6,13 @@ import urllib.request
 import uuid
 from typing import Any
 
-from fastapi import Body, FastAPI, Header, HTTPException, Request, Response
+from fastapi import Body, FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
+
+from api.routes.data import router as data_router
+from api.routes.shared import authenticated, json_error, require_dashboard_auth
+from api.routes.tags import router as tags_router
 
 from server import (
     ADMIN_PASSWORD_HASH,
@@ -17,46 +21,24 @@ from server import (
     REELFARM_BASE_URL,
     SESSION_COOKIE,
     SESSION_TTL_SECONDS,
-    account_issues_payload,
-    account_tags_payload,
-    add_account_issue,
-    add_account_tag,
-    ai_materials_payload,
-    business_material_report_payload,
     cookie_header,
-    create_product_tag,
     create_external_api_key,
     cron_authorized,
-    database_snapshot,
-    data_query_payload,
     daily_feishu_ai_analysis,
     daily_feishu_report_payload,
     daily_feishu_report_text,
-    default_data,
-    delete_product_tag,
-    delete_account_issue,
-    delete_account_tag,
-    connect_db,
-    external_api_key_authorized,
-    growth_dashboard_payload,
-    init_relational_schema,
-    load_data,
     load_publish_check_state,
     llm_models_payload,
     make_auth_token,
     password_hash,
-    product_tags_payload,
     reelfarm_api_key,
     reelfarm_matches,
-    relational_table_counts,
     revoke_external_api_key,
     save_app_value,
-    save_data,
     save_publish_check_state,
     send_daily_feishu_report,
     send_publish_check_reminder,
     sync_daily_all_records,
-    sync_product_growth_snapshots,
     sync_all_reelfarm_records,
     sync_museon_clone_country,
     sync_reelfarm_country,
@@ -64,10 +46,8 @@ from server import (
     run_publish_check,
     stored_reelfarm_country,
     delete_app_value,
-    enrich_data_with_relational_rollups,
     REELFARM_API_KEY,
     using_postgres,
-    valid_auth_token,
 )
 import hmac
 
@@ -100,49 +80,6 @@ async def rewrite_vercel_route(request: Request, call_next):
         request.scope["path"] = f"/{clean_path}" if clean_path else "/"
         request.scope["raw_path"] = request.scope["path"].encode("utf-8")
     return await call_next(request)
-
-
-def query_as_lists(request: Request) -> dict[str, list[str]]:
-    query: dict[str, list[str]] = {}
-    for key in request.query_params.keys():
-        if key == "path":
-            continue
-        query[key] = request.query_params.getlist(key)
-    return query
-
-
-def authenticated(request: Request) -> bool:
-    return valid_auth_token(request.cookies.get(SESSION_COOKIE, ""))
-
-
-def require_dashboard_auth(request: Request) -> None:
-    if not authenticated(request):
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-
-def bearer_token(authorization: str | None) -> str:
-    if not authorization or not authorization.startswith("Bearer "):
-        return ""
-    return authorization.removeprefix("Bearer ").strip()
-
-
-def require_materials_api_key(authorization: str | None) -> None:
-    token = bearer_token(authorization)
-    if not external_api_key_authorized(token, "materials:read"):
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-
-def require_data_query_auth(request: Request, authorization: str | None) -> None:
-    if authenticated(request):
-        return
-    token = bearer_token(authorization)
-    if external_api_key_authorized(token, "materials:read"):
-        return
-    raise HTTPException(status_code=401, detail="Unauthorized")
-
-
-def json_error(status_code: int, message: str) -> JSONResponse:
-    return JSONResponse(status_code=status_code, content={"ok": False, "error": message})
 
 
 def geelark_api_token() -> str:
@@ -331,39 +268,8 @@ def auth_logout(response: Response):
     return {"ok": True, "authenticated": False}
 
 
-@app.get("/api/data")
-def get_data(request: Request):
-    require_dashboard_auth(request)
-    return {"data": enrich_data_with_relational_rollups(load_data())}
-
-
-@app.post("/api/data")
-def post_data(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
-    require_dashboard_auth(request)
-    data = payload.get("data")
-    if not isinstance(data, list):
-        raise HTTPException(status_code=400, detail="Expected { data: [...] }")
-
-    save_data(data)
-    return {"ok": True, "data": enrich_data_with_relational_rollups(data)}
-
-
-@app.get("/api/database")
-def get_database(request: Request):
-    require_dashboard_auth(request)
-    return database_snapshot()
-
-
-@app.get("/api/database/relational")
-def get_relational_database(request: Request):
-    require_dashboard_auth(request)
-    with connect_db() as conn:
-        init_relational_schema(conn)
-        return {
-            "ok": True,
-            "database_backend": "postgres" if using_postgres() else "sqlite",
-            "tables": relational_table_counts(conn),
-        }
+app.include_router(data_router)
+app.include_router(tags_router)
 
 
 @app.get("/api/geelark/phones")
@@ -414,14 +320,6 @@ def get_geelark_phones_map(request: Request, pairs: str = ""):
         "group_count": sum(int(item.get("group_count") or 0) for item in items),
         "items": items,
     }
-
-
-@app.post("/api/reset")
-def reset_data(request: Request):
-    require_dashboard_auth(request)
-    data = default_data()
-    save_data(data)
-    return {"ok": True, "data": enrich_data_with_relational_rollups(data)}
 
 
 @app.get("/api/publish-check")
@@ -520,83 +418,6 @@ def get_reports_daily_feishu_preview(request: Request, date: str = ""):
     }
 
 
-@app.get("/api/account-tags")
-def get_account_tags(request: Request, account_ids: str = ""):
-    require_dashboard_auth(request)
-    ids = [item.strip() for item in account_ids.split(",") if item.strip()]
-    return account_tags_payload(ids)
-
-
-@app.post("/api/account-tags")
-def post_account_tags(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
-    require_dashboard_auth(request)
-    try:
-        return add_account_tag(payload.get("account_id"), payload.get("tag"))
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-
-
-@app.post("/api/account-tags/delete")
-def post_account_tags_delete(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
-    require_dashboard_auth(request)
-    try:
-        return delete_account_tag(payload.get("account_id"), payload.get("tag"))
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-
-
-@app.get("/api/account-issues")
-def get_account_issues(request: Request, account_ids: str = ""):
-    require_dashboard_auth(request)
-    ids = [item.strip() for item in account_ids.split(",") if item.strip()]
-    return account_issues_payload(ids)
-
-
-@app.post("/api/account-issues")
-def post_account_issues(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
-    require_dashboard_auth(request)
-    try:
-        return add_account_issue(payload.get("account_id"), payload.get("issue"))
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-
-
-@app.post("/api/account-issues/delete")
-def post_account_issues_delete(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
-    require_dashboard_auth(request)
-    try:
-        return delete_account_issue(payload.get("account_id"), payload.get("issue"))
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-
-
-@app.get("/api/product-tags")
-def get_product_tags(request: Request, product_code: str = ""):
-    require_dashboard_auth(request)
-    try:
-        return product_tags_payload(product_code)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-
-
-@app.post("/api/product-tags")
-def post_product_tags(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
-    require_dashboard_auth(request)
-    try:
-        return create_product_tag(payload.get("product_code"), payload.get("tag"))
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-
-
-@app.post("/api/product-tags/delete")
-def post_product_tags_delete(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
-    require_dashboard_auth(request)
-    try:
-        return delete_product_tag(payload.get("product_code"), payload.get("tag"), payload.get("remove_assignments", True))
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-
-
 @app.get("/api/reelfarm/config")
 def get_reelfarm_config(request: Request):
     require_dashboard_auth(request)
@@ -646,60 +467,6 @@ def post_api_keys_revoke(request: Request, payload: dict[str, Any] = Body(defaul
         return {"ok": True, "record": revoke_external_api_key(key_id)}
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
-
-
-@app.get("/api/ai/materials")
-def get_ai_materials(request: Request, authorization: str | None = Header(default=None)):
-    require_materials_api_key(authorization)
-    return ai_materials_payload(query_as_lists(request))
-
-
-@app.get("/api/data/query")
-def get_data_query(request: Request, authorization: str | None = Header(default=None)):
-    require_data_query_auth(request, authorization)
-    try:
-        return data_query_payload(query_as_lists(request))
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    except RuntimeError as error:
-        raise HTTPException(status_code=502, detail=str(error)) from error
-    except Exception as error:
-        raise HTTPException(status_code=500, detail=f"Data query failed: {error}") from error
-
-
-@app.get("/api/growth")
-def get_growth_dashboard(request: Request):
-    require_dashboard_auth(request)
-    try:
-        return growth_dashboard_payload(query_as_lists(request))
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-
-
-@app.get("/api/business-material-report")
-def get_business_material_report(request: Request):
-    require_dashboard_auth(request)
-    try:
-        return business_material_report_payload(query_as_lists(request))
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    except RuntimeError as error:
-        raise HTTPException(status_code=502, detail=str(error)) from error
-
-
-@app.post("/api/growth/sync-product")
-def post_growth_sync_product(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
-    require_dashboard_auth(request)
-    try:
-        records = sync_product_growth_snapshots(
-            str(payload.get("product_code", "")).strip(),
-            payload.get("days", 30),
-        )
-        return {"ok": True, "count": len(records), "records": records}
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    except RuntimeError as error:
-        raise HTTPException(status_code=502, detail=str(error)) from error
 
 
 @app.api_route("/api/sync/daily-all", methods=["GET", "POST"])
