@@ -5,6 +5,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "account-pool-regression": "tsx scripts/account_pool_regression_checks.ts",
+    "architecture-boundaries": "python3 scripts/architecture_boundary_checks.py",
     "smoke": "python3 scripts/smoke_checks.py",
     "api-contract": "python3 scripts/api_contract_checks.py"
   },

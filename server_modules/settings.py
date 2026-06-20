@@ -32,6 +32,7 @@ REELFARM_BASE_URL = "https://reel.farm/api/v1"
 MUSEON_BASE_URL = os.environ.get("MUSEON_BASE_URL", "https://api.museon.ai/external/api/v1").strip().rstrip("/")
 MUSEON_API_KEY = os.environ.get("MUSEON_API_KEY", "").strip()
 MUSEON_WORKSPACE_ID = os.environ.get("MUSEON_WORKSPACE_ID", "b5e25f84-b3ed-484b-b467-901a4afcd9c6").strip()
+MUSEON_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/124 Safari/537.36"
 MIXPANEL_REGION = os.environ.get("MIXPANEL_REGION", "standard").strip().lower()
 REPORT_TIMEZONE_NAME = os.environ.get("REPORT_TIMEZONE", "Asia/Shanghai").strip()
 MIXPANEL_TIMEZONE_NAME = os.environ.get("MIXPANEL_TIMEZONE", "America/Los_Angeles").strip()

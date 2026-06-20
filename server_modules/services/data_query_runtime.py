@@ -38,6 +38,7 @@ from server_modules.reelfarm_utils import (
     reelfarm_dashboard_automation_condition,
     reelfarm_expected_automation_condition,
 )
+from server_modules.services import museon_runtime
 from server_modules.time_windows import business_material_day_window
 
 
@@ -57,9 +58,7 @@ def common_where(query, date_column="post.published_at", include_post_dates=True
 
 
 def hydrate_museon_images_for_rows(conn, row_data_list):
-    from server import hydrate_museon_images_for_rows as hydrate
-
-    return hydrate(conn, row_data_list)
+    return museon_runtime.hydrate_images_for_rows(conn, row_data_list)
 
 
 def query_accounts(query):

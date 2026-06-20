@@ -41,6 +41,9 @@ jobs:
       - name: Python compile check
         run: python -m compileall -q server.py api server_modules scripts
 
+      - name: Architecture boundary checks
+        run: npm run architecture-boundaries
+
       - name: TypeScript typecheck
         run: npm run typecheck
 

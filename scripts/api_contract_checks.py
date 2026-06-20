@@ -4,6 +4,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from architecture_boundary_checks import assert_no_runtime_server_imports
+
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -32,15 +34,6 @@ def assert_status(response, expected, label):
 def assert_true(value, label):
     if not value:
         raise AssertionError(label)
-
-
-def assert_api_routes_do_not_import_server():
-    offenders = []
-    for path in (ROOT / "api").rglob("*.py"):
-        text = path.read_text(encoding="utf-8")
-        if "from server import" in text or "import server" in text:
-            offenders.append(str(path.relative_to(ROOT)))
-    assert_true(not offenders, f"api modules should not import server.py directly: {', '.join(offenders)}")
 
 
 def seed_contract_database(server):
@@ -79,7 +72,7 @@ def seed_contract_database(server):
 
 def main():
     configure_test_env()
-    assert_api_routes_do_not_import_server()
+    assert_no_runtime_server_imports()
 
     from fastapi.testclient import TestClient
     import server

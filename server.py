@@ -217,7 +217,13 @@ from server_modules.queries.read_model_queries import (
 from server_modules.services.data_enrichment import (
     enrich_data_with_relational_rollups as enrich_data_with_relational_rollups_runtime,
 )
-from server_modules.services import daily_feishu_runtime, sync_runtime
+from server_modules.services import (
+    daily_feishu_runtime,
+    growth_runtime,
+    museon_runtime,
+    reelfarm_projection_runtime,
+    sync_runtime,
+)
 from server_modules.auth_utils import (
     cookie_header,
     cron_authorized as cron_secret_authorized,
@@ -401,324 +407,11 @@ def relational_table_counts(conn):
 
 
 def project_products_to_relational(data=None, product_code_filter="", market_code_filter=""):
-    data = data if isinstance(data, list) else load_data()
-    now = datetime.now(timezone.utc).isoformat()
-    channel_id = stable_id("channel", "TIKTOK")
-    product_code_filter = str(product_code_filter or "").strip().upper()
-    market_code_filter = str(market_code_filter or "").strip().upper()
-
-    with connect_db() as conn:
-        init_relational_schema(conn)
-        zero_play_candidates = {}
-        upsert_row(
-            conn,
-            "channels",
-            {"id": channel_id, "name": "TikTok", "code": "TIKTOK"},
-            ["code"],
-        )
-
-        for product in data:
-            if not isinstance(product, dict):
-                continue
-
-            product_id = str(product.get("id") or stable_id("product", product.get("name")))
-            product_code = product_code_for(product)
-            if product_code_filter and product_code != product_code_filter:
-                continue
-
-            upsert_row(
-                conn,
-                "products",
-                {
-                    "id": product_id,
-                    "name": str(product.get("name") or "Untitled Product"),
-                    "code": product_code,
-                    "owner_type": product.get("folder") or product.get("owner_type"),
-                    "logo_url": product.get("logo") or "",
-                    "created_at": product.get("created_at") or now,
-                    "updated_at": now,
-                },
-                ["id"],
-            )
-
-            for country in product.get("countries", []) or []:
-                if not isinstance(country, dict):
-                    continue
-
-                market_code = country_code_for(country)
-                if market_code_filter and market_code != market_code_filter:
-                    continue
-
-                market_id = stable_id("market", market_code)
-                product_market_id = stable_id("product_market", product_id, market_id)
-                product_market_channel_id = stable_id("product_market_channel", product_market_id, channel_id)
-
-                upsert_row(
-                    conn,
-                    "markets",
-                    {"id": market_id, "name": str(country.get("name") or market_code), "code": market_code},
-                    ["code"],
-                )
-                upsert_row(
-                    conn,
-                    "product_markets",
-                    {"id": product_market_id, "product_id": product_id, "market_id": market_id},
-                    ["product_id", "market_id"],
-                )
-                upsert_row(
-                    conn,
-                    "product_market_channels",
-                    {
-                        "id": product_market_channel_id,
-                        "product_market_id": product_market_id,
-                        "channel_id": channel_id,
-                    },
-                    ["product_market_id", "channel_id"],
-                )
-
-                for concept in country.get("concepts", []) or []:
-                    if not isinstance(concept, dict):
-                        continue
-                    concept_name = str(concept.get("group") or "默认 Topic").strip() or "默认 Topic"
-                    format_name = str(concept.get("name") or "默认 Format").strip() or "默认 Format"
-                    concept_id = stable_id("concept", product_id, concept_name)
-                    format_id = stable_id("format", concept_id, format_name)
-                    upsert_row(
-                        conn,
-                        "concepts",
-                        {"id": concept_id, "product_id": product_id, "name": concept_name, "description": ""},
-                        ["product_id", "name"],
-                    )
-                    upsert_row(
-                        conn,
-                        "formats",
-                        {"id": format_id, "concept_id": concept_id, "name": format_name, "description": ""},
-                        ["concept_id", "name"],
-                    )
-
-                reel_farm_result = country.get("reelFarmResult")
-                has_reelfarm_result = isinstance(reel_farm_result, dict)
-                result = reel_farm_result if has_reelfarm_result else {}
-                synced_at = country.get("reelFarmSyncedAt") or now
-                seen_reelfarm_automation_ids = set()
-                for card in result.get("cards", []) or []:
-                    if not isinstance(card, dict):
-                        continue
-
-                    account = card.get("account") if isinstance(card.get("account"), dict) else {}
-                    automation = card.get("automation") if isinstance(card.get("automation"), dict) else {}
-                    automation_reelfarm_id = str(
-                        automation.get("automation_id") or stable_id("automation_source", automation.get("title"))
-                    )
-                    automation_title = str(automation.get("title") or automation_reelfarm_id)
-                    reelfarm_account_id = str(
-                        account.get("tiktok_account_id")
-                        or automation.get("tiktok_account_id")
-                        or account.get("account_username")
-                        or automation_reelfarm_id
-                    )
-                    account_id = stable_id("account", product_market_channel_id, reelfarm_account_id)
-                    automation_id = stable_id("automation", automation_reelfarm_id)
-                    seen_reelfarm_automation_ids.add(automation_reelfarm_id)
-                    is_active_tiktok_automation = reelfarm_automation_is_active(automation)
-                    if is_active_tiktok_automation:
-                        zero_play_candidates.setdefault(account_id, [])
-
-                    upsert_row(
-                        conn,
-                        "accounts",
-                        {
-                            "id": account_id,
-                            "product_market_channel_id": product_market_channel_id,
-                            "source": "reelfarm",
-                            "source_account_id": reelfarm_account_id,
-                            "reelfarm_account_id": reelfarm_account_id,
-                            "username": account.get("account_username") or account.get("account_name") or "",
-                            "display_name": account.get("account_name") or "",
-                            "avatar_url": account.get("account_image") or "",
-                            "status": account.get("status") or automation.get("status") or "",
-                        },
-                        ["product_market_channel_id", "reelfarm_account_id"],
-                    )
-                    upsert_row(
-                        conn,
-                        "automations",
-                        {
-                            "id": automation_id,
-                            "product_market_channel_id": product_market_channel_id,
-                            "account_id": account_id,
-                            "source": "reelfarm",
-                            "source_automation_id": automation_reelfarm_id,
-                            "reelfarm_automation_id": automation_reelfarm_id,
-                            "name": automation_title,
-                            "status": automation.get("status") or "",
-                            "schedule": db_json(automation.get("schedule", [])),
-                            "settings_json": db_json(automation),
-                            "post_mode": automation.get("post_mode") or reelfarm_post_mode(automation),
-                            "publish_method": automation.get("publish_method") or reelfarm_publish_method(automation),
-                            "sync_status": "present",
-                            "last_seen_at": synced_at,
-                            "deleted_at": "",
-                            "created_at": automation.get("created_at") or "",
-                            "synced_at": synced_at,
-                        },
-                        ["reelfarm_automation_id"],
-                    )
-
-                    concept_name, format_name = parse_concept_format_from_automation(
-                        automation_title,
-                        market_code,
-                        product_code,
-                    )
-                    concept_id = None
-                    format_id = None
-                    if concept_name and format_name:
-                        concept_id = stable_id("concept", product_id, concept_name)
-                        format_id = stable_id("format", concept_id, format_name)
-                        upsert_row(
-                            conn,
-                            "concepts",
-                            {"id": concept_id, "product_id": product_id, "name": concept_name, "description": ""},
-                            ["product_id", "name"],
-                        )
-                        upsert_row(
-                            conn,
-                            "formats",
-                            {"id": format_id, "concept_id": concept_id, "name": format_name, "description": ""},
-                            ["concept_id", "name"],
-                        )
-
-                    posts_by_video = {
-                        str(post.get("video_id")): post
-                        for post in (card.get("posts") or [])
-                        if isinstance(post, dict)
-                    }
-                    for video in card.get("videos", []) or []:
-                        if not isinstance(video, dict):
-                            continue
-                        reelfarm_video_id = str(video.get("video_id") or video.get("id") or "")
-                        if not reelfarm_video_id:
-                            continue
-                        material_id = stable_id("material", reelfarm_video_id)
-                        images = video.get("slideshow_images") if isinstance(video.get("slideshow_images"), list) else []
-                        upsert_row(
-                            conn,
-                            "materials",
-                            {
-                                "id": material_id,
-                                "automation_id": automation_id,
-                                "product_market_channel_id": product_market_channel_id,
-                                "account_id": account_id,
-                                "concept_id": concept_id,
-                                "format_id": format_id,
-                                "source": "reelfarm",
-                                "source_material_id": reelfarm_video_id,
-                                "reelfarm_video_id": reelfarm_video_id,
-                                "video_type": video.get("video_type") or "",
-                                "hook": video.get("hook") or "",
-                                "prompt": video.get("prompt") or "",
-                                "images_json": db_json(images),
-                                "slide_count": int_or_none(video.get("slide_count")) or len(images),
-                                "status": video.get("status") or "",
-                                "created_at": video.get("created_at") or "",
-                                "finished_at": video.get("finished_at") or "",
-                                "synced_at": synced_at,
-                            },
-                            ["reelfarm_video_id"],
-                        )
-
-                        post = posts_by_video.get(reelfarm_video_id)
-                        if not isinstance(post, dict):
-                            continue
-                        reelfarm_post_id = str(post.get("post_id") or stable_id("post_source", material_id))
-                        post_id = stable_id("post", reelfarm_post_id)
-                        snapshot_date = utc_snapshot_date()
-                        if is_active_tiktok_automation:
-                            collect_zero_play_issue_candidate(
-                                zero_play_candidates,
-                                account_id,
-                                post.get("published_at"),
-                                post.get("view_count"),
-                                business_date_string(synced_at),
-                            )
-                        upsert_row(
-                            conn,
-                            "posts",
-                            {
-                                "id": post_id,
-                                "material_id": material_id,
-                                "account_id": account_id,
-                                "source": "reelfarm",
-                                "source_post_id": reelfarm_post_id,
-                                "reelfarm_post_id": reelfarm_post_id,
-                                "status": post.get("status") or "",
-                                "title": post.get("title") or "",
-                                "published_at": post.get("published_at") or "",
-                                "published_at_readable": post.get("published_at_readable") or "",
-                                "view_count": int_or_none(post.get("view_count")),
-                                "like_count": int_or_none(post.get("like_count")),
-                                "comment_count": int_or_none(post.get("comment_count")),
-                                "share_count": int_or_none(post.get("share_count")),
-                                "bookmark_count": int_or_none(post.get("bookmark_count")),
-                                "synced_at": synced_at,
-                            },
-                            ["reelfarm_post_id"],
-                        )
-                        upsert_row(
-                            conn,
-                            "post_daily_snapshots",
-                            {
-                                "id": stable_id("post_daily_snapshot", post_id, snapshot_date),
-                                "post_id": post_id,
-                                "snapshot_date": snapshot_date,
-                                "view_count": int_or_none(post.get("view_count")),
-                                "like_count": int_or_none(post.get("like_count")),
-                                "comment_count": int_or_none(post.get("comment_count")),
-                                "share_count": int_or_none(post.get("share_count")),
-                                "bookmark_count": int_or_none(post.get("bookmark_count")),
-                                "synced_at": synced_at,
-                            },
-                            ["post_id", "snapshot_date"],
-                        )
-
-                if has_reelfarm_result:
-                    mark_missing_reelfarm_automations(
-                        conn,
-                        product_market_channel_id,
-                        seen_reelfarm_automation_ids,
-                        synced_at,
-                    )
-
-        apply_zero_play_issues(conn, zero_play_candidates, now)
-        counts = relational_table_counts(conn)
-        conn.commit()
-
-    return {
-        "ok": True,
-        "projected_at": now,
-        "database_backend": "postgres" if using_postgres() else "sqlite",
-        "filters": {
-            "product_code": product_code_filter or None,
-            "market_code": market_code_filter or None,
-        },
-        "tables": counts,
-    }
+    return reelfarm_projection_runtime.project_products_to_relational(data, product_code_filter, market_code_filter)
 
 
 def project_synced_country_to_relational(product, country):
-    if not isinstance(product, dict) or not isinstance(country, dict):
-        return None
-
-    scoped_product = dict(product)
-    scoped_country = dict(country)
-    scoped_product["countries"] = [scoped_country]
-    product_code = product_code_for(scoped_product)
-    market_code = country_code_for(scoped_country)
-    return project_products_to_relational(
-        data=[scoped_product],
-        product_code_filter=product_code,
-        market_code_filter=market_code,
-    )
+    return reelfarm_projection_runtime.project_synced_country_to_relational(product, country)
 
 
 def stored_reelfarm_country(product_code, market_code):
@@ -1114,167 +807,15 @@ def query_museon_clone_product_rollups(query):
 
 
 def product_channel_views_for_window(product_code, channel_code, utc_start, utc_end):
-    placeholder = db_placeholder()
-    with connect_db() as conn:
-        init_relational_schema(conn)
-        row = conn.execute(
-            f"""
-            SELECT
-                COUNT(DISTINCT post.id) AS posts,
-                COUNT(DISTINCT acc.id) AS creators,
-                COALESCE(SUM(post.view_count), 0) AS views,
-                COALESCE(SUM(post.like_count), 0) AS likes
-            {relational_base_from()}
-            WHERE ch.code = {placeholder}
-              AND p.code = {placeholder}
-              AND post.published_at >= {placeholder}
-              AND post.published_at < {placeholder}
-              AND post.id IS NOT NULL
-            """,
-            (channel_code, str(product_code or "").upper(), utc_start.isoformat(), utc_end.isoformat()),
-        ).fetchone()
-    data = row_dict(row)
-    return {
-        "posts": int(data.get("posts") or 0),
-        "creators": int(data.get("creators") or 0),
-        "views": int(data.get("views") or 0),
-        "likes": int(data.get("likes") or 0),
-    }
+    return growth_runtime.product_channel_views_for_window(product_code, channel_code, utc_start, utc_end)
 
 
 def product_channel_daily_views(product_code, channel_code, utc_start, utc_end):
-    placeholder = db_placeholder()
-    daily = {}
-    with connect_db() as conn:
-        init_relational_schema(conn)
-        rows = conn.execute(
-            f"""
-            SELECT
-                post.id AS post_id,
-                post.published_at AS published_at,
-                COALESCE(post.view_count, 0) AS view_count
-            {relational_base_from()}
-            WHERE ch.code = {placeholder}
-              AND p.code = {placeholder}
-              AND post.published_at >= {placeholder}
-              AND post.published_at < {placeholder}
-              AND post.id IS NOT NULL
-            GROUP BY post.id, post.published_at, post.view_count
-            """,
-            (channel_code, str(product_code or "").upper(), utc_start.isoformat(), utc_end.isoformat()),
-        ).fetchall()
-    for row in rows:
-        item = row_dict(row)
-        published_at = parse_iso_datetime(item.get("published_at"))
-        report_date = report_date_for_utc_datetime(published_at)
-        if not report_date:
-            continue
-        daily[report_date] = daily.get(report_date, 0) + int(item.get("view_count") or 0)
-    return daily
+    return growth_runtime.product_channel_daily_views(product_code, channel_code, utc_start, utc_end)
 
 
 def product_business_material_daily_stats(product_code, utc_start, utc_end):
-    placeholder = db_placeholder()
-    daily = {}
-    with connect_db() as conn:
-        init_relational_schema(conn)
-        rows = conn.execute(
-            f"""
-            SELECT
-                ch.code AS channel_code,
-                a.id AS automation_id,
-                acc.id AS account_id,
-                post.id AS post_id,
-                mat.id AS material_id,
-                mat.created_at AS material_created_at,
-                post.published_at AS published_at,
-                COALESCE(post.view_count, 0) AS view_count
-            {relational_base_from()}
-            WHERE p.code = {placeholder}
-              AND ch.code IN ('TIKTOK', 'MUSEON_CLONE')
-              AND (
-                (
-                  ch.code = 'TIKTOK'
-                  AND LOWER(COALESCE(a.status, '')) = 'active'
-                  AND mat.id IS NOT NULL
-                  AND post.id IS NOT NULL
-                  AND mat.created_at >= {placeholder}
-                  AND mat.created_at < {placeholder}
-                )
-                OR (
-                  ch.code = 'MUSEON_CLONE'
-                  AND post.id IS NOT NULL
-                  AND post.published_at >= {placeholder}
-                  AND post.published_at < {placeholder}
-                )
-              )
-            GROUP BY ch.code, a.id, acc.id, post.id, mat.id, mat.created_at, post.published_at, post.view_count
-            """,
-            (
-                str(product_code or "").upper(),
-                utc_start.isoformat(),
-                utc_end.isoformat(),
-                utc_start.isoformat(),
-                utc_end.isoformat(),
-            ),
-        ).fetchall()
-    for row in rows:
-        item = row_dict(row)
-        source_key = "clone" if item.get("channel_code") == "MUSEON_CLONE" else "reelfarm"
-        source_at = item.get("published_at") if source_key == "clone" else item.get("material_created_at")
-        report_date = business_material_date_for_utc_datetime(parse_iso_datetime(source_at))
-        if not report_date:
-            continue
-        entry = daily.setdefault(report_date, {
-            "reelfarm_materials": set(),
-            "clone_materials": set(),
-            "reelfarm_posted_materials": set(),
-            "reelfarm_published_automations": set(),
-            "clone_posts": set(),
-            "reelfarm_views": 0,
-            "clone_views": 0,
-        })
-        material_id = item.get("material_id") or item.get("post_id")
-        if source_key == "clone":
-            if material_id:
-                entry["clone_materials"].add(str(material_id))
-            if item.get("post_id"):
-                entry["clone_posts"].add(str(item.get("post_id")))
-            entry["clone_views"] += int(item.get("view_count") or 0)
-        else:
-            if material_id:
-                entry["reelfarm_materials"].add(str(material_id))
-            if item.get("post_id"):
-                if material_id:
-                    entry["reelfarm_posted_materials"].add(str(material_id))
-                published_identity = item.get("account_id") or item.get("automation_id")
-                if published_identity:
-                    entry["reelfarm_published_automations"].add(str(published_identity))
-                entry["reelfarm_views"] += int(item.get("view_count") or 0)
-    normalized = {}
-    for report_date, item in daily.items():
-        reelfarm_materials = len(item.get("reelfarm_materials") or set())
-        clone_materials = len(item.get("clone_materials") or set())
-        reelfarm_posts = len(item.get("reelfarm_posted_materials") or set())
-        reelfarm_published_automations = len(item.get("reelfarm_published_automations") or set())
-        clone_posts = len(item.get("clone_posts") or set())
-        reelfarm_views = int(item.get("reelfarm_views") or 0)
-        clone_views = int(item.get("clone_views") or 0)
-        normalized[report_date] = {
-            "reelfarm_materials": reelfarm_materials,
-            "clone_materials": clone_materials,
-            "total_materials": reelfarm_materials + clone_materials,
-            "reelfarm_posts": reelfarm_posts,
-            "reelfarm_published_automations": reelfarm_published_automations,
-            "clone_posts": clone_posts,
-            "total_posts": reelfarm_posts + clone_posts,
-            "reelfarm_views": reelfarm_views,
-            "clone_views": clone_views,
-            "total_views": reelfarm_views + clone_views,
-            "reelfarm_avg_views": (reelfarm_views / reelfarm_posts) if reelfarm_posts else None,
-            "clone_avg_views": (clone_views / clone_posts) if clone_posts else None,
-        }
-    return normalized
+    return growth_runtime.product_business_material_daily_stats(product_code, utc_start, utc_end)
 
 
 def product_reelfarm_country_avg_views(product_code, utc_start, utc_end):
@@ -1356,146 +897,23 @@ def daily_reelfarm_account_alerts(product_code, utc_start, utc_end, limit=120):
     )
 
 def product_active_reelfarm_expected_schedule_count(product_code):
-    placeholder = db_placeholder()
-    with connect_db() as conn:
-        init_relational_schema(conn)
-        rows = conn.execute(
-            f"""
-            SELECT DISTINCT a.id, a.schedule
-            FROM products p
-            JOIN product_markets pm ON pm.product_id = p.id
-            JOIN product_market_channels pmc ON pmc.product_market_id = pm.id
-            JOIN channels ch ON ch.id = pmc.channel_id
-            JOIN automations a ON a.product_market_channel_id = pmc.id
-            WHERE p.code = {placeholder}
-              AND ch.code = 'TIKTOK'
-              AND {reelfarm_expected_automation_condition("a")}
-            """,
-            (str(product_code or "").upper(),),
-        ).fetchall()
-
-    return sum(reelfarm_schedule_slot_count(row_dict(row).get("schedule")) for row in rows)
+    return growth_runtime.product_active_reelfarm_expected_schedule_count(product_code)
 
 
 def product_active_reelfarm_expected_automation_count(product_code):
-    placeholder = db_placeholder()
-    with connect_db() as conn:
-        init_relational_schema(conn)
-        row = conn.execute(
-            f"""
-            SELECT COUNT(DISTINCT acc.id) AS automation_count
-            FROM products p
-            JOIN product_markets pm ON pm.product_id = p.id
-            JOIN product_market_channels pmc ON pmc.product_market_id = pm.id
-            JOIN channels ch ON ch.id = pmc.channel_id
-            JOIN automations a ON a.product_market_channel_id = pmc.id
-            JOIN accounts acc ON acc.id = a.account_id
-            WHERE p.code = {placeholder}
-              AND ch.code = 'TIKTOK'
-              AND {reelfarm_expected_automation_condition("a")}
-            """,
-            (str(product_code or "").upper(),),
-        ).fetchone()
-    return int(row_dict(row).get("automation_count") or 0)
+    return growth_runtime.product_active_reelfarm_expected_automation_count(product_code)
 
 
 def latest_snapshot_views_by_source(product_code, snapshot_date):
-    product_code = str(product_code or "").upper()
-    snapshot_date = str(snapshot_date or "")[:10]
-    if not product_code or not snapshot_date:
-        return {}
-    placeholder = db_placeholder()
-    with connect_db() as conn:
-        init_relational_schema(conn)
-        rows = conn.execute(
-            f"""
-            SELECT
-                ch.code AS channel_code,
-                post.id AS post_id,
-                COALESCE((
-                    SELECT snap.view_count
-                    FROM post_daily_snapshots snap
-                    WHERE snap.post_id = post.id
-                      AND snap.snapshot_date <= {placeholder}
-                    ORDER BY snap.snapshot_date DESC
-                    LIMIT 1
-                ), 0) AS view_count
-            {relational_base_from()}
-            WHERE p.code = {placeholder}
-              AND ch.code IN ('TIKTOK', 'MUSEON_CLONE')
-              AND post.id IS NOT NULL
-            GROUP BY ch.code, post.id
-            """,
-            (snapshot_date, product_code),
-        ).fetchall()
-    snapshots = {}
-    for row in rows:
-        item = row_dict(row)
-        source = "clone" if item.get("channel_code") == "MUSEON_CLONE" else "reelfarm"
-        post_id = str(item.get("post_id") or "")
-        if post_id:
-            snapshots.setdefault(source, {})[post_id] = int(item.get("view_count") or 0)
-    return snapshots
+    return growth_runtime.latest_snapshot_views_by_source(product_code, snapshot_date)
 
 
 def product_business_growth_daily_stats(product_code, windows):
-    if not windows:
-        return {}
-    needed_dates = set()
-    for window in windows:
-        report_date = str(window["report_date"])
-        previous_date = (datetime.strptime(report_date, "%Y-%m-%d").date() - timedelta(days=1)).isoformat()
-        needed_dates.add(report_date)
-        needed_dates.add(previous_date)
-    snapshot_cache = {
-        snapshot_date: latest_snapshot_views_by_source(product_code, snapshot_date)
-        for snapshot_date in sorted(needed_dates)
-    }
-    daily = {}
-    for window in windows:
-        report_date = str(window["report_date"])
-        previous_date = (datetime.strptime(report_date, "%Y-%m-%d").date() - timedelta(days=1)).isoformat()
-        current = snapshot_cache.get(report_date, {})
-        previous = snapshot_cache.get(previous_date, {})
-        entry = {
-            "reelfarm_posts": 0,
-            "clone_posts": 0,
-            "reelfarm_views": 0,
-            "clone_views": 0,
-        }
-        for source, view_key, post_key in (
-            ("reelfarm", "reelfarm_views", "reelfarm_posts"),
-            ("clone", "clone_views", "clone_posts"),
-        ):
-            current_posts = current.get(source, {})
-            previous_posts = previous.get(source, {})
-            for post_id, current_views in current_posts.items():
-                previous_views = int(previous_posts.get(post_id) or 0)
-                delta = int(current_views or 0) - previous_views
-                if delta < 0:
-                    delta = 0
-                if delta > 0:
-                    entry[post_key] += 1
-                    entry[view_key] += delta
-        entry["total_posts"] = entry["reelfarm_posts"] + entry["clone_posts"]
-        entry["total_views"] = entry["reelfarm_views"] + entry["clone_views"]
-        daily[report_date] = entry
-    return daily
+    return growth_runtime.product_business_growth_daily_stats(product_code, windows)
 
 
 def mixpanel_event_daily_counts(config, event_name, utc_start, utc_end, value_type="general"):
-    return mixpanel_event_daily_counts_impl(
-        config,
-        event_name,
-        utc_start,
-        utc_end,
-        value_type,
-        default_region=MIXPANEL_REGION,
-        mixpanel_timezone=mixpanel_timezone,
-        source_dates_for_utc_window=source_dates_for_utc_window,
-        report_date_for_utc_datetime=report_date_for_utc_datetime,
-        make_ssl_context=make_ssl_context,
-    )
+    return growth_runtime.mixpanel_event_daily_counts(config, event_name, utc_start, utc_end, value_type)
 
 
 def mixpanel_event_business_material_counts(config, event_name, utc_start, utc_end, value_type="general", date_mapper=None):
@@ -1515,143 +933,26 @@ def mixpanel_event_business_material_counts(config, event_name, utc_start, utc_e
 
 
 def mixpanel_event_user_unique_query_count(config, event_name, utc_start, utc_end):
-    return mixpanel_event_user_unique_query_count_impl(
-        config,
-        event_name,
-        utc_start,
-        utc_end,
-        default_region=MIXPANEL_REGION,
-        mixpanel_timezone=mixpanel_timezone,
-        source_dates_for_utc_window=source_dates_for_utc_window,
-        make_ssl_context=make_ssl_context,
-    )
+    return growth_runtime.mixpanel_event_user_unique_query_count(config, event_name, utc_start, utc_end)
 
 
 def mixpanel_event_total(config, event_name, utc_start, utc_end, value_type="general"):
-    daily = mixpanel_event_daily_counts(config, event_name, utc_start, utc_end, value_type)
-    if not daily and not (config or {}).get("project_id"):
-        return None
-    return sum(int(value or 0) for value in daily.values())
+    return growth_runtime.mixpanel_event_total(config, event_name, utc_start, utc_end, value_type)
 
 
 def sync_product_growth_snapshot(product_code, report_date=""):
-    product_code = str(product_code or "").strip().upper()
-    if not product_code:
-        raise ValueError("product_code is required.")
-    window = report_day_window(report_date)
-    source_tz = mixpanel_timezone()
-    source_date_from, source_date_to = source_dates_for_utc_window(window["utc_start"], window["utc_end"], source_tz)
-    rf = product_channel_views_for_window(product_code, "TIKTOK", window["utc_start"], window["utc_end"])
-    clone = product_channel_views_for_window(product_code, "MUSEON_CLONE", window["utc_start"], window["utc_end"])
-    mixpanel_config = product_mixpanel_config(product_code)
-    onboarding_event = product_mixpanel_event_name(product_code, "ONBOARDING")
-    onboarding_unique = mixpanel_event_total(mixpanel_config, onboarding_event, window["utc_start"], window["utc_end"], "unique")
-    now = datetime.now(timezone.utc).isoformat()
-    record = {
-        "id": stable_id("product_daily_growth_snapshot", product_code, window["report_date"]),
-        "product_code": product_code,
-        "report_date": window["report_date"],
-        "report_timezone": window["report_timezone"],
-        "source_timezone": getattr(source_tz, "key", MIXPANEL_TIMEZONE_NAME),
-        "utc_start": window["utc_start"].isoformat(),
-        "utc_end": window["utc_end"].isoformat(),
-        "source_date_from": source_date_from,
-        "source_date_to": source_date_to,
-        "reelfarm_views": rf["views"],
-        "clone_views": clone["views"],
-        "total_views": rf["views"] + clone["views"],
-        "download_count": None,
-        "onboarding_unique": onboarding_unique,
-        "synced_at": now,
-    }
-    with connect_db() as conn:
-        init_relational_schema(conn)
-        upsert_row(conn, "product_daily_growth_snapshots", record, ["product_code", "report_date"])
-        conn.commit()
-    return record
+    return growth_runtime.sync_product_growth_snapshot(product_code, report_date)
 
 
 def sync_product_growth_snapshots(product_code, days=30):
-    product_code = str(product_code or "").strip().upper()
-    if not product_code:
-        raise ValueError("product_code is required.")
-    try:
-        days = int(days)
-    except (TypeError, ValueError):
-        days = 30
-    days = max(1, min(90, days))
-    windows = growth_report_windows(days)
-    if not windows:
-        return []
-    overall_utc_start = windows[0]["utc_start"]
-    overall_utc_end = windows[-1]["utc_end"]
-    source_tz = mixpanel_timezone()
-    rf_daily = product_channel_daily_views(product_code, "TIKTOK", overall_utc_start, overall_utc_end)
-    clone_daily = product_channel_daily_views(product_code, "MUSEON_CLONE", overall_utc_start, overall_utc_end)
-    mixpanel_config = product_mixpanel_config(product_code)
-    onboarding_event = product_mixpanel_event_name(product_code, "ONBOARDING")
-    onboarding_daily = mixpanel_event_daily_counts(mixpanel_config, onboarding_event, overall_utc_start, overall_utc_end, "unique")
-    now = datetime.now(timezone.utc).isoformat()
-    records = []
-    with connect_db() as conn:
-        init_relational_schema(conn)
-        for window in windows:
-            report_date = window["report_date"]
-            source_date_from, source_date_to = source_dates_for_utc_window(window["utc_start"], window["utc_end"], source_tz)
-            reelfarm_views = int(rf_daily.get(report_date) or 0)
-            clone_views = int(clone_daily.get(report_date) or 0)
-            record = {
-                "id": stable_id("product_daily_growth_snapshot", product_code, report_date),
-                "product_code": product_code,
-                "report_date": report_date,
-                "report_timezone": window["report_timezone"],
-                "source_timezone": getattr(source_tz, "key", MIXPANEL_TIMEZONE_NAME),
-                "utc_start": window["utc_start"].isoformat(),
-                "utc_end": window["utc_end"].isoformat(),
-                "source_date_from": source_date_from,
-                "source_date_to": source_date_to,
-                "reelfarm_views": reelfarm_views,
-                "clone_views": clone_views,
-                "total_views": reelfarm_views + clone_views,
-                "download_count": None,
-                "onboarding_unique": onboarding_daily.get(report_date),
-                "synced_at": now,
-            }
-            upsert_row(conn, "product_daily_growth_snapshots", record, ["product_code", "report_date"])
-            records.append(record)
-        conn.commit()
-    return records
+    return growth_runtime.sync_product_growth_snapshots(product_code, days)
 
 
 def growth_dashboard_payload(query):
-    return growth_dashboard_payload_impl(
-        query,
-        query_value=query_value,
-        report_timezone=report_timezone,
-        db_placeholder=db_placeholder,
-        connect_db=connect_db,
-        init_relational_schema=init_relational_schema,
-        row_dict=row_dict,
-        report_timezone_name=REPORT_TIMEZONE_NAME,
-        mixpanel_timezone_name=MIXPANEL_TIMEZONE_NAME,
-    )
+    return growth_runtime.growth_dashboard_payload(query)
 
 def business_material_report_payload(query):
-    return business_material_report_payload_impl(
-        query,
-        query_value=query_value,
-        business_report_windows_with_onboarding=business_report_windows_with_onboarding,
-        product_business_material_daily_stats=product_business_material_daily_stats,
-        product_business_growth_daily_stats=product_business_growth_daily_stats,
-        product_active_reelfarm_expected_automation_count=product_active_reelfarm_expected_automation_count,
-        product_mixpanel_config=product_mixpanel_config,
-        product_mixpanel_event_name=product_mixpanel_event_name,
-        mixpanel_event_user_unique_query_count=mixpanel_event_user_unique_query_count,
-        normalize_business_report_row=normalize_business_report_row,
-        summarize_business_report_rows=summarize_business_report_rows,
-        report_timezone_name=REPORT_TIMEZONE_NAME,
-        mixpanel_timezone_name=MIXPANEL_TIMEZONE_NAME,
-    )
+    return growth_runtime.business_material_report_payload(query)
 
 def clean_tag(value):
     return clean_tag_impl(value)
@@ -1766,65 +1067,27 @@ def delete_account_tag(account_id, tag):
 
 
 def museon_request(path, params=None):
-    return museon_request_impl(
-        path,
-        params,
-        api_key=MUSEON_API_KEY,
-        base_url=MUSEON_BASE_URL,
-        user_agent=MUSEON_USER_AGENT,
-        make_ssl_context=make_ssl_context,
-    )
+    return museon_runtime.request(path, params)
 
 
 def museon_campaigns(force=False):
-    return museon_campaigns_impl(
-        request_fn=museon_request,
-        workspace_id=MUSEON_WORKSPACE_ID,
-        force=force,
-    )
+    return museon_runtime.campaigns(force)
 
 
 def museon_clone_campaign(product_code, country_code):
-    return museon_clone_campaign_impl(
-        product_code,
-        country_code,
-        campaigns_fn=museon_campaigns,
-    )
+    return museon_runtime.clone_campaign(product_code, country_code)
 
 
 def museon_clone_campaigns_for_product(product_code, country_code=""):
-    return museon_clone_campaigns_for_product_impl(
-        product_code,
-        country_code,
-        products=load_data(),
-        country_codes=COUNTRY_CODES,
-        code_from_name=code_from_name,
-        clone_campaign_fn=museon_clone_campaign,
-    )
+    return museon_runtime.clone_campaigns_for_product(product_code, country_code)
 
 
 def museon_posts(campaign_id, date_from="", date_to="", username="", page=1, page_size=100, sort=""):
-    return museon_posts_impl(
-        campaign_id,
-        date_from,
-        date_to,
-        username,
-        page,
-        page_size,
-        sort,
-        request_fn=museon_request,
-        post_datetime_bound=post_datetime_bound,
-    )
+    return museon_runtime.posts(campaign_id, date_from, date_to, username, page, page_size, sort)
 
 
 def museon_all_posts(campaign_id, date_from="", date_to="", max_pages=40):
-    return museon_all_posts_impl(
-        campaign_id,
-        date_from,
-        date_to,
-        max_pages,
-        posts_fn=museon_posts,
-    )
+    return museon_runtime.all_posts(campaign_id, date_from, date_to, max_pages)
 
 
 def local_product_country_context(product_code, country_code):
@@ -1856,288 +1119,19 @@ def reelfarm_account_lookup(product_code, country_code):
 
 
 def museon_content_download_images(content_id):
-    return museon_content_download_images_impl(content_id, request_fn=museon_request)
+    return museon_runtime.content_download_images(content_id)
 
 
 def hydrate_museon_images_for_rows(conn, row_data_list):
-    placeholder = db_placeholder()
-    hydrated = []
-    changed = False
-    for data in row_data_list:
-        item = dict(data)
-        existing_images = parse_json_list(item.get("images_json"))
-        if existing_images:
-            hydrated.append(item)
-            continue
-
-        content_id = museon_content_id_from_material_source(item.get("reelfarm_video_id"))
-        images = museon_content_download_images(content_id)
-        if images:
-            images_json = db_json(images)
-            slide_count = int_or_none(item.get("slide_count")) or len(images)
-            item["images_json"] = images_json
-            item["slide_count"] = slide_count
-            conn.execute(
-                f"""
-                UPDATE materials
-                SET images_json = {placeholder},
-                    slide_count = CASE
-                        WHEN slide_count IS NULL OR slide_count = 0 THEN {placeholder}
-                        ELSE slide_count
-                    END
-                WHERE id = {placeholder}
-                """,
-                (images_json, slide_count, item.get("material_id")),
-            )
-            changed = True
-        hydrated.append(item)
-
-    if changed:
-        conn.commit()
-    return hydrated
+    return museon_runtime.hydrate_images_for_rows(conn, row_data_list)
 
 
 def local_product_country_record(product_id="", country_id="", product_code="", country_code=""):
-    product_code = str(product_code or "").strip().upper()
-    country_code = str(country_code or "").strip().upper()
-    for product in load_data():
-        if not isinstance(product, dict):
-            continue
-        pcode = product_code_for(product)
-        if product_id and str(product.get("id") or "") != str(product_id):
-            continue
-        if product_code and pcode != product_code:
-            continue
-        for country in product.get("countries") or []:
-            if not isinstance(country, dict):
-                continue
-            ccode = country_code_for(country)
-            if country_id and str(country.get("id") or "") != str(country_id):
-                continue
-            if country_code and ccode != country_code:
-                continue
-            return product, country, pcode, ccode
-    return (
-        {
-            "id": product_id or stable_id("product", product_code),
-            "name": product_code or "Product",
-            "reelFarmCode": product_code,
-            "folder": "",
-            "logo": "",
-        },
-        {
-            "id": country_id or stable_id("country", country_code),
-            "name": country_code or "Country",
-            "reelFarmCode": country_code,
-        },
-        product_code,
-        country_code,
-    )
+    return museon_runtime.local_product_country_record(product_id, country_id, product_code, country_code)
 
 
 def sync_museon_clone_country(product_id="", country_id="", product_code="", country_code=""):
-    product, country, product_code, country_code = local_product_country_record(product_id, country_id, product_code, country_code)
-    if not product_code or not country_code:
-        raise ValueError("Missing product_code or country_code.")
-
-    started = time.perf_counter()
-    synced_at = datetime.now(timezone.utc).isoformat()
-    campaign = museon_clone_campaign(product_code, country_code)
-    if not campaign:
-        return {
-            "ok": True,
-            "skipped": True,
-            "source": "museon_clone",
-            "product_code": product_code,
-            "country_code": country_code,
-            "creator_count": 0,
-            "material_count": 0,
-            "post_count": 0,
-            "synced_at": synced_at,
-            "message": f"No Museon clone campaign found for {country_code}-{product_code}.",
-        }
-
-    posts = museon_all_posts(campaign.get("id"), max_pages=0)
-    channel_id = stable_id("channel", "MUSEON_CLONE")
-    product_row_id = str(product.get("id") or stable_id("product", product_code))
-    market_id = stable_id("market", country_code)
-    product_market_id = stable_id("product_market", product_row_id, market_id)
-    product_market_channel_id = stable_id("product_market_channel", product_market_id, channel_id)
-    campaign_name = str(campaign.get("name") or campaign.get("title") or f"{country_code}-{product_code}-Clone")
-    campaign_id = str(campaign.get("id") or stable_id("museon_campaign", campaign_name))
-    account_ids = set()
-    material_count = 0
-    post_count = 0
-
-    with connect_db() as conn:
-        init_relational_schema(conn)
-        upsert_row(conn, "channels", {"id": channel_id, "name": "Clone Slide Show", "code": "MUSEON_CLONE"}, ["code"])
-        upsert_row(
-            conn,
-            "products",
-            {
-                "id": product_row_id,
-                "name": str(product.get("name") or product_code),
-                "code": product_code,
-                "owner_type": product.get("folder") or product.get("owner_type") or "",
-                "logo_url": product.get("logo") or product.get("logo_url") or "",
-                "created_at": product.get("created_at") or synced_at,
-                "updated_at": synced_at,
-            },
-            ["id"],
-        )
-        upsert_row(conn, "markets", {"id": market_id, "name": str(country.get("name") or country_code), "code": country_code}, ["code"])
-        upsert_row(conn, "product_markets", {"id": product_market_id, "product_id": product_row_id, "market_id": market_id}, ["product_id", "market_id"])
-        upsert_row(
-            conn,
-            "product_market_channels",
-            {"id": product_market_channel_id, "product_market_id": product_market_id, "channel_id": channel_id},
-            ["product_market_id", "channel_id"],
-        )
-
-        for post in posts:
-            if not isinstance(post, dict):
-                continue
-            account = museon_account_from_post(post)
-            username = normalize_username(account.get("username")) or normalize_username(account.get("display_name"))
-            if not username:
-                continue
-            museon_account_id = str(account.get("id") or username)
-            account_source_id = f"museon:{museon_account_id}"
-            account_id = stable_id("museon_account", product_market_channel_id, account_source_id)
-            automation_source_id = f"museon:{campaign_id}:{museon_account_id}"
-            automation_id = stable_id("museon_automation", automation_source_id)
-            post_source_id = str(post.get("id") or post.get("post_id") or post.get("content_id") or stable_id("museon_post_source", campaign_id, username, museon_post_published_at(post)))
-            material_source_id = str(post.get("content_id") or post_source_id)
-            reelfarm_video_id = f"museon:{campaign_id}:{material_source_id}"
-            reelfarm_post_id = f"museon:{campaign_id}:{post_source_id}"
-            material_id = stable_id("museon_material", reelfarm_video_id)
-            post_id = stable_id("museon_post", reelfarm_post_id)
-            metrics = museon_post_metrics(post)
-            published_at = museon_post_published_at(post)
-            images = museon_post_images(post)
-
-            account_ids.add(account_id)
-            material_count += 1
-            post_count += 1
-
-            upsert_row(
-                conn,
-                "accounts",
-                {
-                    "id": account_id,
-                    "product_market_channel_id": product_market_channel_id,
-                    "source": "museon_clone",
-                    "source_account_id": account_source_id,
-                    "reelfarm_account_id": account_source_id,
-                    "username": account.get("username") or username,
-                    "display_name": account.get("display_name") or account.get("username") or username,
-                    "avatar_url": account.get("avatar_url") or "",
-                    "status": account.get("status") or "active",
-                },
-                ["product_market_channel_id", "reelfarm_account_id"],
-            )
-            upsert_row(
-                conn,
-                "automations",
-                {
-                    "id": automation_id,
-                    "product_market_channel_id": product_market_channel_id,
-                    "account_id": account_id,
-                    "source": "museon_clone",
-                    "source_automation_id": automation_source_id,
-                    "reelfarm_automation_id": automation_source_id,
-                    "name": campaign_name,
-                    "status": "active",
-                    "schedule": "[]",
-                    "settings_json": db_json({"source": "museon_clone", "campaign": campaign, "account": account}),
-                    "post_mode": "RPA",
-                    "publish_method": "rpa",
-                    "created_at": campaign.get("created_at") or "",
-                    "synced_at": synced_at,
-                },
-                ["reelfarm_automation_id"],
-            )
-            upsert_row(
-                conn,
-                "materials",
-                {
-                    "id": material_id,
-                    "automation_id": automation_id,
-                    "product_market_channel_id": product_market_channel_id,
-                    "account_id": account_id,
-                    "concept_id": None,
-                    "format_id": None,
-                    "source": "museon_clone",
-                    "source_material_id": reelfarm_video_id,
-                    "reelfarm_video_id": reelfarm_video_id,
-                    "video_type": post.get("content_type") or "slideshow",
-                    "hook": post.get("title") or post.get("description") or "",
-                    "prompt": post.get("caption") or post.get("description") or "",
-                    "images_json": db_json(images),
-                    "slide_count": int_or_none(post.get("slide_count")) or len(images),
-                    "status": post.get("status") or "",
-                    "created_at": post.get("created_at") or published_at or "",
-                    "finished_at": post.get("finished_at") or "",
-                    "synced_at": synced_at,
-                },
-                ["reelfarm_video_id"],
-            )
-            upsert_row(
-                conn,
-                "posts",
-                {
-                    "id": post_id,
-                    "material_id": material_id,
-                    "account_id": account_id,
-                    "source": "museon_clone",
-                    "source_post_id": reelfarm_post_id,
-                    "reelfarm_post_id": reelfarm_post_id,
-                    "status": post.get("status") or "",
-                    "title": post.get("title") or post.get("description") or "",
-                    "published_at": published_at,
-                    "published_at_readable": readable_utc_datetime(published_at),
-                    "view_count": metrics["view_count"],
-                    "like_count": metrics["like_count"],
-                    "comment_count": metrics["comment_count"],
-                    "share_count": metrics["share_count"],
-                    "bookmark_count": metrics["bookmark_count"],
-                    "synced_at": synced_at,
-                },
-                ["reelfarm_post_id"],
-            )
-            snapshot_date = utc_snapshot_date()
-            upsert_row(
-                conn,
-                "post_daily_snapshots",
-                {
-                    "id": stable_id("post_daily_snapshot", post_id, snapshot_date),
-                    "post_id": post_id,
-                    "snapshot_date": snapshot_date,
-                    "view_count": metrics["view_count"],
-                    "like_count": metrics["like_count"],
-                    "comment_count": metrics["comment_count"],
-                    "share_count": metrics["share_count"],
-                    "bookmark_count": metrics["bookmark_count"],
-                    "synced_at": synced_at,
-                },
-                ["post_id", "snapshot_date"],
-            )
-        conn.commit()
-
-    return {
-        "ok": True,
-        "source": "museon_clone",
-        "product_code": product_code,
-        "country_code": country_code,
-        "campaign_id": campaign_id,
-        "campaign_name": campaign_name,
-        "creator_count": len(account_ids),
-        "material_count": material_count,
-        "post_count": post_count,
-        "synced_at": synced_at,
-        "duration_total_seconds": round(time.perf_counter() - started, 3),
-    }
+    return museon_runtime.sync_clone_country(product_id, country_id, product_code, country_code)
 
 
 def query_museon_clone_accounts(query):

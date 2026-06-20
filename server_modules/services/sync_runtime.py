@@ -10,6 +10,9 @@ from server_modules.product_config import (
     product_code_for,
 )
 from server_modules.reelfarm_lifecycle import cleanup_reelfarm_product_from_latest_automations as cleanup_reelfarm_product_from_latest_automations_impl
+from server_modules.services import growth_runtime
+from server_modules.services import museon_runtime
+from server_modules.services import reelfarm_projection_runtime
 from server_modules.services import reelfarm_runtime
 from server_modules.sync_orchestrator import (
     sync_all_growth_snapshots as sync_all_growth_snapshots_impl,
@@ -56,9 +59,7 @@ def safe_record_sync_run(*args, **kwargs):
 
 
 def project_synced_country_to_relational(product, country):
-    from server import project_synced_country_to_relational as project
-
-    return project(product, country)
+    return reelfarm_projection_runtime.project_synced_country_to_relational(product, country)
 
 
 def cleanup_reelfarm_product_from_latest_automations(product_code, automations, synced_at):
@@ -183,15 +184,11 @@ def sync_reelfarm_prefix(prefix, product_id="", country_id="", concept_id="", pr
 
 
 def sync_museon_clone_country(product_id="", country_id="", product_code="", country_code=""):
-    from server import sync_museon_clone_country as sync_country
-
-    return sync_country(product_id, country_id, product_code, country_code)
+    return museon_runtime.sync_clone_country(product_id, country_id, product_code, country_code)
 
 
 def sync_product_growth_snapshots(product_code, days=30):
-    from server import sync_product_growth_snapshots as sync_product
-
-    return sync_product(product_code, days)
+    return growth_runtime.sync_product_growth_snapshots(product_code, days)
 
 
 def configured_product_codes():
