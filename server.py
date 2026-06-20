@@ -4002,6 +4002,22 @@ def find_open_port(start_port=8765):
 
 
 class ManagementTableHandler(BaseHTTPRequestHandler):
+    PUBLIC_API_PATHS = {
+        "/api/health",
+        "/api/auth/login",
+        "/api/auth/logout",
+        "/api/auth/status",
+    }
+    CRON_API_PATHS = {
+        "/api/reelfarm/sync-all",
+        "/api/sync/daily-all",
+        "/api/reports/daily-feishu",
+    }
+    EXTERNAL_API_PATHS = {
+        "/api/ai/materials",
+        "/api/data/query",
+    }
+
     def log_message(self, format, *args):
         print("[%s] %s" % (self.log_date_time_string(), format % args))
 
@@ -4305,13 +4321,11 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
     def auth_required(self, path):
         if not path.startswith("/api/"):
             return False
-        if path in {"/api/health", "/api/auth/login", "/api/auth/logout", "/api/auth/status"}:
+        if path in self.PUBLIC_API_PATHS:
             return False
-        if path in {"/api/reelfarm/sync-all", "/api/sync/daily-all", "/api/reports/daily-feishu"} and cron_authorized(self.headers):
+        if path in self.CRON_API_PATHS and cron_authorized(self.headers):
             return False
-        if path == "/api/ai/materials" and self.ai_authorized():
-            return False
-        if path == "/api/data/query" and self.ai_authorized():
+        if path in self.EXTERNAL_API_PATHS and self.ai_authorized():
             return False
         return True
 
