@@ -4121,6 +4121,97 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
         except ValueError as error:
             self.send_error_json(404, error)
 
+    def handle_reelfarm_sync_prefix(self):
+        payload, ok = self.read_json_payload()
+        if not ok:
+            return
+
+        prefix = self.payload_text(payload, "prefix")
+        try:
+            self.send_json(
+                200,
+                sync_reelfarm_prefix(
+                    prefix,
+                    self.payload_text(payload, "product_id"),
+                    self.payload_text(payload, "country_id"),
+                    self.payload_text(payload, "concept_id"),
+                    self.payload_text(payload, "product_code"),
+                    self.payload_text(payload, "country_code"),
+                ),
+            )
+        except ValueError as error:
+            self.send_error_json(400, error)
+        except RuntimeError as error:
+            self.send_error_json(502, error)
+
+    def handle_reelfarm_sync_country(self):
+        payload, ok = self.read_json_payload()
+        if not ok:
+            return
+
+        prefix = self.payload_text(payload, "prefix")
+        try:
+            self.send_json(
+                200,
+                sync_reelfarm_country(
+                    prefix,
+                    self.payload_text(payload, "product_id"),
+                    self.payload_text(payload, "country_id"),
+                    self.payload_text(payload, "product_code"),
+                    self.payload_text(payload, "country_code"),
+                ),
+            )
+        except ValueError as error:
+            self.send_error_json(400, error)
+        except RuntimeError as error:
+            self.send_error_json(502, error)
+
+    def handle_museon_sync_country(self):
+        payload, ok = self.read_json_payload()
+        if not ok:
+            return
+
+        try:
+            self.send_json(
+                200,
+                sync_museon_clone_country(
+                    self.payload_text(payload, "product_id"),
+                    self.payload_text(payload, "country_id"),
+                    self.payload_text(payload, "product_code"),
+                    self.payload_text(payload, "country_code"),
+                ),
+            )
+        except ValueError as error:
+            self.send_error_json(400, error)
+        except RuntimeError as error:
+            self.send_error_json(502, error)
+
+    def handle_growth_sync_product(self):
+        payload, ok = self.read_json_payload({})
+        if not ok:
+            return
+
+        try:
+            records = sync_product_growth_snapshots(
+                self.payload_text(payload, "product_code"),
+                self.payload_value(payload, "days", 30),
+            )
+            self.send_json(200, {"ok": True, "count": len(records), "records": records})
+        except ValueError as error:
+            self.send_error_json(400, error)
+        except RuntimeError as error:
+            self.send_error_json(502, error)
+
+    def handle_daily_sync_all(self):
+        if not cron_authorized(self.headers):
+            self.send_error_json(401, "Unauthorized")
+            return
+
+        try:
+            self.send_json(200, sync_daily_all_records())
+        except RuntimeError as error:
+            self.send_error_json(502, error)
+
     def read_json_body(self):
         length = int(self.headers.get("Content-Length", "0"))
         if length <= 0:
@@ -4398,97 +4489,23 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/reelfarm/sync-prefix":
-            payload, ok = self.read_json_payload()
-            if not ok:
-                return
-
-            prefix = self.payload_text(payload, "prefix")
-            try:
-                self.send_json(
-                    200,
-                    sync_reelfarm_prefix(
-                        prefix,
-                        self.payload_text(payload, "product_id"),
-                        self.payload_text(payload, "country_id"),
-                        self.payload_text(payload, "concept_id"),
-                        self.payload_text(payload, "product_code"),
-                        self.payload_text(payload, "country_code"),
-                    ),
-                )
-            except ValueError as error:
-                self.send_error_json(400, error)
-            except RuntimeError as error:
-                self.send_error_json(502, error)
+            self.handle_reelfarm_sync_prefix()
             return
 
         if path == "/api/reelfarm/sync-country":
-            payload, ok = self.read_json_payload()
-            if not ok:
-                return
-
-            prefix = self.payload_text(payload, "prefix")
-            try:
-                self.send_json(
-                    200,
-                    sync_reelfarm_country(
-                        prefix,
-                        self.payload_text(payload, "product_id"),
-                        self.payload_text(payload, "country_id"),
-                        self.payload_text(payload, "product_code"),
-                        self.payload_text(payload, "country_code"),
-                    ),
-                )
-            except ValueError as error:
-                self.send_error_json(400, error)
-            except RuntimeError as error:
-                self.send_error_json(502, error)
+            self.handle_reelfarm_sync_country()
             return
 
         if path == "/api/museon/sync-country":
-            payload, ok = self.read_json_payload()
-            if not ok:
-                return
-
-            try:
-                self.send_json(
-                    200,
-                    sync_museon_clone_country(
-                        self.payload_text(payload, "product_id"),
-                        self.payload_text(payload, "country_id"),
-                        self.payload_text(payload, "product_code"),
-                        self.payload_text(payload, "country_code"),
-                    ),
-                )
-            except ValueError as error:
-                self.send_error_json(400, error)
-            except RuntimeError as error:
-                self.send_error_json(502, error)
+            self.handle_museon_sync_country()
             return
 
         if path == "/api/growth/sync-product":
-            payload, ok = self.read_json_payload({})
-            if not ok:
-                return
-            try:
-                records = sync_product_growth_snapshots(
-                    self.payload_text(payload, "product_code"),
-                    self.payload_value(payload, "days", 30),
-                )
-                self.send_json(200, {"ok": True, "count": len(records), "records": records})
-            except ValueError as error:
-                self.send_error_json(400, error)
-            except RuntimeError as error:
-                self.send_error_json(502, error)
+            self.handle_growth_sync_product()
             return
 
         if path == "/api/sync/daily-all":
-            if not cron_authorized(self.headers):
-                self.send_error_json(401, "Unauthorized")
-                return
-            try:
-                self.send_json(200, sync_daily_all_records())
-            except RuntimeError as error:
-                self.send_error_json(502, error)
+            self.handle_daily_sync_all()
             return
 
         if path == "/api/reports/daily-feishu":
