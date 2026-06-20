@@ -8,7 +8,7 @@ import {
   getAccountAvgViews,
   getAutomationDisplay,
   getPublishMethod
-} from './AccountPoolHelpers';
+} from '@/lib/domain/accountPool';
 import { AccountPostPanel, type AccountPostState } from './CountryAccountPosts';
 import { accountTagStyle, nonIssueTags } from './CountryAccountTagHelpers';
 

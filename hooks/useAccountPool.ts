@@ -1,32 +1,21 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import {
-  type AccountPoolRow,
-  type ViewSortDirection,
-  getAccountPoolPerformanceMetrics,
-  getAccountRowKey,
-  getAccountPoolTagOptions,
-  filterAccountPoolRows,
-  sortAccountPoolRows
-} from '@/components/AccountPoolHelpers';
-import { ACCOUNT_POST_PAGE_SIZE, type AccountPostState } from '@/components/CountryAccountPosts';
-import { type TagFilterRow } from '@/components/CountryAccountTags';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
 import { defaultDateRange } from '@/lib/dateRange';
+import type { AccountPoolDataSource, AccountPoolRow } from '@/lib/domain/accountPool';
 import { formatTagLabel } from '@/lib/tagUtils';
-import type { AccountSummary, Country, DetailedPostRow, Product } from '@/lib/types';
+import type { Country, Product } from '@/lib/types';
 import { getCountryReelFarmCode, getProductReelFarmCode } from '@/lib/utils';
 import {
   addTagToRows,
-  attachAccountTagsAndIssues,
-  buildAccountPostsQueryParams,
-  buildAccountPoolQueryParams,
-  fetchAccountTagsAndIssues,
   removeProductTagFromFilters,
   removeProductTagFromRows,
   removeTagFromRows
 } from './accountPoolStateHelpers';
+import { loadAccountPoolRows } from './accountPool/accountPoolData';
+import { useAccountPoolFilters } from './accountPool/useAccountPoolFilters';
+import { useAccountPoolPosts } from './accountPool/useAccountPoolPosts';
 
 export function useAccountPool({
   product,
@@ -36,69 +25,67 @@ export function useAccountPool({
 }: {
   product: Product;
   countries: Country[];
-  dataSource: 'reelfarm' | 'museon_clone';
+  dataSource: AccountPoolDataSource;
   onSyncProduct: (product: Product) => void | Promise<void>;
 }) {
   const [rows, setRows] = useState<AccountPoolRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [search, setSearch] = useState('');
-  const [countryFilter, setCountryFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [publishMethodFilter, setPublishMethodFilter] = useState('all');
-  const [tagFilters, setTagFilters] = useState<TagFilterRow[]>([]);
   const [dateFrom, setDateFrom] = useState(defaultDateRange.from);
   const [dateTo, setDateTo] = useState(defaultDateRange.to);
-  const [viewSort, setViewSort] = useState<ViewSortDirection>('none');
-  const [expandedAccounts, setExpandedAccounts] = useState<Record<string, boolean>>({});
-  const [postCache, setPostCache] = useState<Record<string, AccountPostState>>({});
   const [editingTagAccountId, setEditingTagAccountId] = useState('');
   const [productTagOptions, setProductTagOptions] = useState<string[]>([]);
+  const productCode = useMemo(() => getProductReelFarmCode(product), [product]);
   const countryKey = useMemo(
     () => countries.map(country => getCountryReelFarmCode(country)).join('|'),
     [countries]
   );
 
-  async function loadAccountPool() {
+  const {
+    search,
+    setSearch,
+    countryFilter,
+    setCountryFilter,
+    statusFilter,
+    setStatusFilter,
+    statusOptions,
+    publishMethodFilter,
+    setPublishMethodFilter,
+    tagFilters,
+    setTagFilters,
+    tagOptions,
+    viewSort,
+    filteredRows,
+    sortedRows,
+    performanceMetrics,
+    toggleViewSort
+  } = useAccountPoolFilters({ rows, productTagOptions, dataSource });
+
+  const {
+    expandedAccounts,
+    postCache,
+    accountRowKey,
+    loadAccountPosts,
+    toggleAccount,
+    resetAccountPosts
+  } = useAccountPoolPosts({ productCode, dateFrom, dateTo, dataSource });
+
+  const loadAccountPool = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const productCode = getProductReelFarmCode(product);
-      const productTagsRequest = api.productTags(productCode).catch(() => ({
-        ok: false,
-        product_code: productCode,
-        tags: [] as string[]
-      }));
-      const productTagsPayload = await productTagsRequest;
-      if (!countries.length) {
-        setProductTagOptions(productTagsPayload.tags || []);
-        setRows([]);
-        return;
+      const payload = await loadAccountPoolRows({
+        productCode,
+        countries,
+        dateFrom,
+        dateTo,
+        dataSource
+      });
+      setProductTagOptions(payload.productTags);
+      setRows(payload.rows);
+      if (payload.failures.length) {
+        setError(`部分国家账号读取失败：${payload.failures.join('; ')}`);
       }
-
-      const countryPayloads = await Promise.allSettled(
-        countries.map(async country => {
-          const params = buildAccountPoolQueryParams({ productCode, country, dateFrom, dateTo, dataSource });
-          const payload = await api.dataQuery<{ ok: boolean; data: AccountSummary[] }>(params);
-          return (payload.data || []).map(account => ({ ...account, country }));
-        })
-      );
-      setProductTagOptions(productTagsPayload.tags || []);
-      const accounts = countryPayloads
-        .flatMap(result => result.status === 'fulfilled' ? result.value : [])
-        .filter((account): account is AccountSummary & { country: Country } => Boolean(account));
-      const failures = countryPayloads
-        .map((result, index) => result.status === 'rejected' ? `${countries[index]?.name || 'Unknown'}: ${result.reason?.message || 'Request failed'}` : '')
-        .filter(Boolean);
-      if (!accounts.length && failures.length) {
-        throw new Error(failures.join('; '));
-      }
-      if (failures.length) {
-        setError(`部分国家账号读取失败：${failures.join('; ')}`);
-      }
-      const accountIds = accounts.map(account => account.account_id).filter(Boolean);
-      const { tagMap, issueMap } = await fetchAccountTagsAndIssues(accountIds);
-      setRows(attachAccountTagsAndIssues(accounts, tagMap, issueMap));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown account pool loading error.';
       setRows([]);
@@ -106,7 +93,7 @@ export function useAccountPool({
     } finally {
       setLoading(false);
     }
-  }
+  }, [countries, dataSource, dateFrom, dateTo, productCode]);
 
   async function handleSyncProduct() {
     await onSyncProduct(product);
@@ -115,90 +102,11 @@ export function useAccountPool({
 
   useEffect(() => {
     loadAccountPool().catch(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product.id, dataSource, dateFrom, dateTo, countryKey]);
+  }, [loadAccountPool]);
 
   useEffect(() => {
-    setExpandedAccounts({});
-    setPostCache({});
-  }, [product.id, dataSource, dateFrom, dateTo, countryKey]);
-
-  function accountRowKey(row: AccountPoolRow) {
-    return getAccountRowKey(row, dateFrom, dateTo);
-  }
-
-  async function loadAccountPosts(row: AccountPoolRow, offset = 0) {
-    const key = accountRowKey(row);
-    const cached = postCache[key];
-    if (cached && cached.offset === offset && cached.rows.length && !cached.error) return;
-
-    setPostCache(previous => ({
-      ...previous,
-      [key]: {
-        rows: previous[key]?.rows || [],
-        offset,
-        hasMore: previous[key]?.hasMore || false,
-        total: previous[key]?.total,
-        loading: true,
-        error: ''
-      }
-    }));
-
-    try {
-      const params = buildAccountPostsQueryParams({
-        productCode: getProductReelFarmCode(product),
-        country: row.country,
-        accountId: row.account_id,
-        limit: ACCOUNT_POST_PAGE_SIZE,
-        offset,
-        dateFrom,
-        dateTo,
-        dataSource
-      });
-      const payload = await api.dataQuery<{
-        ok: boolean;
-        data: DetailedPostRow[];
-        pagination?: { limit: number; offset: number; has_more: boolean; total?: number };
-      }>(params);
-      setPostCache(previous => ({
-        ...previous,
-        [key]: {
-          rows: payload.data || [],
-          offset,
-          hasMore: Boolean(payload.pagination?.has_more),
-          total: payload.pagination?.total,
-          loading: false,
-          error: ''
-        }
-      }));
-    } catch (error: any) {
-      setPostCache(previous => ({
-        ...previous,
-        [key]: {
-          rows: previous[key]?.rows || [],
-          offset,
-          hasMore: false,
-          total: previous[key]?.total,
-          loading: false,
-          error: error?.message || 'Posts loading failed.'
-        }
-      }));
-    }
-  }
-
-  function toggleAccount(row: AccountPoolRow) {
-    const key = accountRowKey(row);
-    const isExpanded = Boolean(expandedAccounts[key]);
-    setExpandedAccounts(previous => ({ ...previous, [key]: !isExpanded }));
-    if (!isExpanded) {
-      loadAccountPosts(row, postCache[key]?.offset || 0);
-    }
-  }
-
-  const tagOptions = useMemo(
-    () => getAccountPoolTagOptions(productTagOptions, rows),
-    [productTagOptions, rows]
-  );
+    resetAccountPosts();
+  }, [product.id, dataSource, dateFrom, dateTo, countryKey, resetAccountPosts]);
 
   const editingTagRow = editingTagAccountId ? rows.find(row => row.account_id === editingTagAccountId) || null : null;
 
@@ -206,7 +114,7 @@ export function useAccountPool({
     const accountId = String(row.account_id || '').trim();
     const nextTag = tag.trim();
     if (!accountId || !nextTag) return;
-    const productTagsPayload = await api.createProductTag(getProductReelFarmCode(product), nextTag);
+    const productTagsPayload = await api.createProductTag(productCode, nextTag);
     setProductTagOptions(productTagsPayload.tags || []);
     const payload = await api.addAccountTag(accountId, nextTag);
     setRows(previous => addTagToRows(previous, accountId, payload.tag));
@@ -220,7 +128,6 @@ export function useAccountPool({
   }
 
   async function deleteProductTagOption(tag: string) {
-    const productCode = getProductReelFarmCode(product);
     const nextTag = tag.trim();
     if (!productCode || !nextTag) return;
     const confirmed = window.confirm(`删除 ${formatTagLabel(nextTag)} 吗？这个 Tag 会从当前产品所有账号上移除。`);
@@ -231,29 +138,6 @@ export function useAccountPool({
     setRows(previous => removeProductTagFromRows(previous, deletedTag));
     setTagFilters(previous => removeProductTagFromFilters(previous, deletedTag));
   }
-
-  const filteredRows = useMemo(() => filterAccountPoolRows({
-    rows,
-    search,
-    countryFilter,
-    statusFilter,
-    publishMethodFilter,
-    tagFilters,
-    dataSource
-  }), [countryFilter, dataSource, publishMethodFilter, rows, search, statusFilter, tagFilters]);
-
-  const sortedRows = useMemo(() => {
-    return sortAccountPoolRows(filteredRows, viewSort);
-  }, [filteredRows, viewSort]);
-
-  function toggleViewSort() {
-    setViewSort(previous => previous === 'desc' ? 'asc' : 'desc');
-  }
-
-  const statusOptions = useMemo(() => {
-    return Array.from(new Set(rows.map(row => String(row.status || 'unknown').toLowerCase()))).sort();
-  }, [rows]);
-  const performanceMetrics = useMemo(() => getAccountPoolPerformanceMetrics(filteredRows), [filteredRows]);
 
   return {
     rows,
