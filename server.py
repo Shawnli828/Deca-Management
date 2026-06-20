@@ -4019,6 +4019,25 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
         payload = {"ok": False, "error": str(error)} if include_ok else {"error": str(error)}
         self.send_json(status, payload)
 
+    def send_static_file(self, request_path):
+        requested = (BASE_DIR / unquote(request_path.lstrip("/"))).resolve()
+        if BASE_DIR not in requested.parents and requested != BASE_DIR:
+            self.send_error_json(403, "Forbidden")
+            return
+
+        if not requested.is_file():
+            self.send_error_json(404, "Not found")
+            return
+
+        content_type = mimetypes.guess_type(requested.name)[0] or "application/octet-stream"
+        body = requested.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def read_json_body(self):
         length = int(self.headers.get("Content-Length", "0"))
         if length <= 0:
@@ -4257,23 +4276,8 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
         if path == "/":
             path = "/index.html"
 
-        requested = (BASE_DIR / unquote(path.lstrip("/"))).resolve()
-        if BASE_DIR not in requested.parents and requested != BASE_DIR:
-            self.send_error_json(403, "Forbidden")
-            return
-
-        if not requested.is_file():
-            self.send_error_json(404, "Not found")
-            return
-
-        content_type = mimetypes.guess_type(requested.name)[0] or "application/octet-stream"
-        body = requested.read_bytes()
-        self.send_response(200)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        self.send_static_file(path)
+        return
 
     def do_POST(self):
         path = urlparse(self.path).path
