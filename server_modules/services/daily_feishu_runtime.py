@@ -103,6 +103,10 @@ def report_card(report_date="", report=None):
     return daily_feishu_service().report_card(report_date, report)
 
 
+def report_template_variables(report_date="", report=None, view_slot="product_1"):
+    return daily_feishu_service().report_template_variables(report, report_date, view_slot)
+
+
 def ai_analysis(report_date="", model="", report=None, require_config=False):
     return daily_feishu_service().ai_analysis(report_date, model, report, require_config)
 
@@ -113,3 +117,7 @@ def llm_models_payload():
 
 def send_report(report_date="", include_ai=False, model="", require_synced=False, mode="text"):
     return daily_feishu_service().send_report(report_date, include_ai, model, require_synced, mode)
+
+
+def product_template_callback_card(view_slot="product_1", report_date=""):
+    return daily_feishu_service().product_template_callback_card(view_slot, report_date)

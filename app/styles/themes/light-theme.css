@@ -1669,6 +1669,35 @@
             white-space: pre-wrap;
         }
 
+        .feishu-template-preview {
+            margin-top: 12px;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            background: #ffffff;
+        }
+
+        .feishu-template-preview summary {
+            cursor: pointer;
+            padding: 10px 12px;
+            color: #334155;
+            font-size: 13px;
+            font-weight: 720;
+        }
+
+        .feishu-template-preview pre {
+            max-height: 360px;
+            overflow: auto;
+            margin: 0;
+            border-top: 1px solid var(--line);
+            padding: 12px;
+            background: #f8fafc;
+            color: #111827;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 12px;
+            line-height: 1.55;
+            white-space: pre-wrap;
+        }
+
         .feishu-product-list {
             display: grid;
             gap: 10px;

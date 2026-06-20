@@ -177,6 +177,12 @@ export function FeishuReportLayout({
             </div>
           </div>
           <pre className="feishu-message-preview">{payload?.message || (loading ? '正在生成...' : '暂无预览')}</pre>
+          {sendMode === 'template' && payload?.template_preview ? (
+            <details className="feishu-template-preview">
+              <summary>模板变量预览</summary>
+              <pre>{JSON.stringify(payload.template_preview, null, 2)}</pre>
+            </details>
+          ) : null}
         </section>
 
         <aside className="feishu-product-card">
@@ -404,7 +410,15 @@ export function FeishuStatusMessages({
       {sendResult?.ok ? (
         <div className="feishu-success">
           已发送到飞书：{sendResult.sent_at || '刚刚'}
-          {sendResult.mode ? ` · ${sendResult.mode === 'card' ? '卡片模式' : sendResult.mode === 'text' ? '文本模式' : '卡片失败转文本'}` : ''}
+          {sendResult.mode ? ` · ${
+            sendResult.mode === 'template'
+              ? '模板卡片模式'
+              : sendResult.mode === 'card'
+                ? 'Webhook 卡片模式'
+                : sendResult.mode === 'text'
+                  ? '文本模式'
+                  : 'Webhook 卡片失败转文本'
+          }` : ''}
         </div>
       ) : null}
     </>

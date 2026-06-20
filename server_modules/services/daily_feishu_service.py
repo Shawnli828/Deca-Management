@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable, Mapping
 
 from server_modules.daily_report import (
@@ -17,6 +17,10 @@ from server_modules.external_clients import (
     llm_models_payload as llm_models_payload_client,
     send_feishu_message as send_feishu_message_client,
 )
+from server_modules.integrations.feishu_app_client import (
+    feishu_template_card_response,
+    send_template_card as send_feishu_template_card_client,
+)
 from server_modules.domain.feishu_card import build_daily_report_card
 from server_modules.metrics_service import (
     build_daily_report_product_item,
@@ -24,7 +28,17 @@ from server_modules.metrics_service import (
     summarize_daily_report_products,
 )
 from server_modules.services.feishu_card_adapter import daily_report_card_data
+from server_modules.services.feishu_template_variables import (
+    overview_template_variables,
+    parse_product_names,
+    product_template_variables,
+)
 from server_modules.sync_status import format_sync_readiness_line
+
+
+DEFAULT_FEISHU_OVERVIEW_TEMPLATE_ID = "AAqNBs4PoCeb2"
+DEFAULT_FEISHU_PRODUCT_TEMPLATE_ID = "AAqNBsXlJdHqX"
+DEFAULT_FEISHU_TEMPLATE_VERSION = "1.0.0"
 
 
 @dataclass
@@ -59,6 +73,131 @@ class DailyFeishuReportService:
             self.webhook_url,
             self.webhook_secret,
             self.make_ssl_context,
+        )
+
+    def template_config(self):
+        return {
+            "app_id": self.env.get("FEISHU_APP_ID", "").strip(),
+            "app_secret": self.env.get("FEISHU_APP_SECRET", "").strip(),
+            "chat_id": self.env.get("FEISHU_CHAT_ID", "").strip(),
+            "overview_template_id": (
+                self.env.get("FEISHU_OVERVIEW_TEMPLATE_ID", "").strip()
+                or DEFAULT_FEISHU_OVERVIEW_TEMPLATE_ID
+            ),
+            "overview_template_version": (
+                self.env.get("FEISHU_OVERVIEW_TEMPLATE_VERSION", "").strip()
+                or DEFAULT_FEISHU_TEMPLATE_VERSION
+            ),
+            "product_template_id": (
+                self.env.get("FEISHU_PRODUCT_TEMPLATE_ID", "").strip()
+                or DEFAULT_FEISHU_PRODUCT_TEMPLATE_ID
+            ),
+            "product_template_version": (
+                self.env.get("FEISHU_PRODUCT_TEMPLATE_VERSION", "").strip()
+                or DEFAULT_FEISHU_TEMPLATE_VERSION
+            ),
+            "product_names": parse_product_names(self.env.get("FEISHU_TEMPLATE_PRODUCT_NAMES", "")),
+        }
+
+    def template_history(self, report, product_names=None, days=7):
+        product_names = product_names or self.template_config().get("product_names")
+        report_date = str((report or {}).get("report_date") or "").strip()
+        try:
+            end_date = datetime.strptime(report_date, "%Y-%m-%d").date()
+        except ValueError:
+            end_date = datetime.strptime(default_daily_report_date(), "%Y-%m-%d").date()
+        start_date = (end_date - timedelta(days=max(1, int(days or 7)) - 1)).isoformat()
+        date_to = end_date.isoformat()
+        names = self.configured_product_name_map()
+        wanted_names = {str(name or "").strip().lower() for name in product_names or [] if str(name or "").strip()}
+        history = {}
+        for product_code in self.configured_product_codes():
+            product_name = names.get(product_code, product_code)
+            if wanted_names and str(product_name or "").strip().lower() not in wanted_names:
+                continue
+            try:
+                payload = self.business_material_report_payload({
+                    "product_code": [product_code],
+                    "date_from": [start_date],
+                    "date_to": [date_to],
+                    "mode": ["published_materials"],
+                })
+            except Exception:
+                continue
+            history[str(product_code or "").strip().upper()] = payload.get("rows") or []
+        return history
+
+    def report_template_variables(self, report=None, report_date="", view_slot="product_1"):
+        report = report or self.report_payload(report_date)
+        config = self.template_config()
+        history_by_code = self.template_history(report, config.get("product_names"))
+        return {
+            "overview": overview_template_variables(
+                report,
+                product_names=config.get("product_names"),
+                history_by_code=history_by_code,
+            ),
+            "product": product_template_variables(
+                report,
+                product_names=config.get("product_names"),
+                history_by_code=history_by_code,
+                view_slot=view_slot,
+            ),
+        }
+
+    def send_template_cards(self, report):
+        config = self.template_config()
+        variables = self.report_template_variables(report=report)
+        overview_result = send_feishu_template_card_client(
+            app_id=config.get("app_id"),
+            app_secret=config.get("app_secret"),
+            chat_id=config.get("chat_id"),
+            template_id=config.get("overview_template_id"),
+            template_version=config.get("overview_template_version"),
+            template_variables=variables.get("overview"),
+            ssl_context_factory=self.make_ssl_context,
+        )
+        if not overview_result.get("ok"):
+            return {
+                "ok": False,
+                "error": overview_result.get("error") or "Failed to send overview template card.",
+                "overview": overview_result,
+                "template_preview": variables,
+            }
+
+        product_result = send_feishu_template_card_client(
+            app_id=config.get("app_id"),
+            app_secret=config.get("app_secret"),
+            chat_id=config.get("chat_id"),
+            template_id=config.get("product_template_id"),
+            template_version=config.get("product_template_version"),
+            template_variables=variables.get("product"),
+            ssl_context_factory=self.make_ssl_context,
+        )
+        if not product_result.get("ok"):
+            return {
+                "ok": False,
+                "error": product_result.get("error") or "Failed to send product template card.",
+                "overview": overview_result,
+                "product": product_result,
+                "template_preview": variables,
+            }
+
+        return {
+            "ok": True,
+            "overview": overview_result,
+            "product": product_result,
+            "template_preview": variables,
+        }
+
+    def product_template_callback_card(self, view_slot="product_1", report_date=""):
+        report = self.report_payload(report_date or default_daily_report_date())
+        config = self.template_config()
+        variables = self.report_template_variables(report=report, view_slot=view_slot).get("product")
+        return feishu_template_card_response(
+            config.get("product_template_id"),
+            config.get("product_template_version"),
+            variables,
         )
 
     def report_payload(self, report_date=""):
@@ -214,14 +353,34 @@ class DailyFeishuReportService:
 
     def send_report(self, report_date="", include_ai=False, model="", require_synced=False, mode="text"):
         mode = str(mode or "text").strip().lower()
-        if mode not in {"text", "card", "card_with_text_fallback"}:
-            raise ValueError("mode must be text, card, or card_with_text_fallback.")
+        if mode not in {"text", "card", "card_with_text_fallback", "template"}:
+            raise ValueError("mode must be text, card, card_with_text_fallback, or template.")
         report = self.report_payload(report_date)
         if require_synced and not (report.get("sync_ready") or {}).get("ok"):
             return {
                 "ok": False,
                 "error": format_sync_readiness_line(report.get("sync_ready")),
                 "report": report,
+            }
+
+        if mode == "template":
+            sent_templates = self.send_template_cards(report)
+            if not sent_templates.get("ok"):
+                sent_templates["report"] = report
+                return sent_templates
+            return {
+                "ok": True,
+                "sent_at": datetime.now(timezone.utc).isoformat(),
+                "report_date": report.get("report_date"),
+                "totals": report.get("totals"),
+                "product_count": len(report.get("products") or []),
+                "error_count": len(report.get("errors") or []),
+                "mode": "template",
+                "template_messages": {
+                    "overview_message_id": (sent_templates.get("overview") or {}).get("message_id"),
+                    "product_message_id": (sent_templates.get("product") or {}).get("message_id"),
+                },
+                "template_preview": sent_templates.get("template_preview"),
             }
 
         card_data = None

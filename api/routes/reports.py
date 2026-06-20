@@ -8,6 +8,7 @@ from server_modules.services.daily_feishu_runtime import (
     report_card as daily_feishu_report_card,
     report_card_data as daily_feishu_report_card_data,
     report_payload as daily_feishu_report_payload,
+    report_template_variables as daily_feishu_report_template_variables,
     send_report as send_daily_feishu_report,
 )
 
@@ -82,9 +83,12 @@ def get_reports_daily_feishu_preview(request: Request, date: str = "", mode: str
         message = daily_feishu_report_text(report)
         card_data = None
         card = None
+        template_preview = None
         if str(mode or "").strip().lower() in {"card", "card_with_text_fallback"}:
             card_data = daily_feishu_report_card_data(report=report)
             card = daily_feishu_report_card(report=report)
+        if str(mode or "").strip().lower() == "template":
+            template_preview = daily_feishu_report_template_variables(report=report)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except RuntimeError as error:
@@ -97,4 +101,5 @@ def get_reports_daily_feishu_preview(request: Request, date: str = "", mode: str
         "mode": mode,
         "card_data": card_data,
         "card": card,
+        "template_preview": template_preview,
     }

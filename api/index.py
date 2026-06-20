@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse
 from api.routes.api_keys import router as api_keys_router
 from api.routes.auth import router as auth_router
 from api.routes.data import router as data_router
+from api.routes.feishu_callbacks import router as feishu_callbacks_router
 from api.routes.geelark import router as geelark_router
 from api.routes.publish_check import router as publish_check_router
 from api.routes.reelfarm import router as reelfarm_router
@@ -49,6 +50,7 @@ async def rewrite_vercel_route(request: Request, call_next):
 app.include_router(system_router)
 app.include_router(auth_router)
 app.include_router(data_router)
+app.include_router(feishu_callbacks_router)
 app.include_router(tags_router)
 app.include_router(geelark_router)
 app.include_router(publish_check_router)
