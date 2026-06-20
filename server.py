@@ -4229,33 +4229,10 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             self.send_error_json(502, error)
 
     def handle_daily_feishu_send(self):
-        query = self.query_params()
-        try:
-            include_ai = self.query_bool(query, "include_ai")
-            result = send_daily_feishu_report(
-                self.query_text(query, "date"),
-                include_ai=include_ai,
-                model=self.query_text(query, "model"),
-            )
-            status = 200 if result.get("ok") else 400
-            self.send_json(status, result)
-        except ValueError as error:
-            self.send_error_json(400, error, include_ok=True)
+        self.send_daily_feishu_response()
 
     def handle_daily_feishu_analysis(self):
-        query = self.query_params()
-        try:
-            self.send_json(
-                200,
-                daily_feishu_ai_analysis(
-                    self.query_text(query, "date"),
-                    self.query_text(query, "model"),
-                ),
-            )
-        except ValueError as error:
-            self.send_error_json(400, error, include_ok=True)
-        except RuntimeError as error:
-            self.send_error_json(502, error, include_ok=True)
+        self.send_daily_feishu_analysis_response()
 
     def handle_reelfarm_sync_all(self):
         if not cron_authorized(self.headers):
@@ -4298,6 +4275,34 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
 
     def query_bool(self, query, key):
         return self.query_text(query, key).lower() in {"1", "true", "yes", "y", "on"}
+
+    def send_daily_feishu_response(self, allow_require_synced=False):
+        query = self.query_params()
+        try:
+            result = send_daily_feishu_report(
+                self.query_text(query, "date"),
+                include_ai=self.query_bool(query, "include_ai"),
+                model=self.query_text(query, "model"),
+                require_synced=allow_require_synced and self.query_bool(query, "require_synced"),
+            )
+            status = 200 if result.get("ok") else 400
+            self.send_json(status, result)
+        except ValueError as error:
+            self.send_error_json(400, error, include_ok=True)
+
+    def send_daily_feishu_analysis_response(self, status_from_ok=False):
+        query = self.query_params()
+        try:
+            result = daily_feishu_ai_analysis(
+                self.query_text(query, "date"),
+                self.query_text(query, "model"),
+            )
+            status = 200 if not status_from_ok or result.get("ok") else 400
+            self.send_json(status, result)
+        except ValueError as error:
+            self.send_error_json(400, error, include_ok=True)
+        except RuntimeError as error:
+            self.send_error_json(502, error, include_ok=True)
 
     def cookies(self):
         cookies = {}
@@ -4386,34 +4391,10 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             self.send_error_json(502, error, include_ok=True)
 
     def handle_daily_feishu_get(self):
-        query = self.query_params()
-        try:
-            include_ai = self.query_bool(query, "include_ai")
-            require_synced = self.query_bool(query, "require_synced")
-            result = send_daily_feishu_report(
-                self.query_text(query, "date"),
-                include_ai=include_ai,
-                model=self.query_text(query, "model"),
-                require_synced=require_synced,
-            )
-            status = 200 if result.get("ok") else 400
-            self.send_json(status, result)
-        except ValueError as error:
-            self.send_error_json(400, error, include_ok=True)
+        self.send_daily_feishu_response(allow_require_synced=True)
 
     def handle_daily_feishu_analysis_get(self):
-        query = self.query_params()
-        try:
-            result = daily_feishu_ai_analysis(
-                self.query_text(query, "date"),
-                self.query_text(query, "model"),
-            )
-            status = 200 if result.get("ok") else 400
-            self.send_json(status, result)
-        except ValueError as error:
-            self.send_error_json(400, error, include_ok=True)
-        except RuntimeError as error:
-            self.send_error_json(502, error, include_ok=True)
+        self.send_daily_feishu_analysis_response(status_from_ok=True)
 
     def handle_llm_models_get(self):
         self.send_json(200, llm_models_payload())
