@@ -4495,14 +4495,9 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
         except ValueError as error:
             self.send_error_json(400, error)
 
-    def get_route_handlers(self):
-        return self.route_handlers(self.GET_ROUTE_METHODS)
-
-    def post_route_handlers(self):
-        return self.route_handlers(self.POST_ROUTE_METHODS)
-
-    def route_handlers(self, route_methods):
-        return {path: getattr(self, method_name) for path, method_name in route_methods.items()}
+    def route_handler(self, route_methods, path):
+        method_name = route_methods.get(path)
+        return getattr(self, method_name) if method_name else None
 
     def do_GET(self):
         path = urlparse(self.path).path
@@ -4510,7 +4505,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             self.send_error_json(401, "Unauthorized")
             return
 
-        handler = self.get_route_handlers().get(path)
+        handler = self.route_handler(self.GET_ROUTE_METHODS, path)
         if handler:
             handler()
             return
@@ -4536,7 +4531,7 @@ class ManagementTableHandler(BaseHTTPRequestHandler):
             self.send_error_json(401, "Unauthorized")
             return
 
-        handler = self.post_route_handlers().get(path)
+        handler = self.route_handler(self.POST_ROUTE_METHODS, path)
         if handler:
             handler()
             return
