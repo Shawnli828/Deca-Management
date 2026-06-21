@@ -178,7 +178,7 @@ export type DailyFeishuProductSummary = {
   [key: string]: unknown;
 };
 
-export type FeishuSendMode = 'text' | 'card' | 'card_with_text_fallback' | 'template';
+export type FeishuSendMode = 'card' | 'card_with_text_fallback' | 'template';
 
 export type FeishuCardMetricProduct = {
   code?: string;
@@ -379,6 +379,7 @@ export type PostRow = {
   status?: string;
   title?: string;
   published_at?: string;
+  published_at_meta?: string;
   published_at_readable?: string;
   synced_at?: string;
 };
