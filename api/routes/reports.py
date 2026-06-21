@@ -22,6 +22,13 @@ def truthy_query_value(value: str) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
+def normalize_feishu_mode(mode: str) -> str:
+    normalized = str(mode or "card_with_text_fallback").strip().lower()
+    if normalized not in {"card", "card_with_text_fallback", "template"}:
+        raise ValueError("mode must be card, card_with_text_fallback, or template.")
+    return normalized
+
+
 @router.get("/api/reports/daily-feishu", response_model=FlexibleResponse, operation_id="get_reports_daily_feishu")
 @router.post("/api/reports/daily-feishu", response_model=FlexibleResponse, operation_id="post_reports_daily_feishu")
 def post_reports_daily_feishu(
@@ -40,7 +47,7 @@ def post_reports_daily_feishu(
             include_ai=truthy_query_value(include_ai),
             model=model,
             require_synced=truthy_query_value(require_synced),
-            mode=mode,
+            mode=normalize_feishu_mode(mode),
         )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
@@ -76,18 +83,19 @@ def get_reports_llm_models(request: Request):
 
 
 @router.get("/api/reports/daily-feishu-preview", response_model=FeishuPreviewResponse)
-def get_reports_daily_feishu_preview(request: Request, date: str = "", mode: str = "text"):
+def get_reports_daily_feishu_preview(request: Request, date: str = "", mode: str = "card_with_text_fallback"):
     require_dashboard_auth(request)
     try:
+        normalized_mode = normalize_feishu_mode(mode)
         report = daily_feishu_report_payload(date)
         message = daily_feishu_report_text(report)
         card_data = None
         card = None
         template_preview = None
-        if str(mode or "").strip().lower() in {"card", "card_with_text_fallback"}:
+        if normalized_mode in {"card", "card_with_text_fallback"}:
             card_data = daily_feishu_report_card_data(report=report)
             card = daily_feishu_report_card(report=report)
-        if str(mode or "").strip().lower() == "template":
+        if normalized_mode == "template":
             template_preview = daily_feishu_report_template_variables(report=report)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
@@ -98,7 +106,7 @@ def get_reports_daily_feishu_preview(request: Request, date: str = "", mode: str
         "report": report,
         "message": message,
         "message_preview": message[:1200],
-        "mode": mode,
+        "mode": normalized_mode,
         "card_data": card_data,
         "card": card,
         "template_preview": template_preview,
