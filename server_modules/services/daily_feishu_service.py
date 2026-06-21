@@ -40,6 +40,7 @@ from server_modules.sync_status import format_sync_readiness_line
 DEFAULT_FEISHU_OVERVIEW_TEMPLATE_ID = "AAqNBs4PoCeb2"
 DEFAULT_FEISHU_PRODUCT_TEMPLATE_ID = "AAqNBsXlJdHqX"
 DEFAULT_FEISHU_TEMPLATE_VERSION = "1.0.0"
+FEISHU_TREND_START_DATE = "2026-06-20"
 
 
 @dataclass
@@ -134,9 +135,13 @@ class DailyFeishuReportService:
         except ValueError:
             end_date = datetime.strptime(default_daily_report_date(), "%Y-%m-%d").date()
         days = max(1, min(30, int(days or 7)))
+        start_floor = datetime.strptime(FEISHU_TREND_START_DATE, "%Y-%m-%d").date()
+        start_date = max(end_date - timedelta(days=days - 1), start_floor)
+        if start_date > end_date:
+            return {"overview": [], "products": {}}
         dates = [
-            (end_date - timedelta(days=days - index - 1)).isoformat()
-            for index in range(days)
+            (start_date + timedelta(days=index)).isoformat()
+            for index in range((end_date - start_date).days + 1)
         ]
         if not product_codes:
             return {"overview": [], "products": {}}

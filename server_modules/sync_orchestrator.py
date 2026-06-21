@@ -215,7 +215,7 @@ def sync_daily_all_records(
         "ok": ok,
         "synced_at": synced_at,
         "timezone": "Asia/Shanghai",
-        "schedule": "08:30 BJT",
+        "schedule": "09:30 BJT",
         "duration_total_seconds": duration_total,
         "stages": stages,
     }, started_at=started_at, finished_at=finished_at, duration_seconds=duration_total)

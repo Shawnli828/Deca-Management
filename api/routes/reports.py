@@ -39,14 +39,18 @@ def post_reports_daily_feishu(
     require_synced: str = "",
     mode: str = "card_with_text_fallback",
 ):
-    if not cron_authorized(request.headers):
+    is_cron_request = cron_authorized(request.headers)
+    if not is_cron_request:
         require_dashboard_auth(request)
+    effective_require_synced = truthy_query_value(require_synced) or (
+        is_cron_request and not str(require_synced or "").strip()
+    )
     try:
         result = send_daily_feishu_report(
             date,
             include_ai=truthy_query_value(include_ai),
             model=model,
-            require_synced=truthy_query_value(require_synced),
+            require_synced=effective_require_synced,
             mode=normalize_feishu_mode(mode),
         )
     except ValueError as error:

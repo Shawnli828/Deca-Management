@@ -54,8 +54,9 @@ def main():
         configured_product_name_map=lambda: {},
         business_material_report_payload=lambda _query: {
             "rows": [
-                {"report_date": "2026-06-18", "total_views": 100, "downloads": 10},
-                {"report_date": "2026-06-19", "total_views": 20, "downloads": 2},
+                {"report_date": "2026-06-19", "total_views": 100, "downloads": 10},
+                {"report_date": "2026-06-20", "total_views": 20, "downloads": 2},
+                {"report_date": "2026-06-21", "total_views": 30, "downloads": 3},
             ]
         },
         daily_reelfarm_account_alerts=lambda *_args, **_kwargs: {},
@@ -63,10 +64,11 @@ def main():
         sync_status_payload=lambda: {},
         sync_readiness_payload=lambda *_args, **_kwargs: {},
     )
-    daily_trend = trend_service.report_trend("2026-06-19", ["DB"], days=2)
-    assert_equal(daily_trend["products"]["DB"][0]["view"], 100, "trend first day daily view")
-    assert_equal(daily_trend["products"]["DB"][1]["view"], 20, "trend second day should not accumulate")
-    assert_equal(daily_trend["overview"][1]["download"], 2, "overview download should stay daily")
+    daily_trend = trend_service.report_trend("2026-06-21", ["DB"], days=3)
+    assert_equal([row["date"] for row in daily_trend["products"]["DB"]], ["2026-06-20", "2026-06-21"], "trend should start at configured business date")
+    assert_equal(daily_trend["products"]["DB"][0]["view"], 20, "trend first included day daily view")
+    assert_equal(daily_trend["products"]["DB"][1]["view"], 30, "trend second day should not accumulate")
+    assert_equal(daily_trend["overview"][1]["download"], 3, "overview download should stay daily")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         app_runtime.DB_PATH = Path(tmpdir) / "feishu-card.sqlite3"
@@ -101,11 +103,10 @@ def main():
     assert_equal(card_products[0].get("totalPlays"), products[0].get("total_views"), "product total views")
     assert_equal(card_products[0].get("countries", [])[0].get("rfAvg"), 1234, "country RF avg")
     assert_equal(card_products[0].get("countries", [])[0].get("flag"), "🇩🇪", "country flag")
-    assert_equal(len(card_data.get("trend") or []), 7, "card trend row count")
-    assert_equal((card_data.get("trend") or [])[-1].get("view"), 1234, "card trend latest daily view")
+    assert_equal(len(card_data.get("trend") or []), 0, "card trend before configured start should be empty")
     trend_groups = card_data.get("trendGroups") or []
     assert_equal([group.get("label") for group in trend_groups], ["总览", "Demi"], "card trend groups")
-    assert_equal((trend_groups[1].get("trend") or [])[-1].get("view"), 1234, "product trend latest view")
+    assert_equal(len(trend_groups[1].get("trend") or []), 0, "product trend before configured start should be empty")
 
     assert_equal(card.get("schema"), "2.0", "card schema")
     assert_equal(card.get("header", {}).get("template"), "blue", "card header template")
