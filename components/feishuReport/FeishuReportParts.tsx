@@ -29,7 +29,7 @@ export function FeishuReportHero({
       <div>
         <p className="dashboard-kicker">AI Feishu Report</p>
         <h1>Feishu Report</h1>
-        <p>每日业务数据先生成可检查预览，再发送为飞书模板卡片、Webhook 卡片或文本日报。</p>
+        <p>每日业务数据先生成可检查预览，再发送为 Webhook 卡片或 CardKit 模板卡片。</p>
       </div>
       <div className="feishu-report-actions">
         <label>
@@ -42,7 +42,6 @@ export function FeishuReportHero({
             <option value="card_with_text_fallback">Webhook 卡片优先</option>
             <option value="card">仅 Webhook 卡片</option>
             <option value="template">模板卡片</option>
-            <option value="text">仅文本</option>
           </select>
         </label>
         <button type="button" onClick={() => loadPreview(reportDate)} disabled={loading}>
@@ -67,13 +66,13 @@ export function FeishuFlowGrid({
 }) {
   const sendDescription = sendMode === 'template'
     ? '发送 CardKit 模板卡片，总览和产品卡各一张'
-    : sendMode === 'text'
-    ? (includeAi ? '发送文本时附带 AI 分析' : '手动发送当前日报文本')
-    : (sendMode === 'card' ? '发送 Webhook 兼容卡片' : '优先发送 Webhook 卡片，失败时转文本');
+    : sendMode === 'card'
+      ? '发送 Webhook 兼容卡片'
+      : '优先发送 Webhook 卡片，失败时转文本';
   const cards = [
     ['01', 'Data Snapshot', '读取 Daily Metric 当前业务日数据', 'Ready'],
     ['02', 'LLM Insight', '让模型总结波动、异常和重点产品', analysisPayload ? (analysisPayload.configured ? 'Ready' : 'Needs Key') : 'Optional'],
-    ['03', sendMode === 'template' ? 'Template Card' : 'Webhook Card', '生成总览与产品线分段看板', sendMode === 'text' ? 'Optional' : 'Ready'],
+    ['03', sendMode === 'template' ? 'Template Card' : 'Webhook Card', '生成总览与产品线分段看板', 'Ready'],
     ['04', 'Feishu Send', sendDescription, 'Ready']
   ];
 
