@@ -336,9 +336,9 @@ function FeishuMiniTrendChart({
       view: Number(row.view || 0),
       download: Number(row.download || 0)
     }));
-    const width = 360;
-    const height = 188;
-    const pad = { top: 18, right: 44, bottom: 30, left: 48 };
+    const width = 320;
+    const height = 118;
+    const pad = { top: 8, right: 10, bottom: 20, left: 10 };
     const plotWidth = width - pad.left - pad.right;
     const plotHeight = height - pad.top - pad.bottom;
     const viewRange = paddedRange(rows.map(row => row.view));
@@ -352,32 +352,35 @@ function FeishuMiniTrendChart({
     const downloadPoints = rows.map((row, index) => ({ x: xFor(index), y: yFor(row.download, downloadRange), value: row.download }));
     const pathFor = (points: Array<{ x: number; y: number }>) =>
       points.map((point, index) => `${index ? 'L' : 'M'}${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ');
-    const grid = Array.from({ length: 3 }, (_, index) => {
-      const ratio = index / 2;
+    const grid = Array.from({ length: 2 }, (_, index) => {
+      const ratio = index;
       return {
         y: pad.top + ratio * plotHeight,
-        view: viewRange.max - ratio * (viewRange.max - viewRange.min),
-        download: downloadRange.max - ratio * (downloadRange.max - downloadRange.min),
       };
     });
+    const labelIndexes = Array.from(new Set([0, rows.length - 1])).filter(index => index >= 0);
+    const latest = rows[rows.length - 1] || { view: 0, download: 0 };
     return {
       rows,
       width,
       height,
       pad,
-      plotHeight,
       viewPoints,
       downloadPoints,
       viewPath: pathFor(viewPoints),
       downloadPath: pathFor(downloadPoints),
       grid,
+      labelIndexes,
+      latest,
     };
   }, [trend]);
 
   if (!chart.rows.length) {
     return (
       <div className="feishu-native-mini-chart is-empty">
-        <strong>{title}</strong>
+        <div className="feishu-native-mini-chart-head">
+          <strong>{title}</strong>
+        </div>
         <p>暂无趋势数据。</p>
       </div>
     );
@@ -385,26 +388,40 @@ function FeishuMiniTrendChart({
 
   return (
     <div className="feishu-native-mini-chart">
-      <strong>{title}</strong>
-      <svg viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label={`${title} View and Download trend`}>
+      <div className="feishu-native-mini-chart-head">
+        <strong>{title}</strong>
+        <span>
+          View {compactAxisMetric(chart.latest.view)} · Download {compactAxisMetric(chart.latest.download)}
+        </span>
+      </div>
+      <svg
+        viewBox={`0 0 ${chart.width} ${chart.height}`}
+        role="img"
+        aria-label={`${title} View and Download trend`}
+        preserveAspectRatio="none"
+      >
           {chart.grid.map(line => (
             <g key={`grid-${line.y}`}>
               <line x1={chart.pad.left} x2={chart.width - chart.pad.right} y1={line.y} y2={line.y} />
-              <text x={chart.pad.left - 10} y={line.y + 4} textAnchor="end">{compactAxisMetric(line.view)}</text>
-              <text x={chart.width - chart.pad.right + 10} y={line.y + 4} textAnchor="start">{compactAxisMetric(line.download)}</text>
             </g>
           ))}
           <path className="is-view-line" d={chart.viewPath} />
           <path className="is-download-line" d={chart.downloadPath} />
           {chart.viewPoints.map((point, index) => (
-            <circle className="is-view-point" cx={point.x} cy={point.y} r="4.5" key={`view-${chart.rows[index].label}`} />
+            <circle className="is-view-point" cx={point.x} cy={point.y} r="2.2" key={`view-${index}-${chart.rows[index].label}`} />
           ))}
           {chart.downloadPoints.map((point, index) => (
-            <circle className="is-download-point" cx={point.x} cy={point.y} r="4.5" key={`download-${chart.rows[index].label}`} />
+            <circle className="is-download-point" cx={point.x} cy={point.y} r="2.2" key={`download-${index}-${chart.rows[index].label}`} />
           ))}
-          {chart.rows.map((row, index) => (
-            <text className="is-x-label" x={chart.viewPoints[index].x} y={chart.height - 14} textAnchor="middle" key={`label-${row.label}`}>
-              {row.label}
+          {chart.labelIndexes.map(index => (
+            <text
+              className="is-x-label"
+              x={chart.viewPoints[index].x}
+              y={chart.height - 6}
+              textAnchor={index === 0 ? 'start' : 'end'}
+              key={`label-${index}-${chart.rows[index].label}`}
+            >
+              {chart.rows[index].label}
             </text>
           ))}
         </svg>

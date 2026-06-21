@@ -1531,16 +1531,16 @@
 
         .feishu-native-trend {
             display: grid;
-            gap: 12px;
+            gap: 10px;
             border-top: 1px solid #e5eaf2;
-            padding-top: 16px;
+            padding-top: 14px;
         }
 
         .feishu-native-trend-head {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 14px;
+            gap: 10px;
         }
 
         .feishu-native-trend p,
@@ -1554,18 +1554,18 @@
         .feishu-native-legend {
             display: flex;
             flex-wrap: wrap;
-            gap: 14px;
+            gap: 10px;
             color: #64748b;
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 400;
         }
 
         .feishu-native-legend span::before {
             content: "";
             display: inline-block;
-            width: 24px;
-            height: 4px;
-            margin-right: 7px;
+            width: 16px;
+            height: 3px;
+            margin-right: 5px;
             border-radius: 999px;
             vertical-align: middle;
         }
@@ -1581,29 +1581,48 @@
         .feishu-native-trend-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 12px;
+            gap: 8px;
         }
 
         .feishu-native-mini-chart {
             display: grid;
-            gap: 8px;
+            gap: 6px;
             min-width: 0;
             border: 1px solid #e5eaf2;
             background: #ffffff;
-            padding: 10px 12px;
+            padding: 8px 10px;
         }
 
-        .feishu-native-mini-chart > strong {
+        .feishu-native-mini-chart-head {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .feishu-native-mini-chart-head strong {
             color: #111827;
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 600;
             line-height: 1.25;
+        }
+
+        .feishu-native-mini-chart-head span {
+            overflow: hidden;
+            color: #64748b;
+            font-size: 10px;
+            font-weight: 400;
+            line-height: 1.25;
+            text-align: right;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .feishu-native-mini-chart svg {
             display: block;
             width: 100%;
-            height: auto;
+            height: 92px;
         }
 
         .feishu-native-mini-chart line {
@@ -1613,13 +1632,13 @@
 
         .feishu-native-mini-chart text {
             fill: #64748b;
-            font-size: 10px;
+            font-size: 9px;
             font-weight: 400;
         }
 
         .feishu-native-mini-chart .is-x-label {
             fill: #334155;
-            font-size: 10px;
+            font-size: 9px;
             font-weight: 400;
         }
 
@@ -1627,7 +1646,7 @@
             fill: none;
             stroke-linecap: round;
             stroke-linejoin: round;
-            stroke-width: 2;
+            stroke-width: 1.6;
         }
 
         .feishu-native-mini-chart .is-view-line {
