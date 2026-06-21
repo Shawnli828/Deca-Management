@@ -38,7 +38,35 @@ def main():
     from server_modules.domain.feishu_card import bar, build_daily_report_card
     from server_modules.external_clients import feishu_signed_card_payload
     from server_modules.services.daily_feishu_runtime import report_payload
+    from server_modules.services.daily_feishu_service import DailyFeishuReportService
     from server_modules.services.feishu_card_adapter import daily_report_card_data
+
+    trend_service = DailyFeishuReportService(
+        env={},
+        webhook_url="",
+        webhook_secret="",
+        llm_api_base="",
+        llm_model="",
+        fallback_llm_models=[],
+        report_timezone_name="Asia/Shanghai",
+        make_ssl_context=lambda: None,
+        configured_product_codes=lambda: [],
+        configured_product_name_map=lambda: {},
+        business_material_report_payload=lambda _query: {
+            "rows": [
+                {"report_date": "2026-06-18", "total_views": 100, "downloads": 10},
+                {"report_date": "2026-06-19", "total_views": 20, "downloads": 2},
+            ]
+        },
+        daily_reelfarm_account_alerts=lambda *_args, **_kwargs: {},
+        product_reelfarm_country_avg_views=lambda *_args, **_kwargs: [],
+        sync_status_payload=lambda: {},
+        sync_readiness_payload=lambda *_args, **_kwargs: {},
+    )
+    daily_trend = trend_service.report_trend("2026-06-19", ["DB"], days=2)
+    assert_equal(daily_trend["products"]["DB"][0]["view"], 100, "trend first day daily view")
+    assert_equal(daily_trend["products"]["DB"][1]["view"], 20, "trend second day should not accumulate")
+    assert_equal(daily_trend["overview"][1]["download"], 2, "overview download should stay daily")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         app_runtime.DB_PATH = Path(tmpdir) / "feishu-card.sqlite3"
@@ -74,7 +102,7 @@ def main():
     assert_equal(card_products[0].get("countries", [])[0].get("rfAvg"), 1234, "country RF avg")
     assert_equal(card_products[0].get("countries", [])[0].get("flag"), "🇩🇪", "country flag")
     assert_equal(len(card_data.get("trend") or []), 7, "card trend row count")
-    assert_equal((card_data.get("trend") or [])[-1].get("view"), 1234, "card trend latest lifetime view")
+    assert_equal((card_data.get("trend") or [])[-1].get("view"), 1234, "card trend latest daily view")
     trend_groups = card_data.get("trendGroups") or []
     assert_equal([group.get("label") for group in trend_groups], ["总览", "Demi"], "card trend groups")
     assert_equal((trend_groups[1].get("trend") or [])[-1].get("view"), 1234, "product trend latest view")
@@ -90,8 +118,8 @@ def main():
     assert_true(products[0].get("product_name") in card_text, "card includes product row")
     assert_true("|Demi|1/1|" in card_text, "daily table post column uses RF publish coverage")
     assert_true("RF Avg View" in card_text, "daily table includes RF avg view")
-    assert_true("View / Download 趋势" in card_text, "card includes trend section")
-    assert_true("累计 View" in card_text, "trend table includes lifetime view")
+    assert_true("View / Download 日趋势" in card_text, "card includes daily trend section")
+    assert_true("|日期|View|Download|" in card_text, "trend table includes daily view and download")
 
     signed_payload = feishu_signed_card_payload(card, "secret")
     assert_equal(signed_payload.get("msg_type"), "interactive", "signed payload type")

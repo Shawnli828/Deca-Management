@@ -256,7 +256,7 @@ function OverviewNativePreview({ data }: { data: FeishuCardData }) {
         <div className="feishu-native-daily-table">
           <div className="feishu-native-daily-row is-head">
             <span>App</span>
-            <span>Post</span>
+            <span>发布账号/总账号</span>
             <span>View</span>
             <span>RF Avg View</span>
             <span>Download</span>
@@ -311,7 +311,7 @@ function FeishuTrendPanel({
           {visibleGroups.map(group => (
             <FeishuMiniTrendChart
               key={group.key || group.label}
-              title={group.label || group.key || '趋势'}
+              title={(group.label || group.key) === '总览' ? '全部汇总' : (group.label || group.key || '趋势')}
               trend={group.trend || []}
             />
           ))}
@@ -337,8 +337,8 @@ function FeishuMiniTrendChart({
       download: Number(row.download || 0)
     }));
     const width = 320;
-    const height = 118;
-    const pad = { top: 8, right: 10, bottom: 20, left: 10 };
+    const height = 170;
+    const pad = { top: 12, right: 36, bottom: 26, left: 42 };
     const plotWidth = width - pad.left - pad.right;
     const plotHeight = height - pad.top - pad.bottom;
     const viewRange = paddedRange(rows.map(row => row.view));
@@ -350,16 +350,26 @@ function FeishuMiniTrendChart({
     };
     const viewPoints = rows.map((row, index) => ({ x: xFor(index), y: yFor(row.view, viewRange), value: row.view }));
     const downloadPoints = rows.map((row, index) => ({ x: xFor(index), y: yFor(row.download, downloadRange), value: row.download }));
-    const pathFor = (points: Array<{ x: number; y: number }>) =>
-      points.map((point, index) => `${index ? 'L' : 'M'}${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ');
-    const grid = Array.from({ length: 2 }, (_, index) => {
-      const ratio = index;
+    const pathFor = (points: Array<{ x: number; y: number }>) => {
+      if (!points.length) return '';
+      if (points.length === 1) return `M${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
+      return points.slice(1).reduce((path, point, index) => {
+        const previous = points[index];
+        const midX = (previous.x + point.x) / 2;
+        return `${path} C${midX.toFixed(1)} ${previous.y.toFixed(1)} ${midX.toFixed(1)} ${point.y.toFixed(1)} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`;
+      }, `M${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`);
+    };
+    const grid = Array.from({ length: 4 }, (_, index) => {
+      const ratio = index / 3;
       return {
         y: pad.top + ratio * plotHeight,
+        view: viewRange.max - ratio * (viewRange.max - viewRange.min),
+        download: downloadRange.max - ratio * (downloadRange.max - downloadRange.min),
       };
     });
-    const labelIndexes = Array.from(new Set([0, rows.length - 1])).filter(index => index >= 0);
-    const latest = rows[rows.length - 1] || { view: 0, download: 0 };
+    const labelIndexes = rows.length <= 5
+      ? rows.map((_, index) => index)
+      : Array.from(new Set([0, 2, 4, rows.length - 1])).filter(index => index < rows.length);
     return {
       rows,
       width,
@@ -371,7 +381,6 @@ function FeishuMiniTrendChart({
       downloadPath: pathFor(downloadPoints),
       grid,
       labelIndexes,
-      latest,
     };
   }, [trend]);
 
@@ -390,19 +399,21 @@ function FeishuMiniTrendChart({
     <div className="feishu-native-mini-chart">
       <div className="feishu-native-mini-chart-head">
         <strong>{title}</strong>
-        <span>
-          View {compactAxisMetric(chart.latest.view)} · Download {compactAxisMetric(chart.latest.download)}
-        </span>
       </div>
       <svg
         viewBox={`0 0 ${chart.width} ${chart.height}`}
         role="img"
         aria-label={`${title} View and Download trend`}
-        preserveAspectRatio="none"
       >
           {chart.grid.map(line => (
             <g key={`grid-${line.y}`}>
               <line x1={chart.pad.left} x2={chart.width - chart.pad.right} y1={line.y} y2={line.y} />
+              <text className="is-y-label" x={chart.pad.left - 8} y={line.y + 3} textAnchor="end">
+                {compactAxisMetric(line.view)}
+              </text>
+              <text className="is-y-label" x={chart.width - chart.pad.right + 8} y={line.y + 3} textAnchor="start">
+                {compactAxisMetric(line.download)}
+              </text>
             </g>
           ))}
           <path className="is-view-line" d={chart.viewPath} />

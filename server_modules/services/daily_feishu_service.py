@@ -57,7 +57,6 @@ class DailyFeishuReportService:
     business_material_report_payload: Callable
     daily_reelfarm_account_alerts: Callable
     product_reelfarm_country_avg_views: Callable
-    daily_lifetime_trend: Callable
     sync_status_payload: Callable
     sync_readiness_payload: Callable
 
@@ -139,10 +138,59 @@ class DailyFeishuReportService:
             (end_date - timedelta(days=days - index - 1)).isoformat()
             for index in range(days)
         ]
+        if not product_codes:
+            return {"overview": [], "products": {}}
+
+        start_date = dates[0]
+        end_date_text = dates[-1]
+        products = {}
+        overview_by_date = {
+            date: {"date": date, "view": 0, "download": 0}
+            for date in dates
+        }
+
+        for product_code in product_codes:
+            code = str(product_code or "").strip().upper()
+            if not code:
+                continue
+            rows_by_date = {}
+            try:
+                payload = self.business_material_report_payload({
+                    "product_code": [code],
+                    "date_from": [start_date],
+                    "date_to": [end_date_text],
+                    "mode": ["published_materials"],
+                })
+                for row in payload.get("rows") or []:
+                    row_date = str(row.get("report_date") or "")[:10]
+                    if row_date:
+                        rows_by_date[row_date] = {
+                            "date": row_date,
+                            "view": self._safe_trend_int(row.get("total_views")),
+                            "download": self._safe_trend_int(row.get("downloads")),
+                        }
+            except Exception:
+                rows_by_date = {}
+
+            product_rows = []
+            for date in dates:
+                item = rows_by_date.get(date) or {"date": date, "view": 0, "download": 0}
+                product_rows.append(item)
+                overview_by_date[date]["view"] += item.get("view") or 0
+                overview_by_date[date]["download"] += item.get("download") or 0
+            products[code] = product_rows
+
+        return {
+            "overview": [overview_by_date[date] for date in dates],
+            "products": products,
+        }
+
+    @staticmethod
+    def _safe_trend_int(value):
         try:
-            return self.daily_lifetime_trend(product_codes, dates)
-        except Exception:
-            return []
+            return int(value or 0)
+        except (TypeError, ValueError):
+            return 0
 
     def report_template_payload(self, report=None, report_date="", view_slot="product_1"):
         report = report or self.report_payload(report_date)

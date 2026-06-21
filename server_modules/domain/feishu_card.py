@@ -87,24 +87,38 @@ def product_daily_table(data):
     )
 
 
-def trend_table(data):
-    rows = []
-    for item in data.get("trend") or []:
-        rows.append(
+def trend_rows_table(rows):
+    output = []
+    for item in rows or []:
+        output.append(
             "|{date}|{view}|{download}|".format(
                 date=item.get("label") or item.get("date") or "—",
                 view=fmt(item.get("view")),
                 download=fmt(item.get("download")),
             )
         )
-    if not rows:
-        rows.append("|暂无数据|—|—|")
+    if not output:
+        output.append("|暂无数据|—|—|")
     return (
-        "**View / Download 趋势**\n\n"
-        "|日期|累计 View|累计 Download|\n"
+        "|日期|View|Download|\n"
         "|:-|-:|-:|\n"
-        + "\n".join(rows)
+        + "\n".join(output)
     )
+
+
+def trend_table(data):
+    rows = []
+    groups = data.get("trendGroups") or []
+    if not groups:
+        groups = [{"label": "全部汇总", "trend": data.get("trend") or []}]
+
+    for group in groups[:4]:
+        label = group.get("label") or group.get("key") or "趋势"
+        if label == "总览":
+            label = "全部汇总"
+        rows.append(f"**{label}**\n{trend_rows_table(group.get('trend') or [])}")
+
+    return "**View / Download 日趋势**\n\n" + "\n\n".join(rows)
 
 
 def overview_tab(data):
