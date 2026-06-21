@@ -212,6 +212,13 @@ export type FeishuCardMetricProduct = {
   }>;
 };
 
+export type FeishuCardTrendRow = {
+  date?: string;
+  label?: string;
+  view?: number;
+  download?: number;
+};
+
 export type FeishuCardData = {
   bizDate?: string;
   window?: string;
@@ -227,11 +234,11 @@ export type FeishuCardData = {
     downloadRate?: number | null;
   };
   products?: FeishuCardMetricProduct[];
-  trend?: Array<{
-    date?: string;
+  trend?: FeishuCardTrendRow[];
+  trendGroups?: Array<{
+    key?: string;
     label?: string;
-    view?: number;
-    download?: number;
+    trend?: FeishuCardTrendRow[];
   }>;
 };
 

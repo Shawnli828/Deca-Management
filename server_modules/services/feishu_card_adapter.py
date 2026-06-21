@@ -172,16 +172,42 @@ def trend_date_label(value):
         return text
 
 
-def trend_payload(report):
-    rows = []
-    for row in report.get("trend") or []:
-        rows.append({
+def trend_rows_payload(source_rows):
+    output = []
+    for row in source_rows or []:
+        output.append({
             "date": str(row.get("date") or "")[:10],
             "label": trend_date_label(row.get("date")),
             "view": safe_int(row.get("view")),
             "download": safe_int(row.get("download")),
         })
-    return rows
+    return output
+
+
+def trend_payload(report):
+    trend = report.get("trend") or []
+    if isinstance(trend, dict):
+        return trend_rows_payload(trend.get("overview") or [])
+    return trend_rows_payload(trend)
+
+
+def trend_groups_payload(report, products):
+    trend = report.get("trend") or []
+    if not isinstance(trend, dict):
+        return [{"key": "overview", "label": "总览", "trend": trend_rows_payload(trend)}]
+
+    product_trends = trend.get("products") or {}
+    groups = [{"key": "overview", "label": "总览", "trend": trend_rows_payload(trend.get("overview") or [])}]
+    for product in products or []:
+        code = str(product.get("code") or "").strip().upper()
+        if not code:
+            continue
+        groups.append({
+            "key": code,
+            "label": product.get("name") or code,
+            "trend": trend_rows_payload(product_trends.get(code) or []),
+        })
+    return groups
 
 
 def daily_report_card_data(report):
@@ -204,4 +230,5 @@ def daily_report_card_data(report):
         },
         "products": products,
         "trend": trend_payload(report),
+        "trendGroups": trend_groups_payload(report, products),
     }

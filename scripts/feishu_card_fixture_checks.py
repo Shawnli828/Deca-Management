@@ -75,6 +75,9 @@ def main():
     assert_equal(card_products[0].get("countries", [])[0].get("flag"), "🇩🇪", "country flag")
     assert_equal(len(card_data.get("trend") or []), 7, "card trend row count")
     assert_equal((card_data.get("trend") or [])[-1].get("view"), 1234, "card trend latest lifetime view")
+    trend_groups = card_data.get("trendGroups") or []
+    assert_equal([group.get("label") for group in trend_groups], ["总览", "Demi"], "card trend groups")
+    assert_equal((trend_groups[1].get("trend") or [])[-1].get("view"), 1234, "product trend latest view")
 
     assert_equal(card.get("schema"), "2.0", "card schema")
     assert_equal(card.get("header", {}).get("template"), "blue", "card header template")

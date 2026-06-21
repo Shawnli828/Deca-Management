@@ -283,14 +283,51 @@ function OverviewNativePreview({ data }: { data: FeishuCardData }) {
           )}
         </div>
       </div>
-      <FeishuTrendChart trend={data.trend || []} />
+      <FeishuTrendPanel
+        groups={data.trendGroups?.length ? data.trendGroups : [{ key: 'overview', label: '总览', trend: data.trend || [] }]}
+      />
     </div>
   );
 }
 
-function FeishuTrendChart({
+function FeishuTrendPanel({
+  groups
+}: {
+  groups: NonNullable<FeishuCardData['trendGroups']>;
+}) {
+  const visibleGroups = groups.slice(0, 4);
+
+  return (
+    <div className="feishu-native-trend">
+      <div className="feishu-native-trend-head">
+        <div className="feishu-native-section-title">View / Download 趋势</div>
+        <div className="feishu-native-legend">
+          <span className="is-view">View</span>
+          <span className="is-download">Download</span>
+        </div>
+      </div>
+      {visibleGroups.length ? (
+        <div className="feishu-native-trend-grid">
+          {visibleGroups.map(group => (
+            <FeishuMiniTrendChart
+              key={group.key || group.label}
+              title={group.label || group.key || '趋势'}
+              trend={group.trend || []}
+            />
+          ))}
+        </div>
+      ) : (
+        <p>暂无趋势数据。</p>
+      )}
+    </div>
+  );
+}
+
+function FeishuMiniTrendChart({
+  title,
   trend
 }: {
+  title: string;
   trend: NonNullable<FeishuCardData['trend']>;
 }) {
   const chart = useMemo(() => {
@@ -299,9 +336,9 @@ function FeishuTrendChart({
       view: Number(row.view || 0),
       download: Number(row.download || 0)
     }));
-    const width = 760;
-    const height = 310;
-    const pad = { top: 24, right: 66, bottom: 44, left: 66 };
+    const width = 360;
+    const height = 188;
+    const pad = { top: 18, right: 44, bottom: 30, left: 48 };
     const plotWidth = width - pad.left - pad.right;
     const plotHeight = height - pad.top - pad.bottom;
     const viewRange = paddedRange(rows.map(row => row.view));
@@ -315,8 +352,8 @@ function FeishuTrendChart({
     const downloadPoints = rows.map((row, index) => ({ x: xFor(index), y: yFor(row.download, downloadRange), value: row.download }));
     const pathFor = (points: Array<{ x: number; y: number }>) =>
       points.map((point, index) => `${index ? 'L' : 'M'}${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ');
-    const grid = Array.from({ length: 5 }, (_, index) => {
-      const ratio = index / 4;
+    const grid = Array.from({ length: 3 }, (_, index) => {
+      const ratio = index / 2;
       return {
         y: pad.top + ratio * plotHeight,
         view: viewRange.max - ratio * (viewRange.max - viewRange.min),
@@ -339,22 +376,17 @@ function FeishuTrendChart({
 
   if (!chart.rows.length) {
     return (
-      <div className="feishu-native-trend">
-        <div className="feishu-native-section-title">View / Download 趋势</div>
+      <div className="feishu-native-mini-chart is-empty">
+        <strong>{title}</strong>
         <p>暂无趋势数据。</p>
       </div>
     );
   }
 
   return (
-    <div className="feishu-native-trend">
-      <div className="feishu-native-section-title">View / Download 趋势</div>
-      <div className="feishu-native-legend">
-        <span className="is-view">View（左轴）</span>
-        <span className="is-download">Download（右轴）</span>
-      </div>
-      <div className="feishu-native-chart-wrap">
-        <svg viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="View and Download trend">
+    <div className="feishu-native-mini-chart">
+      <strong>{title}</strong>
+      <svg viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label={`${title} View and Download trend`}>
           {chart.grid.map(line => (
             <g key={`grid-${line.y}`}>
               <line x1={chart.pad.left} x2={chart.width - chart.pad.right} y1={line.y} y2={line.y} />
@@ -375,10 +407,7 @@ function FeishuTrendChart({
               {row.label}
             </text>
           ))}
-          <text className="is-axis-title" x="18" y={chart.pad.top + chart.plotHeight / 2} transform={`rotate(-90 18 ${chart.pad.top + chart.plotHeight / 2})`} textAnchor="middle">View</text>
-          <text className="is-axis-title" x={chart.width - 18} y={chart.pad.top + chart.plotHeight / 2} transform={`rotate(90 ${chart.width - 18} ${chart.pad.top + chart.plotHeight / 2})`} textAnchor="middle">Download</text>
         </svg>
-      </div>
     </div>
   );
 }

@@ -64,6 +64,18 @@ def product_reelfarm_country_avg_views(product_code, utc_start, utc_end):
     return sorted(output, key=lambda row: (row.get("country_name") or row.get("country_code") or ""))
 
 
+def trend_row(report_date, view=0, download=0):
+    return {
+        "date": report_date,
+        "view": int(view or 0),
+        "download": int(download or 0),
+    }
+
+
+def empty_trend(report_dates):
+    return {report_date: trend_row(report_date) for report_date in report_dates}
+
+
 def daily_lifetime_trend(product_codes, dates):
     codes = []
     seen_codes = set()
@@ -75,18 +87,11 @@ def daily_lifetime_trend(product_codes, dates):
 
     report_dates = [str(value or "")[:10] for value in dates or [] if str(value or "")[:10]]
     if not codes or not report_dates:
-        return []
+        return {"overview": [], "products": {}}
 
     placeholder = db_placeholder()
     product_placeholders = ", ".join([placeholder] * len(codes))
-    trend = {
-        report_date: {
-            "date": report_date,
-            "view": 0,
-            "download": 0,
-        }
-        for report_date in report_dates
-    }
+    trends_by_code = {code: empty_trend(report_dates) for code in codes}
 
     with connect_db() as conn:
         init_relational_schema(conn)
@@ -125,57 +130,88 @@ def daily_lifetime_trend(product_codes, dates):
         daily = {}
         for row in growth_rows:
             item = row_dict(row)
+            product_code = str(item.get("product_code") or "").strip().upper()
             report_date = str(item.get("report_date") or "")[:10]
-            if not report_date:
+            if not product_code or product_code not in trends_by_code or not report_date:
                 continue
-            entry = daily.setdefault(report_date, {"view": 0, "download": 0})
+            entry = daily.setdefault(product_code, {}).setdefault(report_date, {"view": 0, "download": 0})
             entry["view"] += int(item.get("total_views") or 0)
             download = item.get("download_count")
             if download is None:
                 download = item.get("onboarding_unique")
             entry["download"] += int(download or 0)
 
-        running = {"view": 0, "download": 0}
-        for report_date in sorted(daily):
-            if report_date <= report_dates[-1]:
-                running["view"] += daily[report_date]["view"]
-                running["download"] += daily[report_date]["download"]
-            if report_date in trend:
-                trend[report_date]["view"] = running["view"]
-                trend[report_date]["download"] = running["download"]
+        for product_code, daily_rows in daily.items():
+            running = {"view": 0, "download": 0}
+            for report_date in sorted(daily_rows):
+                if report_date <= report_dates[-1]:
+                    running["view"] += daily_rows[report_date]["view"]
+                    running["download"] += daily_rows[report_date]["download"]
+                if report_date in trends_by_code[product_code]:
+                    trends_by_code[product_code][report_date]["view"] = running["view"]
+                    trends_by_code[product_code][report_date]["download"] = running["download"]
 
+            for report_date in report_dates:
+                if trends_by_code[product_code][report_date]["view"] or trends_by_code[product_code][report_date]["download"]:
+                    continue
+                trends_by_code[product_code][report_date]["view"] = sum(
+                    int(value.get("view") or 0)
+                    for day, value in daily_rows.items()
+                    if day <= report_date
+                )
+                trends_by_code[product_code][report_date]["download"] = sum(
+                    int(value.get("download") or 0)
+                    for day, value in daily_rows.items()
+                    if day <= report_date
+                )
+
+        overview = []
         for report_date in report_dates:
-            if trend[report_date]["view"] or trend[report_date]["download"]:
-                continue
-            trend[report_date]["view"] = sum(
-                int(value.get("view") or 0)
-                for day, value in daily.items()
-                if day <= report_date
-            )
-            trend[report_date]["download"] = sum(
-                int(value.get("download") or 0)
-                for day, value in daily.items()
-                if day <= report_date
-            )
-        return [trend[report_date] for report_date in report_dates]
+            overview.append(trend_row(
+                report_date,
+                sum(trends_by_code[code][report_date]["view"] for code in codes),
+                sum(trends_by_code[code][report_date]["download"] for code in codes),
+            ))
+        return {
+            "overview": overview,
+            "products": {
+                code: [trends_by_code[code][report_date] for report_date in report_dates]
+                for code in codes
+            },
+        }
 
     if snapshot_rows:
         snapshots_by_post = {}
         for row in snapshot_rows:
             item = row_dict(row)
-            key = (str(item.get("product_code") or ""), str(item.get("post_id") or ""))
+            key = (str(item.get("product_code") or "").strip().upper(), str(item.get("post_id") or ""))
             snapshots_by_post.setdefault(key, []).append((
                 str(item.get("snapshot_date") or "")[:10],
                 int(item.get("view_count") or 0),
             ))
 
-        for snapshots in snapshots_by_post.values():
+        for (product_code, _post_id), snapshots in snapshots_by_post.items():
+            if product_code not in trends_by_code:
+                continue
             latest_view = 0
             index = 0
             for report_date in report_dates:
                 while index < len(snapshots) and snapshots[index][0] <= report_date:
                     latest_view = snapshots[index][1]
                     index += 1
-                trend[report_date]["view"] += latest_view
+                trends_by_code[product_code][report_date]["view"] += latest_view
 
-    return [trend[report_date] for report_date in report_dates]
+    overview = []
+    for report_date in report_dates:
+        overview.append(trend_row(
+            report_date,
+            sum(trends_by_code[code][report_date]["view"] for code in codes),
+            sum(trends_by_code[code][report_date]["download"] for code in codes),
+        ))
+    return {
+        "overview": overview,
+        "products": {
+            code: [trends_by_code[code][report_date] for report_date in report_dates]
+            for code in codes
+        },
+    }
