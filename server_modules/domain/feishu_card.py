@@ -57,6 +57,10 @@ def kpi3(items):
     }
 
 
+def post_coverage(product):
+    return f"{fmt(product.get('rfPublished'))}/{fmt(product.get('rfExpected'))}"
+
+
 def product_daily_table(data):
     rows = []
     products = data.get("products") or []
@@ -66,7 +70,7 @@ def product_daily_table(data):
         rows.append(
             "|{name}|{posts}|{views}|{rf_avg}|{download}|{rate}|".format(
                 name=product.get("name") or "Product",
-                posts=fmt(product.get("totalPosts")),
+                posts=post_coverage(product),
                 views=fmt(product.get("totalPlays")),
                 rf_avg=fmt(product.get("rfAvg")),
                 download=download,

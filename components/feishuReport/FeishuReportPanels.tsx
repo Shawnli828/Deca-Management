@@ -221,6 +221,10 @@ function cardRate(value: unknown) {
   return `${numeric.toFixed(2)}%`;
 }
 
+function postCoverage(product: { rfPublished?: number; rfExpected?: number }) {
+  return `${cardMetric(product.rfPublished)}/${cardMetric(product.rfExpected)}`;
+}
+
 function compactAxisMetric(value: number) {
   if (!Number.isFinite(value)) return '0';
   const abs = Math.abs(value);
@@ -261,7 +265,7 @@ function OverviewNativePreview({ data }: { data: FeishuCardData }) {
           {products.length ? products.map(product => (
             <div className="feishu-native-daily-row" key={product.code || product.name}>
               <strong>{product.name || product.code || 'Product'}</strong>
-              <span>{cardMetric(product.totalPosts)}</span>
+              <span>{postCoverage(product)}</span>
               <span>{cardMetric(product.totalPlays)}</span>
               <span>{cardMetric(product.rfAvg)}</span>
               <span>{product.onboarding === null ? '—' : cardMetric(product.onboarding)}</span>

@@ -85,6 +85,7 @@ def main():
     card_text = "\n".join(text_blocks(elements))
     assert_true("各 App 当日数据" in card_text, "card includes daily app table")
     assert_true(products[0].get("product_name") in card_text, "card includes product row")
+    assert_true("|Demi|1/1|" in card_text, "daily table post column uses RF publish coverage")
     assert_true("RF Avg View" in card_text, "daily table includes RF avg view")
     assert_true("View / Download 趋势" in card_text, "card includes trend section")
     assert_true("累计 View" in card_text, "trend table includes lifetime view")
