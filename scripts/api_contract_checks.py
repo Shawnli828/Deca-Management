@@ -18,8 +18,6 @@ ADMIN_PASSWORD = "contract-password"
 def configure_test_env():
     for key in ("DATABASE_URL", "POSTGRES_URL", "POSTGRES_PRISMA_URL", "POSTGRES_URL_NON_POOLING"):
         os.environ.pop(key, None)
-    for key in ("LLM_API_KEY", "OPENAI_API_KEY"):
-        os.environ.pop(key, None)
     os.environ["ADMIN_USERNAME"] = ADMIN_USERNAME
     os.environ["ADMIN_PASSWORD_HASH"] = hashlib.sha256(ADMIN_PASSWORD.encode("utf-8")).hexdigest()
     os.environ["SESSION_SECRET"] = "contract-session-secret"
@@ -309,10 +307,6 @@ def main():
         assert_true(feishu_report.get("report_date") == "2026-06-15", "Feishu preview should use requested date")
         assert_true(any(item.get("product_name") == "Demi" for item in feishu_report.get("products", [])), "Feishu preview should expose product rows")
         assert_true("Demi" in feishu_preview_body.get("message", ""), "Feishu preview should include seeded product")
-
-        feishu_analysis = client.get("/api/reports/daily-feishu-analysis", params={"date": "2026-06-15", "model": "gpt-4.1-mini"})
-        assert_status(feishu_analysis, 200, "daily Feishu analysis without LLM key")
-        assert_true(feishu_analysis.json().get("needs_api_key") is True, "Feishu analysis should report missing LLM key")
 
         product_tag = client.post("/api/product-tags", json={"product_code": "DM", "tag": "Test Tag"})
         assert_status(product_tag, 200, "create product tag")

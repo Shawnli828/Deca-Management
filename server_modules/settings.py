@@ -38,17 +38,3 @@ REPORT_TIMEZONE_NAME = os.environ.get("REPORT_TIMEZONE", "Asia/Shanghai").strip(
 MIXPANEL_TIMEZONE_NAME = os.environ.get("MIXPANEL_TIMEZONE", "America/Los_Angeles").strip()
 FEISHU_WEBHOOK_URL = os.environ.get("FEISHU_WEBHOOK_URL", "").strip()
 FEISHU_WEBHOOK_SECRET = os.environ.get("FEISHU_WEBHOOK_SECRET", "").strip()
-LLM_API_BASE = os.environ.get("LLM_API_BASE", "https://api.openai.com/v1").strip().rstrip("/")
-LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4.1-mini").strip()
-FALLBACK_LLM_MODELS = [
-    "gpt-5",
-    "gpt-5-mini",
-    "gpt-5-nano",
-    "gpt-4.1",
-    "gpt-4.1-mini",
-    "gpt-4.1-nano",
-    "gpt-4o",
-    "gpt-4o-mini",
-    "gpt-4-turbo",
-    "gpt-4",
-]

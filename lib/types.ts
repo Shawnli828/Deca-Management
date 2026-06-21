@@ -278,36 +278,11 @@ export type DailyFeishuSendResult = {
   product_count?: number;
   error_count?: number;
   message_preview?: string;
-  analysis?: string;
-  model?: string;
   mode?: FeishuSendMode;
   fallback_reason?: string;
   card_preview?: FeishuCardData | null;
   template_messages?: Record<string, string | undefined>;
   template_preview?: Record<string, unknown> | null;
-  error?: string;
-};
-
-export type DailyFeishuAnalysisPayload = {
-  ok: boolean;
-  configured?: boolean;
-  needs_api_key?: boolean;
-  model?: string;
-  report?: DailyFeishuReport;
-  analysis: string;
-  generated_at?: string;
-  message_preview?: string;
-  error?: string;
-};
-
-export type LlmModelsPayload = {
-  ok: boolean;
-  configured?: boolean;
-  needs_api_key?: boolean;
-  fallback?: boolean;
-  models: string[];
-  default_model: string;
-  generated_at?: string;
   error?: string;
 };
 

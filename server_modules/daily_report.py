@@ -1,4 +1,3 @@
-import json
 from datetime import datetime, timedelta, timezone
 
 from server_modules.sync_status import format_sync_readiness_line, format_sync_status_line
@@ -71,110 +70,7 @@ def append_daily_account_alert_lines(lines, alerts, limit=6):
         lines.append(f"  - 还有 {zero_left} 个未展示")
 
 
-def compact_daily_alert_account(item):
-    return {
-        "username": item.get("username"),
-        "display_name": item.get("display_name"),
-        "country_code": item.get("country_code"),
-        "country_name": item.get("country_name"),
-        "automation_names": (item.get("automation_names") or [])[:3],
-    }
-
-
-def compact_daily_account_alerts(alerts, limit=30):
-    alerts = alerts or {}
-    missing_accounts = alerts.get("missing_accounts") or []
-    zero_play_accounts = alerts.get("zero_play_accounts") or []
-    return {
-        "missing_account_count": alerts.get("missing_account_count") or 0,
-        "missing_accounts": [compact_daily_alert_account(item) for item in missing_accounts[:limit]],
-        "missing_accounts_truncated": (alerts.get("missing_accounts_truncated") or 0) + max(len(missing_accounts) - limit, 0),
-        "zero_play_account_count": alerts.get("zero_play_account_count") or 0,
-        "zero_play_accounts": [compact_daily_alert_account(item) for item in zero_play_accounts[:limit]],
-        "zero_play_accounts_truncated": (alerts.get("zero_play_accounts_truncated") or 0) + max(len(zero_play_accounts) - limit, 0),
-    }
-
-
-def compact_daily_feishu_report(report):
-    totals = report.get("totals") or {}
-    products = []
-    for item in report.get("products") or []:
-        countries = []
-        for country in item.get("countries") or []:
-            countries.append({
-                "country_code": country.get("country_code"),
-                "country_name": country.get("country_name"),
-                "reelfarm_posts": country.get("reelfarm_posts"),
-                "reelfarm_views": country.get("reelfarm_views"),
-                "reelfarm_avg_views": country.get("reelfarm_avg_views"),
-            })
-        products.append({
-            "product_code": item.get("product_code"),
-            "product_name": item.get("product_name"),
-            "total_views": item.get("total_views"),
-            "reelfarm_views": item.get("reelfarm_views"),
-            "clone_views": item.get("clone_views"),
-            "reelfarm_posts": item.get("reelfarm_posts"),
-            "clone_posts": item.get("clone_posts"),
-            "reelfarm_avg_views": item.get("reelfarm_avg_views"),
-            "clone_avg_views": item.get("clone_avg_views"),
-            "reelfarm_published_automations": item.get("reelfarm_published_automations"),
-            "reelfarm_expected_automations": item.get("reelfarm_expected_automations"),
-            "downloads": item.get("downloads"),
-            "download_rate": item.get("download_rate"),
-            "account_alerts": compact_daily_account_alerts(item.get("account_alerts")),
-            "countries": countries,
-        })
-    return {
-        "report_date": report.get("report_date"),
-        "business_window_local": report.get("business_window_local"),
-        "onboarding_window_local": report.get("onboarding_window_local"),
-        "totals": {
-            "total_views": totals.get("total_views"),
-            "reelfarm_views": totals.get("reelfarm_views"),
-            "clone_views": totals.get("clone_views"),
-            "reelfarm_posts": totals.get("reelfarm_posts"),
-            "clone_posts": totals.get("clone_posts"),
-            "reelfarm_avg_views": totals.get("reelfarm_avg_views"),
-            "clone_avg_views": totals.get("clone_avg_views"),
-            "reelfarm_published_automations": totals.get("reelfarm_published_automations"),
-            "reelfarm_expected_automations": totals.get("reelfarm_expected_automations"),
-            "downloads": totals.get("downloads"),
-            "download_rate": totals.get("download_rate"),
-            "missing_account_count": totals.get("missing_account_count"),
-            "zero_play_account_count": totals.get("zero_play_account_count"),
-        },
-        "products": products,
-        "errors": report.get("errors") or [],
-    }
-
-
-def previous_daily_report_date(report_date):
-    parsed = datetime.strptime(str(report_date), "%Y-%m-%d").date()
-    return (parsed - timedelta(days=1)).isoformat()
-
-
-def daily_feishu_analysis_prompt(report, previous_report=None):
-    context = {
-        "current": compact_daily_feishu_report(report),
-        "previous": compact_daily_feishu_report(previous_report) if previous_report else None,
-    }
-    return (
-        "你是 Deca Growth 中台的增长运营分析助手。请基于下面的日报 JSON 做一份适合发给团队的中文分析。"
-        "不要编造 JSON 里没有的数字。重点回答："
-        "1. 今日最重要的结论；"
-        "2. RF 发布账号/应发账号是否有缺口，哪些产品需要关注，并点名列出未发送账号；"
-        "3. 播放量相比昨日变化，优先判断是 RF/Clone 哪边变化、均播下降、还是国家结构变化；"
-        "4. Onboarding Unique 和下载/播放转化是否异常，轻微波动可以说正常；"
-        "5. 点名列出 0播警告账号；"
-        "6. 明天建议跟进的动作。"
-        "如果未发送账号或 0播警告账号太多，每个产品最多列 15 个，并说明还有多少未展示。"
-        "如果缺少昨日数据，就只分析当前日报。输出请用短段落和项目符号，控制在 700 字内。\n\n"
-        f"{json.dumps(context, ensure_ascii=False, separators=(',', ':'))}"
-    )
-
-
-def daily_feishu_report_text(report, analysis=""):
+def daily_feishu_report_text(report):
     totals = report.get("totals") or {}
     window = report.get("business_window_local") or {}
     onboarding_window = report.get("onboarding_window_local") or {}
@@ -228,9 +124,6 @@ def daily_feishu_report_text(report, analysis=""):
             f"- 下载/播放：{format_percent(item.get('download_rate'))}",
             "",
         ])
-
-    if analysis:
-        lines.extend(["AI 分析", str(analysis).strip(), ""])
 
     errors = report.get("errors") or []
     if errors:

@@ -3,8 +3,6 @@ from fastapi import APIRouter, HTTPException, Request
 from api.schemas.responses import FeishuPreviewResponse, FlexibleResponse
 from server_modules.daily_report import daily_feishu_report_text
 from server_modules.services.daily_feishu_runtime import (
-    ai_analysis as daily_feishu_ai_analysis,
-    llm_models_payload,
     report_card as daily_feishu_report_card,
     report_card_data as daily_feishu_report_card_data,
     report_payload as daily_feishu_report_payload,
@@ -34,8 +32,6 @@ def normalize_feishu_mode(mode: str) -> str:
 def post_reports_daily_feishu(
     request: Request,
     date: str = "",
-    include_ai: str = "",
-    model: str = "",
     require_synced: str = "",
     mode: str = "card_with_text_fallback",
 ):
@@ -48,8 +44,6 @@ def post_reports_daily_feishu(
     try:
         result = send_daily_feishu_report(
             date,
-            include_ai=truthy_query_value(include_ai),
-            model=model,
             require_synced=effective_require_synced,
             mode=normalize_feishu_mode(mode),
         )
@@ -58,32 +52,6 @@ def post_reports_daily_feishu(
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result.get("error") or "Failed to send Feishu daily report.")
     return result
-
-
-@router.get(
-    "/api/reports/daily-feishu-analysis",
-    response_model=FlexibleResponse,
-    operation_id="get_reports_daily_feishu_analysis",
-)
-@router.post(
-    "/api/reports/daily-feishu-analysis",
-    response_model=FlexibleResponse,
-    operation_id="post_reports_daily_feishu_analysis",
-)
-def post_reports_daily_feishu_analysis(request: Request, date: str = "", model: str = ""):
-    require_dashboard_auth(request)
-    try:
-        return daily_feishu_ai_analysis(date, model)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    except RuntimeError as error:
-        raise HTTPException(status_code=502, detail=str(error)) from error
-
-
-@router.get("/api/reports/llm-models", response_model=FlexibleResponse)
-def get_reports_llm_models(request: Request):
-    require_dashboard_auth(request)
-    return llm_models_payload()
 
 
 @router.get("/api/reports/daily-feishu-preview", response_model=FeishuPreviewResponse)

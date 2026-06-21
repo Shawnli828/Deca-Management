@@ -1,21 +1,6 @@
 import type { DailyFeishuReport } from './types';
 import { formatNumber } from './utils';
 
-export const DEFAULT_LLM_MODEL = 'gpt-4.1-mini';
-
-export const FALLBACK_MODEL_OPTIONS = [
-  'gpt-5',
-  'gpt-5-mini',
-  'gpt-5-nano',
-  'gpt-4.1',
-  'gpt-4.1-mini',
-  'gpt-4.1-nano',
-  'gpt-4o',
-  'gpt-4o-mini',
-  'gpt-4-turbo',
-  'gpt-4'
-];
-
 export function localIsoDate(offsetDays = 0) {
   const date = new Date();
   date.setDate(date.getDate() + offsetDays);

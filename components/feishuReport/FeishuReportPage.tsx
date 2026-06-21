@@ -6,7 +6,6 @@ import {
   FeishuReportHero
 } from './FeishuReportParts';
 import {
-  FeishuAiPanel,
   FeishuReportLayout,
   FeishuReportSummary,
   FeishuStatusMessages
@@ -21,26 +20,13 @@ export function FeishuReportPage() {
     sending,
     error,
     sendResult,
-    model,
-    setModel,
-    modelOptions,
-    modelListStatus,
-    customModel,
-    setCustomModel,
-    includeAi,
-    setIncludeAi,
     sendMode,
     setSendMode,
-    analysisLoading,
-    analysisPayload,
-    analysisError,
     totals,
     products,
     downloadRate,
-    selectedModel,
     loadPreview,
-    sendReport,
-    generateAnalysis
+    sendReport
   } = useFeishuReport();
 
   return (
@@ -57,24 +43,7 @@ export function FeishuReportPage() {
       />
 
       <FeishuStatusMessages error={error} sendResult={sendResult} />
-      <FeishuFlowGrid analysisPayload={analysisPayload} includeAi={includeAi} sendMode={sendMode} />
-      <FeishuAiPanel
-        model={model}
-        setModel={setModel}
-        modelOptions={modelOptions}
-        modelListStatus={modelListStatus}
-        customModel={customModel}
-        setCustomModel={setCustomModel}
-        includeAi={includeAi}
-        setIncludeAi={setIncludeAi}
-        sendMode={sendMode}
-        analysisLoading={analysisLoading}
-        loading={loading}
-        analysisPayload={analysisPayload}
-        analysisError={analysisError}
-        selectedModel={selectedModel}
-        generateAnalysis={generateAnalysis}
-      />
+      <FeishuFlowGrid sendMode={sendMode} />
       <FeishuReportSummary totals={totals} downloadRate={downloadRate} />
       <FeishuReportLayout payload={payload} loading={loading} reportDate={reportDate} products={products} sendMode={sendMode} />
     </section>

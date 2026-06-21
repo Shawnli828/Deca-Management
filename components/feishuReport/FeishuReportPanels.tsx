@@ -3,7 +3,6 @@
 import { useMemo } from 'react';
 import { formatFeishuMetric } from '@/lib/feishuReportHelpers';
 import type {
-  DailyFeishuAnalysisPayload,
   DailyFeishuProductSummary,
   DailyFeishuPreviewPayload,
   DailyFeishuSendResult,
@@ -11,114 +10,6 @@ import type {
   FeishuCardData,
   FeishuSendMode
 } from '@/lib/types';
-
-type FeishuAiPanelProps = {
-  model: string;
-  setModel: (value: string) => void;
-  modelOptions: string[];
-  modelListStatus: string;
-  customModel: string;
-  setCustomModel: (value: string) => void;
-  includeAi: boolean;
-  setIncludeAi: (value: boolean) => void;
-  sendMode: FeishuSendMode;
-  analysisLoading: boolean;
-  loading: boolean;
-  analysisPayload: DailyFeishuAnalysisPayload | null;
-  analysisError: string;
-  selectedModel: string;
-  generateAnalysis: () => void;
-};
-
-export function FeishuAiPanel({
-  model,
-  setModel,
-  modelOptions,
-  modelListStatus,
-  customModel,
-  setCustomModel,
-  includeAi,
-  setIncludeAi,
-  sendMode,
-  analysisLoading,
-  loading,
-  analysisPayload,
-  analysisError,
-  selectedModel,
-  generateAnalysis
-}: FeishuAiPanelProps) {
-  const includeAiDisabled = sendMode === 'card' || sendMode === 'template';
-  const includeAiLabel = sendMode === 'card'
-    ? '卡片模式暂不附带 AI 分析'
-    : sendMode === 'template'
-      ? '模板卡片暂不附带 AI 分析'
-      : '仅在卡片失败转文本时附带 AI 分析';
-
-  return (
-    <section className="feishu-ai-panel">
-      <div className="feishu-ai-copy">
-        <p className="dashboard-kicker">LLM Insight</p>
-        <h2>日报 AI 分析</h2>
-        <p>
-          模型会读取当前业务日和昨日数据，先找发布缺口、播放变化、Onboarding 和下载/播放转化，再生成可以直接放进飞书的中文分析。
-        </p>
-        <small>
-          API Key 只在后端环境变量读取：<code>LLM_API_KEY</code> 或 <code>OPENAI_API_KEY</code>。
-          可选配置：<code>LLM_MODEL</code>、<code>LLM_API_BASE</code>。
-        </small>
-      </div>
-      <div className="feishu-ai-workspace">
-        <div className="feishu-ai-controls">
-          <label>
-            <span>模型</span>
-            <select value={model} onChange={event => setModel(event.target.value)}>
-              {modelOptions.map(option => (
-                <option key={option} value={option}>{option}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>自定义模型</span>
-            <input
-              value={customModel}
-              onChange={event => setCustomModel(event.target.value)}
-              placeholder="例如 gpt-4.1-mini"
-            />
-          </label>
-          <button type="button" onClick={generateAnalysis} disabled={analysisLoading || loading}>
-            {analysisLoading ? '分析中...' : '生成分析'}
-          </button>
-        </div>
-        {modelListStatus ? <small className="feishu-ai-model-note">{modelListStatus}</small> : null}
-        <label className="feishu-ai-checkbox">
-          <input
-            type="checkbox"
-            checked={includeAi}
-            disabled={includeAiDisabled}
-            onChange={event => setIncludeAi(event.target.checked)}
-          />
-          <span>{includeAiLabel}</span>
-        </label>
-        {analysisError ? <div className="feishu-ai-error">{analysisError}</div> : null}
-        <div className="feishu-ai-output">
-          {analysisPayload ? (
-            <>
-              <div className="feishu-ai-output-meta">
-                <strong>{analysisPayload.needs_api_key ? '等待配置 API Key' : '分析结果'}</strong>
-                <span>{analysisPayload.model || selectedModel}</span>
-              </div>
-              <p>{analysisPayload.analysis}</p>
-            </>
-          ) : (
-            <p>
-              选择模型后点击“生成分析”。如果还没配置 API Key，这里会提示需要配置哪些环境变量。
-            </p>
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}
 
 export function FeishuReportSummary({
   totals,

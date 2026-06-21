@@ -1,10 +1,8 @@
 import type {
   BusinessMaterialReportPayload,
-  DailyFeishuAnalysisPayload,
   DailyFeishuPreviewPayload,
   DailyFeishuSendResult,
-  FeishuSendMode,
-  LlmModelsPayload
+  FeishuSendMode
 } from '../types';
 import { apiFetch, withQuery } from './client';
 
@@ -30,23 +28,10 @@ export const reportsApi = {
       undefined,
       'Failed to load Feishu report preview'
     ),
-  dailyFeishuAnalysis: (date?: string, model?: string) =>
-    apiFetch<DailyFeishuAnalysisPayload>(
-      withQuery('/api/reports/daily-feishu-analysis', new URLSearchParams({
-        ...(date ? { date } : {}),
-        ...(model ? { model } : {})
-      })),
-      { method: 'POST' },
-      'Failed to generate Feishu AI analysis'
-    ),
-  llmModels: () =>
-    apiFetch<LlmModelsPayload>('/api/reports/llm-models', undefined, 'Failed to load LLM models'),
-  sendDailyFeishuReport: (date?: string, options?: { includeAi?: boolean; model?: string; mode?: FeishuSendMode }) =>
+  sendDailyFeishuReport: (date?: string, options?: { mode?: FeishuSendMode }) =>
     apiFetch<DailyFeishuSendResult>(
       withQuery('/api/reports/daily-feishu', new URLSearchParams({
         ...(date ? { date } : {}),
-        ...(options?.includeAi ? { include_ai: '1' } : {}),
-        ...(options?.model ? { model: options.model } : {}),
         ...(options?.mode ? { mode: options.mode } : {})
       })),
       { method: 'POST' },

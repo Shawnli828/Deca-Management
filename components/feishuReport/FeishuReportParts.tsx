@@ -1,7 +1,7 @@
 'use client';
 
 import { localIsoDate } from '@/lib/feishuReportHelpers';
-import type { DailyFeishuAnalysisPayload, FeishuSendMode } from '@/lib/types';
+import type { FeishuSendMode } from '@/lib/types';
 
 type FeishuReportHeroProps = {
   reportDate: string;
@@ -27,7 +27,7 @@ export function FeishuReportHero({
   return (
     <header className="feishu-report-hero">
       <div>
-        <p className="dashboard-kicker">AI Feishu Report</p>
+        <p className="dashboard-kicker">Feishu Report</p>
         <h1>Feishu Report</h1>
         <p>每日业务数据先生成可检查预览，再发送为 Webhook 卡片或 CardKit 模板卡片。</p>
       </div>
@@ -56,12 +56,8 @@ export function FeishuReportHero({
 }
 
 export function FeishuFlowGrid({
-  analysisPayload,
-  includeAi,
   sendMode
 }: {
-  analysisPayload: DailyFeishuAnalysisPayload | null;
-  includeAi: boolean;
   sendMode: FeishuSendMode;
 }) {
   const sendDescription = sendMode === 'template'
@@ -71,13 +67,12 @@ export function FeishuFlowGrid({
       : '优先发送 Webhook 卡片，失败时转文本';
   const cards = [
     ['01', 'Data Snapshot', '读取 Daily Metric 当前业务日数据', 'Ready'],
-    ['02', 'LLM Insight', '让模型总结波动、异常和重点产品', analysisPayload ? (analysisPayload.configured ? 'Ready' : 'Needs Key') : 'Optional'],
-    ['03', sendMode === 'template' ? 'Template Card' : 'Webhook Card', '生成总览与产品线分段看板', 'Ready'],
-    ['04', 'Feishu Send', sendDescription, 'Ready']
+    ['02', sendMode === 'template' ? 'Template Card' : 'Webhook Card', '生成总览与产品线分段看板', 'Ready'],
+    ['03', 'Feishu Send', sendDescription, 'Ready']
   ];
 
   return (
-    <section className="feishu-flow-grid" aria-label="AI 日报流程">
+    <section className="feishu-flow-grid" aria-label="飞书日报流程">
       {cards.map(([index, title, description, status]) => (
         <article className="feishu-flow-card" key={title}>
           <span>{index}</span>

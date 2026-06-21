@@ -266,20 +266,6 @@ REPORT_TIMEZONE_NAME = os.environ.get("REPORT_TIMEZONE", "Asia/Shanghai").strip(
 MIXPANEL_TIMEZONE_NAME = os.environ.get("MIXPANEL_TIMEZONE", "America/Los_Angeles").strip()
 FEISHU_WEBHOOK_URL = os.environ.get("FEISHU_WEBHOOK_URL", "").strip()
 FEISHU_WEBHOOK_SECRET = os.environ.get("FEISHU_WEBHOOK_SECRET", "").strip()
-LLM_API_BASE = os.environ.get("LLM_API_BASE", "https://api.openai.com/v1").strip().rstrip("/")
-LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4.1-mini").strip()
-FALLBACK_LLM_MODELS = [
-    "gpt-5",
-    "gpt-5-mini",
-    "gpt-5-nano",
-    "gpt-4.1",
-    "gpt-4.1-mini",
-    "gpt-4.1-nano",
-    "gpt-4o",
-    "gpt-4o-mini",
-    "gpt-4-turbo",
-    "gpt-4",
-]
 
 
 def normalized_catalog_name(value):
@@ -1182,32 +1168,8 @@ def daily_feishu_report_card(report_date="", report=None):
     return daily_feishu_service().report_card(report_date, report)
 
 
-def daily_feishu_llm_api_key():
-    return daily_feishu_service().llm_api_key()
-
-
-def daily_feishu_llm_model(model=""):
-    return daily_feishu_service().selected_llm_model(model)
-
-
-def fallback_llm_models():
-    return daily_feishu_service().selectable_llm_models()
-
-
-def llm_models_payload():
-    return daily_feishu_service().llm_models_payload()
-
-
-def call_daily_feishu_llm(messages, model=""):
-    return daily_feishu_service().call_daily_feishu_llm(messages, model)
-
-
-def daily_feishu_ai_analysis(report_date="", model="", report=None, require_config=False):
-    return daily_feishu_service().ai_analysis(report_date, model, report, require_config)
-
-
-def send_daily_feishu_report(report_date="", include_ai=False, model="", require_synced=False, mode="text"):
-    return daily_feishu_service().send_report(report_date, include_ai, model, require_synced, mode)
+def send_daily_feishu_report(report_date="", require_synced=False, mode="card_with_text_fallback"):
+    return daily_feishu_service().send_report(report_date, require_synced=require_synced, mode=mode)
 
 
 def send_publish_check_reminder():

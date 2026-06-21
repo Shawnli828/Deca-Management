@@ -15,11 +15,8 @@ from server_modules.reelfarm_utils import reelfarm_expected_automation_condition
 from server_modules.services.daily_feishu_service import DailyFeishuReportService
 from server_modules.services.data_runtime import business_material_report_payload
 from server_modules.settings import (
-    FALLBACK_LLM_MODELS,
     FEISHU_WEBHOOK_SECRET,
     FEISHU_WEBHOOK_URL,
-    LLM_API_BASE,
-    LLM_MODEL,
     REPORT_TIMEZONE_NAME,
 )
 from server_modules.sync_status import (
@@ -83,9 +80,6 @@ def daily_feishu_service():
         env=os.environ,
         webhook_url=os.environ.get("FEISHU_WEBHOOK_URL", "").strip() or FEISHU_WEBHOOK_URL,
         webhook_secret=os.environ.get("FEISHU_WEBHOOK_SECRET", "").strip() or FEISHU_WEBHOOK_SECRET,
-        llm_api_base=os.environ.get("LLM_API_BASE", "").strip().rstrip("/") or LLM_API_BASE,
-        llm_model=LLM_MODEL,
-        fallback_llm_models=FALLBACK_LLM_MODELS,
         report_timezone_name=REPORT_TIMEZONE_NAME,
         make_ssl_context=make_ssl_context,
         configured_product_codes=configured_product_codes,
@@ -114,16 +108,8 @@ def report_template_variables(report_date="", report=None, view_slot="product_1"
     return daily_feishu_service().report_template_variables(report, report_date, view_slot)
 
 
-def ai_analysis(report_date="", model="", report=None, require_config=False):
-    return daily_feishu_service().ai_analysis(report_date, model, report, require_config)
-
-
-def llm_models_payload():
-    return daily_feishu_service().llm_models_payload()
-
-
-def send_report(report_date="", include_ai=False, model="", require_synced=False, mode="card_with_text_fallback"):
-    return daily_feishu_service().send_report(report_date, include_ai, model, require_synced, mode)
+def send_report(report_date="", require_synced=False, mode="card_with_text_fallback"):
+    return daily_feishu_service().send_report(report_date, require_synced=require_synced, mode=mode)
 
 
 def product_template_callback_card(
