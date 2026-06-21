@@ -386,10 +386,10 @@ class DailyFeishuReportService:
         )
         return result
 
-    def send_report(self, report_date="", include_ai=False, model="", require_synced=False, mode="text"):
-        mode = str(mode or "text").strip().lower()
-        if mode not in {"text", "card", "card_with_text_fallback", "template"}:
-            raise ValueError("mode must be text, card, card_with_text_fallback, or template.")
+    def send_report(self, report_date="", include_ai=False, model="", require_synced=False, mode="card_with_text_fallback"):
+        mode = str(mode or "card_with_text_fallback").strip().lower()
+        if mode not in {"card", "card_with_text_fallback", "template"}:
+            raise ValueError("mode must be card, card_with_text_fallback, or template.")
         report = self.report_payload(report_date)
         if require_synced and not (report.get("sync_ready") or {}).get("ok"):
             return {
@@ -420,6 +420,7 @@ class DailyFeishuReportService:
 
         card_data = None
         card = None
+        card_error = ""
         if mode in {"card", "card_with_text_fallback"}:
             card_data = self.report_card_data(report=report)
             card = build_daily_report_card(card_data)
@@ -464,11 +465,10 @@ class DailyFeishuReportService:
             "product_count": len(report.get("products") or []),
             "error_count": len(report.get("errors") or []),
             "message_preview": message[:800],
-            "mode": "text" if mode == "text" else "card_with_text_fallback",
+            "mode": "card_with_text_fallback",
+            "fallback_reason": card_error,
+            "card_preview": card_data,
         }
-        if mode == "card_with_text_fallback":
-            result["fallback_reason"] = card_error
-            result["card_preview"] = card_data
         if analysis_payload:
             result["analysis"] = analysis_payload.get("analysis")
             result["model"] = analysis_payload.get("model")
