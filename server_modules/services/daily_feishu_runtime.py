@@ -115,7 +115,7 @@ def llm_models_payload():
     return daily_feishu_service().llm_models_payload()
 
 
-def send_report(report_date="", include_ai=False, model="", require_synced=False, mode="text"):
+def send_report(report_date="", include_ai=False, model="", require_synced=False, mode="card_with_text_fallback"):
     return daily_feishu_service().send_report(report_date, include_ai, model, require_synced, mode)
 
 
