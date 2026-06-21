@@ -48,11 +48,11 @@ export function FeishuAiPanel({
   selectedModel,
   generateAnalysis
 }: FeishuAiPanelProps) {
-  const includeAiDisabled = sendMode === 'card';
-  const includeAiLabel = sendMode === 'text'
-    ? '发送文本时附带 AI 分析'
-    : sendMode === 'card'
-      ? '卡片模式暂不附带 AI 分析'
+  const includeAiDisabled = sendMode === 'card' || sendMode === 'template';
+  const includeAiLabel = sendMode === 'card'
+    ? '卡片模式暂不附带 AI 分析'
+    : sendMode === 'template'
+      ? '模板卡片暂不附带 AI 分析'
       : '仅在卡片失败转文本时附带 AI 分析';
 
   return (
@@ -161,7 +161,7 @@ export function FeishuReportLayout({
   products: DailyFeishuProductSummary[];
   sendMode: FeishuSendMode;
 }) {
-  const showCardPreview = sendMode !== 'text' && Boolean(payload?.card_data);
+  const showCardPreview = Boolean(payload?.card_data);
   return (
     <>
       {showCardPreview ? <FeishuNativeCardPreview data={payload?.card_data || null} loading={loading} /> : null}
@@ -169,7 +169,7 @@ export function FeishuReportLayout({
         <section className="feishu-message-card">
           <div className="feishu-card-head">
             <div>
-              <h2>{sendMode === 'text' ? '飞书文本预览' : '文本兜底预览'}</h2>
+              <h2>文本兜底预览</h2>
               <p>
                 业务日 {payload?.report?.report_date || reportDate} · 内容窗口{' '}
                 {payload?.report?.business_window_local?.start || '—'} → {payload?.report?.business_window_local?.end || '—'}
@@ -415,9 +415,9 @@ export function FeishuStatusMessages({
               ? '模板卡片模式'
               : sendResult.mode === 'card'
                 ? 'Webhook 卡片模式'
-                : sendResult.mode === 'text'
-                  ? '文本模式'
-                  : 'Webhook 卡片失败转文本'
+                : sendResult.fallback_reason
+                  ? 'Webhook 卡片失败转文本'
+                  : 'Webhook 卡片优先模式'
           }` : ''}
         </div>
       ) : null}
