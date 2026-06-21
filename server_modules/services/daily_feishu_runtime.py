@@ -9,6 +9,7 @@ from server_modules.product_config import (
     configured_product_name_map as configured_product_name_map_impl,
 )
 from server_modules.repositories.daily_feishu_repository import (
+    daily_lifetime_trend as daily_lifetime_trend_from_db,
     product_reelfarm_country_avg_views as product_reelfarm_country_avg_views_from_db,
 )
 from server_modules.reelfarm_utils import reelfarm_expected_automation_condition
@@ -30,12 +31,19 @@ from server_modules.sync_status import (
 )
 
 
+def daily_feishu_products():
+    products = load_data()
+    return [
+        product for product in products if str(product.get("folder") or product.get("owner_type") or "").strip() != "乙方"
+    ]
+
+
 def configured_product_codes():
-    return configured_product_codes_impl(load_data())
+    return configured_product_codes_impl(daily_feishu_products())
 
 
 def configured_product_name_map():
-    return configured_product_name_map_impl(load_data())
+    return configured_product_name_map_impl(daily_feishu_products())
 
 
 def latest_sync_runs(sources=None):
@@ -71,6 +79,10 @@ def product_reelfarm_country_avg_views(product_code, utc_start, utc_end):
     return product_reelfarm_country_avg_views_from_db(product_code, utc_start, utc_end)
 
 
+def daily_lifetime_trend(product_codes, dates):
+    return daily_lifetime_trend_from_db(product_codes, dates)
+
+
 def daily_feishu_service():
     return DailyFeishuReportService(
         env=os.environ,
@@ -86,6 +98,7 @@ def daily_feishu_service():
         business_material_report_payload=business_material_report_payload,
         daily_reelfarm_account_alerts=daily_reelfarm_account_alerts,
         product_reelfarm_country_avg_views=product_reelfarm_country_avg_views,
+        daily_lifetime_trend=daily_lifetime_trend,
         sync_status_payload=sync_status_payload,
         sync_readiness_payload=sync_readiness_payload,
     )

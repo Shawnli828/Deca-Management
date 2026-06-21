@@ -23,6 +23,8 @@ COUNTRY_FLAGS = {
     "NL": "🇳🇱",
 }
 
+PRODUCT_DISPLAY_ORDER = ("DeenBack", "Demi", "Delust")
+
 
 def safe_int(value, default=0):
     try:
@@ -136,6 +138,7 @@ def product_card_data(product):
     return {
         "code": product.get("product_code"),
         "name": product.get("product_name") or product.get("product_code") or "Product",
+        "totalPosts": safe_int(product.get("total_posts")),
         "totalPlays": safe_int(product.get("total_views")),
         "rfPlays": safe_int(product.get("reelfarm_views")),
         "clonePlays": safe_int(product.get("clone_views")),
@@ -152,9 +155,39 @@ def product_card_data(product):
     }
 
 
+def product_sort_key(product):
+    name = str(product.get("name") or "")
+    try:
+        index = PRODUCT_DISPLAY_ORDER.index(name)
+    except ValueError:
+        index = len(PRODUCT_DISPLAY_ORDER)
+    return (index, name)
+
+
+def trend_date_label(value):
+    text = str(value or "").strip()[:10]
+    try:
+        return datetime.strptime(text, "%Y-%m-%d").strftime("%m-%d")
+    except ValueError:
+        return text
+
+
+def trend_payload(report):
+    rows = []
+    for row in report.get("trend") or []:
+        rows.append({
+            "date": str(row.get("date") or "")[:10],
+            "label": trend_date_label(row.get("date")),
+            "view": safe_int(row.get("view")),
+            "download": safe_int(row.get("download")),
+        })
+    return rows
+
+
 def daily_report_card_data(report):
     totals = report.get("totals") or {}
     products = [product_card_data(product) for product in report.get("products") or []]
+    products.sort(key=product_sort_key)
     return {
         "bizDate": report.get("report_date"),
         "window": content_window_label(report),
@@ -170,4 +203,5 @@ def daily_report_card_data(report):
             "downloadRate": rounded_metric(totals.get("download_rate")),
         },
         "products": products,
+        "trend": trend_payload(report),
     }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { formatFeishuMetric } from '@/lib/feishuReportHelpers';
 import type {
   DailyFeishuAnalysisPayload,
@@ -9,7 +9,6 @@ import type {
   DailyFeishuSendResult,
   DailyFeishuTotals,
   FeishuCardData,
-  FeishuCardMetricProduct,
   FeishuSendMode
 } from '@/lib/types';
 
@@ -217,149 +216,170 @@ function cardMetric(value: unknown) {
 
 function cardRate(value: unknown) {
   if (value === null || value === undefined || value === '') return '—';
-  return `${formatFeishuMetric(value)}%`;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return `${formatFeishuMetric(value)}%`;
+  return `${numeric.toFixed(2)}%`;
 }
 
-function nativeBar(value: unknown, max: number, width = 14) {
-  const numeric = Number(value || 0);
-  if (!max || !Number.isFinite(numeric)) return '░'.repeat(width);
-  const filled = Math.max(0, Math.min(width, Math.round((numeric / max) * width)));
-  return '█'.repeat(filled) + '░'.repeat(width - filled);
+function compactAxisMetric(value: number) {
+  if (!Number.isFinite(value)) return '0';
+  const abs = Math.abs(value);
+  if (abs >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+  if (abs >= 1000) return `${(value / 1000).toFixed(1)}K`;
+  return String(Math.round(value));
 }
 
-function FeishuKpiRows({ rows }: { rows: Array<Array<[string, unknown]>> }) {
-  return (
-    <div className="feishu-native-kpis">
-      {rows.map((row, index) => (
-        <div className="feishu-native-kpi-row" key={index}>
-          {row.map(([label, value], itemIndex) => (
-            <div className="feishu-native-kpi" key={`${label}-${itemIndex}`}>
-              {label ? (
-                <>
-                  <span>{label}</span>
-                  <strong>{String(value)}</strong>
-                </>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      ))}
-    </div>
-  );
+function paddedRange(values: number[]) {
+  const finite = values.filter(value => Number.isFinite(value));
+  if (!finite.length) return { min: 0, max: 1 };
+  const min = Math.min(...finite);
+  const max = Math.max(...finite);
+  if (min === max) {
+    const pad = Math.max(1, Math.abs(max) * 0.1);
+    return { min: Math.max(0, min - pad), max: max + pad };
+  }
+  const pad = (max - min) * 0.12;
+  return { min: Math.max(0, min - pad), max: max + pad };
 }
 
 function OverviewNativePreview({ data }: { data: FeishuCardData }) {
-  const global = data.global || {};
   const products = data.products || [];
-  const playMax = Math.max(...products.map(product => Number(product.totalPlays || 0)), 0);
-  const avgMax = Math.max(...products.map(product => Number(product.rfAvg || 0)), 0);
-  const sortedByAvg = [...products].sort((a, b) => Number(b.rfAvg || 0) - Number(a.rfAvg || 0));
-  const totalUnsent = products.reduce((sum, product) => sum + Number(product.unsent || 0), 0);
-  const totalZero = products.reduce((sum, product) => sum + Number(product.zeroPlay || 0), 0);
 
   return (
     <div className="feishu-native-body">
-      <FeishuKpiRows rows={[
-        [['总播放', cardMetric(global.totalPlays)], ['RF 总播放', cardMetric(global.rfPlays)], ['Clone 总播放', cardMetric(global.clonePlays)]],
-        [['RF 发布', `${cardMetric(global.rfPublished)}/${cardMetric(global.rfExpected)}`], ['RF 均播', cardMetric(global.rfAvg)], ['Clone 均播', cardMetric(global.cloneAvg)]],
-        [['Onboarding', cardMetric(global.onboarding)], ['下载/播放', cardRate(global.downloadRate)], ['', '']]
-      ]} />
-      <div className="feishu-native-alert">未发送 {totalUnsent} · 0播警告 {totalZero}</div>
-      <FeishuBarBlock title="产品线总播放量" products={products} max={playMax} valueKey="totalPlays" />
-      <FeishuBarBlock title="产品线 RF 均播" products={sortedByAvg} max={avgMax} valueKey="rfAvg" />
-      <div className="feishu-native-table">
-        <strong>Onboarding 与下载/播放</strong>
-        {products.map(product => (
-          <div key={`${product.name}-onboarding`}>
-            <span>{product.name}</span>
-            <span>{product.onboarding === null ? '未配置' : cardMetric(product.onboarding)}</span>
-            <span>{cardRate(product.downloadRate)}</span>
+      <div className="feishu-native-section-title">各 App 当日数据 · {data.bizDate || '—'}</div>
+      <div className="feishu-native-table-scroll">
+        <div className="feishu-native-daily-table">
+          <div className="feishu-native-daily-row is-head">
+            <span>App</span>
+            <span>Post</span>
+            <span>View</span>
+            <span>RF Avg View</span>
+            <span>Download</span>
+            <span>下载/播放</span>
           </div>
-        ))}
-      </div>
-      <div className="feishu-native-table">
-        <strong>异常账号分布</strong>
-        {products.map(product => (
-          <div key={`${product.name}-anomaly`}>
-            <span>{product.name}</span>
-            <span className={product.unsent ? 'is-danger' : ''}>{product.unsent || 0} 未发送</span>
-            <span className={product.zeroPlay ? 'is-danger' : ''}>{product.zeroPlay || 0} 0播</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function FeishuBarBlock({
-  title,
-  products,
-  max,
-  valueKey
-}: {
-  title: string;
-  products: FeishuCardMetricProduct[];
-  max: number;
-  valueKey: keyof FeishuCardMetricProduct;
-}) {
-  return (
-    <div className="feishu-native-bars">
-      <strong>{title}</strong>
-      {products.map(product => (
-        <div className="feishu-native-bar-line" key={`${title}-${product.name}`}>
-          <code>{nativeBar(product[valueKey], max)}</code>
-          <span>{product.name}</span>
-          <b>{cardMetric(product[valueKey])}</b>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ProductNativePreview({ product }: { product: FeishuCardMetricProduct }) {
-  const onboarding = product.onboarding === null ? '未配置' : cardMetric(product.onboarding);
-  return (
-    <div className="feishu-native-body">
-      <FeishuKpiRows rows={[
-        [['总播放', cardMetric(product.totalPlays)], ['RF 总播放', cardMetric(product.rfPlays)], ['Clone 总播放', cardMetric(product.clonePlays)]],
-        [['RF 发布', `${cardMetric(product.rfPublished)}/${cardMetric(product.rfExpected)}`], ['RF 均播', cardMetric(product.rfAvg)], ['Clone 均播', cardMetric(product.cloneAvg)]],
-        [['Onboarding', onboarding], ['下载/播放', cardRate(product.downloadRate)], ['', '']],
-        [['未发送', String(product.unsent || 0)], ['0播警告', String(product.zeroPlay || 0)], ['', '']]
-      ]} />
-      <div className="feishu-native-countries">
-        <strong>国家 RF 均播</strong>
-        {(product.countries || []).length ? product.countries?.map(country => (
-          <div key={`${product.name}-${country.name}`}>
-            <span>{country.flag} {country.name}</span>
-            <b>{cardMetric(country.rfAvg)}</b>
-            <small>{cardMetric(country.posts)} posts</small>
-          </div>
-        )) : <p>暂无 RF 发布数据</p>}
-      </div>
-      {(product.anomalyGroups || []).map(group => (
-        <div className="feishu-native-anomaly" key={`${product.name}-${group.title}`}>
-          <strong>{group.title}</strong>
-          {(group.accounts || []).map(account => (
-            <div key={`${account.handle}-${account.batch}`}>
-              <span>{account.flag} {account.handle}</span>
-              <small>{account.batch}</small>
+          {products.length ? products.map(product => (
+            <div className="feishu-native-daily-row" key={product.code || product.name}>
+              <strong>{product.name || product.code || 'Product'}</strong>
+              <span>{cardMetric(product.totalPosts)}</span>
+              <span>{cardMetric(product.totalPlays)}</span>
+              <span>{cardMetric(product.rfAvg)}</span>
+              <span>{product.onboarding === null ? '—' : cardMetric(product.onboarding)}</span>
+              <span>{cardRate(product.downloadRate)}</span>
             </div>
-          ))}
-          {group.more ? <em>{group.more}</em> : null}
+          )) : (
+            <div className="feishu-native-daily-row">
+              <strong>暂无产品</strong>
+              <span>—</span>
+              <span>—</span>
+              <span>—</span>
+              <span>—</span>
+              <span>—</span>
+            </div>
+          )}
         </div>
-      ))}
+      </div>
+      <FeishuTrendChart trend={data.trend || []} />
+    </div>
+  );
+}
+
+function FeishuTrendChart({
+  trend
+}: {
+  trend: NonNullable<FeishuCardData['trend']>;
+}) {
+  const chart = useMemo(() => {
+    const rows = trend.map(row => ({
+      label: row.label || row.date || '',
+      view: Number(row.view || 0),
+      download: Number(row.download || 0)
+    }));
+    const width = 760;
+    const height = 310;
+    const pad = { top: 24, right: 66, bottom: 44, left: 66 };
+    const plotWidth = width - pad.left - pad.right;
+    const plotHeight = height - pad.top - pad.bottom;
+    const viewRange = paddedRange(rows.map(row => row.view));
+    const downloadRange = paddedRange(rows.map(row => row.download));
+    const xFor = (index: number) => pad.left + (rows.length <= 1 ? plotWidth / 2 : (plotWidth / (rows.length - 1)) * index);
+    const yFor = (value: number, range: { min: number; max: number }) => {
+      const ratio = (value - range.min) / Math.max(1, range.max - range.min);
+      return pad.top + plotHeight - ratio * plotHeight;
+    };
+    const viewPoints = rows.map((row, index) => ({ x: xFor(index), y: yFor(row.view, viewRange), value: row.view }));
+    const downloadPoints = rows.map((row, index) => ({ x: xFor(index), y: yFor(row.download, downloadRange), value: row.download }));
+    const pathFor = (points: Array<{ x: number; y: number }>) =>
+      points.map((point, index) => `${index ? 'L' : 'M'}${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ');
+    const grid = Array.from({ length: 5 }, (_, index) => {
+      const ratio = index / 4;
+      return {
+        y: pad.top + ratio * plotHeight,
+        view: viewRange.max - ratio * (viewRange.max - viewRange.min),
+        download: downloadRange.max - ratio * (downloadRange.max - downloadRange.min),
+      };
+    });
+    return {
+      rows,
+      width,
+      height,
+      pad,
+      plotHeight,
+      viewPoints,
+      downloadPoints,
+      viewPath: pathFor(viewPoints),
+      downloadPath: pathFor(downloadPoints),
+      grid,
+    };
+  }, [trend]);
+
+  if (!chart.rows.length) {
+    return (
+      <div className="feishu-native-trend">
+        <div className="feishu-native-section-title">View / Download 趋势</div>
+        <p>暂无趋势数据。</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="feishu-native-trend">
+      <div className="feishu-native-section-title">View / Download 趋势</div>
+      <div className="feishu-native-legend">
+        <span className="is-view">View（左轴）</span>
+        <span className="is-download">Download（右轴）</span>
+      </div>
+      <div className="feishu-native-chart-wrap">
+        <svg viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="View and Download trend">
+          {chart.grid.map(line => (
+            <g key={`grid-${line.y}`}>
+              <line x1={chart.pad.left} x2={chart.width - chart.pad.right} y1={line.y} y2={line.y} />
+              <text x={chart.pad.left - 10} y={line.y + 4} textAnchor="end">{compactAxisMetric(line.view)}</text>
+              <text x={chart.width - chart.pad.right + 10} y={line.y + 4} textAnchor="start">{compactAxisMetric(line.download)}</text>
+            </g>
+          ))}
+          <path className="is-view-line" d={chart.viewPath} />
+          <path className="is-download-line" d={chart.downloadPath} />
+          {chart.viewPoints.map((point, index) => (
+            <circle className="is-view-point" cx={point.x} cy={point.y} r="4.5" key={`view-${chart.rows[index].label}`} />
+          ))}
+          {chart.downloadPoints.map((point, index) => (
+            <circle className="is-download-point" cx={point.x} cy={point.y} r="4.5" key={`download-${chart.rows[index].label}`} />
+          ))}
+          {chart.rows.map((row, index) => (
+            <text className="is-x-label" x={chart.viewPoints[index].x} y={chart.height - 14} textAnchor="middle" key={`label-${row.label}`}>
+              {row.label}
+            </text>
+          ))}
+          <text className="is-axis-title" x="18" y={chart.pad.top + chart.plotHeight / 2} transform={`rotate(-90 18 ${chart.pad.top + chart.plotHeight / 2})`} textAnchor="middle">View</text>
+          <text className="is-axis-title" x={chart.width - 18} y={chart.pad.top + chart.plotHeight / 2} transform={`rotate(90 ${chart.width - 18} ${chart.pad.top + chart.plotHeight / 2})`} textAnchor="middle">Download</text>
+        </svg>
+      </div>
     </div>
   );
 }
 
 function FeishuNativeCardPreview({ data, loading }: { data: FeishuCardData | null; loading: boolean }) {
-  const [activeTab, setActiveTab] = useState('overview');
-  const products = data?.products || [];
-  const selectedProduct = useMemo(
-    () => products.find(product => product.name === activeTab) || null,
-    [activeTab, products]
-  );
-
   if (!data) {
     return (
       <section className="feishu-native-preview">
@@ -375,24 +395,9 @@ function FeishuNativeCardPreview({ data, loading }: { data: FeishuCardData | nul
           <h2>Deca Growth 每日业务数据</h2>
           <p>业务日 {data.bizDate || '—'} · 内容窗口 {data.window || '—'}</p>
         </div>
-        <span>飞书兼容版</span>
+        <span>Webhook 卡片</span>
       </div>
-      <div className="feishu-native-tabs">
-        <button type="button" className={activeTab === 'overview' ? 'active' : ''} onClick={() => setActiveTab('overview')}>
-          总览
-        </button>
-        {products.map(product => (
-          <button
-            type="button"
-            className={activeTab === product.name ? 'active' : ''}
-            key={product.name}
-            onClick={() => setActiveTab(product.name || '')}
-          >
-            {product.name}
-          </button>
-        ))}
-      </div>
-      {selectedProduct ? <ProductNativePreview product={selectedProduct} /> : <OverviewNativePreview data={data} />}
+      <OverviewNativePreview data={data} />
     </section>
   );
 }

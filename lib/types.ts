@@ -183,6 +183,7 @@ export type FeishuSendMode = 'card' | 'card_with_text_fallback' | 'template';
 export type FeishuCardMetricProduct = {
   code?: string;
   name?: string;
+  totalPosts?: number;
   totalPlays?: number;
   rfPlays?: number;
   clonePlays?: number;
@@ -226,6 +227,12 @@ export type FeishuCardData = {
     downloadRate?: number | null;
   };
   products?: FeishuCardMetricProduct[];
+  trend?: Array<{
+    date?: string;
+    label?: string;
+    view?: number;
+    download?: number;
+  }>;
 };
 
 export type DailyFeishuReportError = {

@@ -57,6 +57,7 @@ class DailyFeishuReportService:
     business_material_report_payload: Callable
     daily_reelfarm_account_alerts: Callable
     product_reelfarm_country_avg_views: Callable
+    daily_lifetime_trend: Callable
     sync_status_payload: Callable
     sync_readiness_payload: Callable
 
@@ -127,6 +128,21 @@ class DailyFeishuReportService:
                 continue
             history[str(product_code or "").strip().upper()] = payload.get("rows") or []
         return history
+
+    def report_trend(self, report_date, product_codes, days=7):
+        try:
+            end_date = datetime.strptime(str(report_date or "")[:10], "%Y-%m-%d").date()
+        except ValueError:
+            end_date = datetime.strptime(default_daily_report_date(), "%Y-%m-%d").date()
+        days = max(1, min(30, int(days or 7)))
+        dates = [
+            (end_date - timedelta(days=days - index - 1)).isoformat()
+            for index in range(days)
+        ]
+        try:
+            return self.daily_lifetime_trend(product_codes, dates)
+        except Exception:
+            return []
 
     def report_template_payload(self, report=None, report_date="", view_slot="product_1"):
         report = report or self.report_payload(report_date)
@@ -249,7 +265,8 @@ class DailyFeishuReportService:
         window = windows_for_day["content"]
         onboarding_window = windows_for_day["onboarding"]
 
-        for product_code in self.configured_product_codes():
+        product_codes = self.configured_product_codes()
+        for product_code in product_codes:
             try:
                 payload = self.business_material_report_payload({
                     "product_code": [product_code],
@@ -308,6 +325,7 @@ class DailyFeishuReportService:
             },
             "products": products,
             "totals": totals,
+            "trend": self.report_trend(report_date, product_codes),
             "errors": errors,
             "sync_status": sync_status,
             "sync_ready": sync_ready,

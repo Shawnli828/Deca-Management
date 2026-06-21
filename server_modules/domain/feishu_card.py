@@ -57,125 +57,58 @@ def kpi3(items):
     }
 
 
-def overview_tab(data):
-    global_data = data.get("global") or {}
+def product_daily_table(data):
+    rows = []
     products = data.get("products") or []
-    total_play_max = max([float(product.get("totalPlays") or 0) for product in products] or [0])
-    plays_lines = [
-        f"`{bar(product.get('totalPlays'), total_play_max)}` **{product.get('name')}** {fmt(product.get('totalPlays'))}"
-        for product in products
-    ]
-
-    avg_products = sorted(products, key=lambda product: float(product.get("rfAvg") or 0), reverse=True)
-    avg_max = max([float(product.get("rfAvg") or 0) for product in products] or [0])
-    avg_lines = [
-        f"`{bar(product.get('rfAvg'), avg_max)}` **{product.get('name')}** {fmt(product.get('rfAvg'))}"
-        for product in avg_products
-    ]
-
-    onboarding_rows = []
     for product in products:
-        download_rate = product.get("downloadRate")
-        if download_rate is None:
-            conversion = "—"
-        elif float(download_rate or 0) >= 0.4:
-            conversion = f"<font color='green'>{fmt(download_rate)}%</font>"
-        else:
-            conversion = f"{fmt(download_rate)}%"
-        onboarding = "未配置" if product.get("onboarding") is None else fmt(product.get("onboarding"))
-        onboarding_rows.append(f"|{product.get('name')}|{onboarding}|{conversion}|")
-
-    anomaly_rows = []
-    total_unsent = 0
-    total_zero = 0
-    for product in products:
-        unsent = int(product.get("unsent") or 0)
-        zero_play = int(product.get("zeroPlay") or 0)
-        total_unsent += unsent
-        total_zero += zero_play
-        unsent_value = f"<font color='red'>{unsent}</font>" if unsent else "0"
-        zero_value = f"<font color='red'>{zero_play}</font>" if zero_play else "0"
-        anomaly_rows.append(f"|{product.get('name')}|{unsent_value}|{zero_value}|")
-
-    return [
-        kpi3([
-            ["总播放", fmt(global_data.get("totalPlays"))],
-            ["RF 总播放", fmt(global_data.get("rfPlays"))],
-            ["Clone 总播放", fmt(global_data.get("clonePlays"))],
-        ]),
-        kpi3([
-            ["RF 发布", f"{fmt(global_data.get('rfPublished'))}/{fmt(global_data.get('rfExpected'))}"],
-            ["RF 均播", fmt(global_data.get("rfAvg"))],
-            ["Clone 均播", fmt(global_data.get("cloneAvg"))],
-        ]),
-        kpi3([
-            ["Onboarding", fmt(global_data.get("onboarding"))],
-            ["下载/播放", f"{fmt(global_data.get('downloadRate'))}%"],
-            ["", ""],
-        ]),
-        markdown(f"<font color='red'>**未发送 {total_unsent}　·　0播警告 {total_zero}**</font>"),
-        hr(),
-        markdown(f"**产品线总播放量**\n{chr(10).join(plays_lines)}"),
-        hr(),
-        markdown(f"**产品线 RF 均播**\n{chr(10).join(avg_lines)}"),
-        hr(),
-        markdown(
-            "**Onboarding 与下载/播放**\n\n"
-            "|产品线|Onboarding|下载/播放|\n|:-|-:|-:|\n"
-            + "\n".join(onboarding_rows)
-        ),
-        hr(),
-        markdown(
-            "**异常账号分布**\n\n"
-            "|产品线|未发送|0播警告|\n|:-|-:|-:|\n"
-            + "\n".join(anomaly_rows)
-            + f"\n|**合计**|<font color='red'>**{total_unsent}**</font>|<font color='red'>**{total_zero}**</font>|"
-        ),
-    ]
-
-
-def product_tab(product):
-    download_rate = "—" if product.get("downloadRate") is None else f"{fmt(product.get('downloadRate'))}%"
-    onboarding = "未配置" if product.get("onboarding") is None else fmt(product.get("onboarding"))
-    country_lines = [
-        f"{country.get('flag')} {country.get('name')}　**{fmt(country.get('rfAvg'))}**　<font color='grey'>{fmt(country.get('posts'))} posts</font>"
-        for country in product.get("countries") or []
-    ]
-    if not country_lines:
-        country_lines = ["暂无 RF 发布数据"]
-
-    elements = [
-        kpi3([
-            ["总播放", fmt(product.get("totalPlays"))],
-            ["RF 总播放", fmt(product.get("rfPlays"))],
-            ["Clone 总播放", fmt(product.get("clonePlays"))],
-        ]),
-        kpi3([
-            ["RF 发布", f"{fmt(product.get('rfPublished'))}/{fmt(product.get('rfExpected'))}"],
-            ["RF 均播", fmt(product.get("rfAvg"))],
-            ["Clone 均播", fmt(product.get("cloneAvg"))],
-        ]),
-        kpi3([["Onboarding", onboarding], ["下载/播放", download_rate], ["", ""]]),
-        kpi3([["未发送", str(product.get("unsent") or 0)], ["0播警告", str(product.get("zeroPlay") or 0)], ["", ""]]),
-        hr(),
-        markdown(f"**国家 RF 均播**\n{chr(10).join(country_lines)}"),
-    ]
-
-    for group in product.get("anomalyGroups") or []:
-        accounts = group.get("accounts") or []
-        if not accounts and not group.get("more"):
-            continue
-        block = (
-            f"<font color='red'>**{group.get('title')}**</font>\n"
-            + "\n".join(
-                f"{account.get('flag')} **{account.get('handle')}**　<font color='grey'>{account.get('batch')}</font>"
-                for account in accounts
+        download = "—" if product.get("onboarding") is None else fmt(product.get("onboarding"))
+        download_rate = "—" if product.get("downloadRate") is None else f"{fmt(product.get('downloadRate'))}%"
+        rows.append(
+            "|{name}|{posts}|{views}|{rf_avg}|{download}|{rate}|".format(
+                name=product.get("name") or "Product",
+                posts=fmt(product.get("totalPosts")),
+                views=fmt(product.get("totalPlays")),
+                rf_avg=fmt(product.get("rfAvg")),
+                download=download,
+                rate=download_rate,
             )
-        ).strip()
-        if group.get("more"):
-            block += f"\n<font color='orange'>{group.get('more')}</font>"
-        elements.extend([hr(), markdown(block)])
-    return elements
+        )
+    if not rows:
+        rows.append("|暂无产品|—|—|—|—|—|")
+    return (
+        f"**各 App 当日数据 · {data.get('bizDate') or ''}**\n\n"
+        "|App|Post|View|RF Avg View|Download|下载/播放|\n"
+        "|:-|-:|-:|-:|-:|-:|\n"
+        + "\n".join(rows)
+    )
+
+
+def trend_table(data):
+    rows = []
+    for item in data.get("trend") or []:
+        rows.append(
+            "|{date}|{view}|{download}|".format(
+                date=item.get("label") or item.get("date") or "—",
+                view=fmt(item.get("view")),
+                download=fmt(item.get("download")),
+            )
+        )
+    if not rows:
+        rows.append("|暂无数据|—|—|")
+    return (
+        "**View / Download 趋势**\n\n"
+        "|日期|累计 View|累计 Download|\n"
+        "|:-|-:|-:|\n"
+        + "\n".join(rows)
+    )
+
+
+def overview_tab(data):
+    return [
+        markdown(product_daily_table(data)),
+        hr(),
+        markdown(trend_table(data)),
+    ]
 
 
 def section_title(title):
@@ -183,13 +116,7 @@ def section_title(title):
 
 
 def build_webhook_safe_elements(data):
-    elements = [section_title("总览")]
-    elements.extend(overview_tab(data))
-    for product in data.get("products") or []:
-        product_name = str(product.get("name") or product.get("code") or "Product")
-        elements.extend([hr(), section_title(product_name)])
-        elements.extend(product_tab(product))
-    return elements
+    return overview_tab(data)
 
 
 def build_daily_report_card(data):
