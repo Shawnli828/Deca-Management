@@ -450,8 +450,8 @@ class DailyFeishuReportService:
             "card_preview": image_payload.get("card_data"),
         }
 
-    def send_report(self, report_date="", require_synced=False, mode="image"):
-        mode = str(mode or "image").strip().lower()
+    def send_report(self, report_date="", require_synced=False, mode="template"):
+        mode = str(mode or "template").strip().lower()
         if mode not in {"image", "card", "card_with_text_fallback", "template"}:
             raise ValueError("mode must be image, card, card_with_text_fallback, or template.")
         report = self.report_payload(report_date)

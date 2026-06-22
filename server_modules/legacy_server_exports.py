@@ -1168,7 +1168,7 @@ def daily_feishu_report_card(report_date="", report=None):
     return daily_feishu_service().report_card(report_date, report)
 
 
-def send_daily_feishu_report(report_date="", require_synced=False, mode="image"):
+def send_daily_feishu_report(report_date="", require_synced=False, mode="template"):
     return daily_feishu_service().send_report(report_date, require_synced=require_synced, mode=mode)
 
 
