@@ -24,7 +24,7 @@ from server_modules.metrics_service import (
 )
 from server_modules.services.feishu_card_adapter import daily_report_card_data
 from server_modules.services.feishu_card_snapshot_service import save_daily_report_snapshot
-from server_modules.services.feishu_svg_report import overview_svg, svg_to_png_bytes
+from server_modules.services.feishu_svg_report import overview_png_bytes, overview_svg
 from server_modules.services.feishu_template_variables import (
     overview_template_variables,
     parse_product_names,
@@ -425,7 +425,7 @@ class DailyFeishuReportService:
     def report_image_payload(self, report):
         card_data = self.report_card_data(report=report)
         svg = overview_svg(card_data)
-        png = svg_to_png_bytes(svg)
+        png = overview_png_bytes(card_data)
         return {
             "card_data": card_data,
             "svg": svg,
