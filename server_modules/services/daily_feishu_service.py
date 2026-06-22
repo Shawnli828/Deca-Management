@@ -32,7 +32,7 @@ from server_modules.services.feishu_template_variables import (
 from server_modules.sync_status import format_sync_readiness_line
 
 
-DEFAULT_FEISHU_OVERVIEW_TEMPLATE_ID = "AAqNBs4PoCeb2"
+DEFAULT_FEISHU_OVERVIEW_TEMPLATE_ID = "AAqNdTzlwzkaC"
 DEFAULT_FEISHU_PRODUCT_TEMPLATE_ID = "AAqNBsXlJdHqX"
 DEFAULT_FEISHU_TEMPLATE_VERSION = "1.0.0"
 DEFAULT_DAILY_REPORT_CHAT_ID = "oc_8a24e41ee7f2872b17724d830d818d84"
