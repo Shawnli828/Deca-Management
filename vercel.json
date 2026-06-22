@@ -17,10 +17,6 @@
       "schedule": "30 1 * * *"
     },
     {
-      "path": "/api/publish-check/run",
-      "schedule": "59 15 * * *"
-    },
-    {
       "path": "/api/reports/daily-feishu",
       "schedule": "0 2 * * *"
     }
