@@ -1363,6 +1363,124 @@
             color: #a16207;
         }
 
+        .feishu-anomaly-detail-section {
+            display: grid;
+            gap: 10px;
+            min-width: 0;
+            border-top: 1px solid #e5eaf2;
+            padding-top: 14px;
+        }
+
+        .feishu-anomaly-table-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            min-width: 0;
+        }
+
+        .feishu-anomaly-table {
+            display: grid;
+            overflow: hidden;
+            min-width: 0;
+            border: 1px solid #dbe3ef;
+            border-radius: 10px;
+            background: #ffffff;
+        }
+
+        .feishu-anomaly-table-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            min-width: 0;
+            border-bottom: 1px solid #e5eaf2;
+            padding: 9px 11px;
+            background: #f8fafc;
+        }
+
+        .feishu-anomaly-table-title strong {
+            min-width: 0;
+            color: #0f172a;
+            font-size: 12px;
+            line-height: 1.25;
+            font-weight: 650;
+        }
+
+        .feishu-anomaly-table-title span {
+            flex: 0 0 auto;
+            border-radius: 999px;
+            padding: 3px 7px;
+            background: #eef2ff;
+            color: #3157d5;
+            font-size: 11px;
+            line-height: 1;
+            font-weight: 650;
+        }
+
+        .feishu-anomaly-table-title.is-red span {
+            background: #fef2f2;
+            color: #dc2626;
+        }
+
+        .feishu-anomaly-table-title.is-amber span {
+            background: #fffbeb;
+            color: #a16207;
+        }
+
+        .feishu-anomaly-table-body {
+            overflow: auto;
+            max-height: 220px;
+        }
+
+        .feishu-anomaly-row {
+            display: grid;
+            grid-template-columns: minmax(110px, 1fr) minmax(120px, 1.1fr);
+            gap: 10px;
+            align-items: center;
+            min-height: 36px;
+            border-top: 1px solid #eef2f7;
+            padding: 8px 11px;
+            color: #0f172a;
+            font-size: 12px;
+            line-height: 1.3;
+        }
+
+        .feishu-anomaly-row.is-head {
+            min-height: 32px;
+            border-top: 0;
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .feishu-anomaly-row span,
+        .feishu-anomaly-row strong {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .feishu-anomaly-row strong {
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 650;
+            text-align: right;
+        }
+
+        .feishu-anomaly-row.is-empty {
+            color: #64748b;
+        }
+
+        .feishu-anomaly-more {
+            border-top: 1px solid #eef2f7;
+            padding: 8px 11px;
+            color: #64748b;
+            font-size: 11px;
+            line-height: 1.35;
+            font-weight: 500;
+        }
+
         .feishu-native-section-title {
             color: #0f172a;
             font-size: 14px;
@@ -1562,6 +1680,23 @@
             fill: #ec6a37;
         }
 
+        .feishu-native-mini-chart .is-point-label {
+            font-size: 9px;
+            font-weight: 650;
+            paint-order: stroke;
+            stroke: #ffffff;
+            stroke-linejoin: round;
+            stroke-width: 3px;
+        }
+
+        .feishu-native-mini-chart .is-view-label {
+            fill: #2f8af5;
+        }
+
+        .feishu-native-mini-chart .is-download-label {
+            fill: #ec6a37;
+        }
+
         .feishu-native-product-list {
             display: grid;
             gap: 10px;
@@ -1707,7 +1842,7 @@
         .feishu-country-trend svg {
             display: block;
             width: 100%;
-            height: 210px;
+            height: 270px;
         }
 
         .feishu-country-trend line {
@@ -1724,6 +1859,15 @@
         .feishu-country-trend .is-x-label {
             fill: #334155;
             font-size: 10px;
+        }
+
+        .feishu-country-trend .is-point-label {
+            font-size: 9px;
+            font-weight: 650;
+            paint-order: stroke;
+            stroke: #ffffff;
+            stroke-linejoin: round;
+            stroke-width: 3px;
         }
 
         .feishu-country-trend path {
@@ -2050,12 +2194,14 @@
             }
 
             .feishu-product-kpi-grid,
+            .feishu-anomaly-table-grid,
             .feishu-country-avg-row {
                 grid-template-columns: 1fr;
             }
 
             .feishu-country-avg-row span:nth-child(n + 2),
-            .feishu-country-avg-row strong {
+            .feishu-country-avg-row strong,
+            .feishu-anomaly-row strong {
                 text-align: left;
             }
         }

@@ -10,6 +10,8 @@ import type {
   FeishuSendMode
 } from '@/lib/types';
 
+type FeishuProductCardData = NonNullable<FeishuCardData['products']>[number];
+
 export function FeishuReportLayout({
   payload,
   loading,
@@ -191,6 +193,7 @@ function FeishuProductPreviewPanel({
         <>
           <ProductSwitcher products={products} activeCode={activeCode} onSelect={setSelectedCode} />
           <ProductKpis product={selectedProduct} />
+          <ProductAnomalyTables product={selectedProduct} />
           <CountryAvgTable countries={selectedProduct.countries || []} />
           <FeishuCountryAvgTrendChart
             title={`${selectedProduct.name || selectedProduct.code || 'Product'} · 国家 RF 均播趋势`}
@@ -204,11 +207,11 @@ function FeishuProductPreviewPanel({
   );
 }
 
-function productKey(product?: NonNullable<FeishuCardData['products']>[number]) {
+function productKey(product?: FeishuProductCardData) {
   return String(product?.code || product?.name || '').trim().toUpperCase();
 }
 
-function productInitials(product?: NonNullable<FeishuCardData['products']>[number]) {
+function productInitials(product?: FeishuProductCardData) {
   const code = String(product?.code || '').trim().toUpperCase();
   if (code) return code.slice(0, 3);
   const label = String(product?.name || product?.code || 'P').trim();
@@ -249,7 +252,7 @@ function ProductSwitcher({
   );
 }
 
-function ProductKpis({ product }: { product: NonNullable<FeishuCardData['products']>[number] }) {
+function ProductKpis({ product }: { product: FeishuProductCardData }) {
   const items = [
     { label: 'View', value: cardMetric(product.totalPlays), tone: 'is-primary', span: 2 },
     { label: 'RF Total View', value: cardMetric(product.rfPlays), tone: '', span: 2 },
@@ -276,6 +279,86 @@ function ProductKpis({ product }: { product: NonNullable<FeishuCardData['product
           <strong>{item.value}</strong>
         </article>
       ))}
+    </div>
+  );
+}
+
+function findAnomalyGroup(product: FeishuProductCardData, marker: string) {
+  return (product.anomalyGroups || []).find(group => String(group.title || '').includes(marker));
+}
+
+function ProductAnomalyTables({ product }: { product: FeishuProductCardData }) {
+  const unsentGroup = findAnomalyGroup(product, '未发送');
+  const zeroPlayGroup = findAnomalyGroup(product, '0播');
+
+  return (
+    <div className="feishu-anomaly-detail-section">
+      <div className="feishu-anomaly-table-grid">
+        <ProductAnomalyTable
+          title="未发账号"
+          count={Number(product.unsent || 0)}
+          accounts={unsentGroup?.accounts || []}
+          more={unsentGroup?.more || null}
+          emptyText="暂无未发账号。"
+          tone="is-red"
+        />
+        <ProductAnomalyTable
+          title="0播放警告"
+          count={Number(product.zeroPlay || 0)}
+          accounts={zeroPlayGroup?.accounts || []}
+          more={zeroPlayGroup?.more || null}
+          emptyText="暂无 0 播账号。"
+          tone="is-amber"
+        />
+      </div>
+    </div>
+  );
+}
+
+function ProductAnomalyTable({
+  title,
+  count,
+  accounts,
+  more,
+  emptyText,
+  tone
+}: {
+  title: string;
+  count: number;
+  accounts: NonNullable<FeishuProductCardData['anomalyGroups']>[number]['accounts'];
+  more?: string | null;
+  emptyText: string;
+  tone: 'is-red' | 'is-amber';
+}) {
+  const rows = accounts || [];
+
+  return (
+    <div className="feishu-anomaly-table">
+      <div className={`feishu-anomaly-table-title ${tone}`}>
+        <strong>{title}</strong>
+        <span>{cardMetric(count)}</span>
+      </div>
+      <div className="feishu-anomaly-table-body">
+        <div className="feishu-anomaly-row is-head">
+          <span>TikTok 账号</span>
+          <span>Automation / RF</span>
+        </div>
+        {rows.length ? rows.map((account, index) => (
+          <div
+            className="feishu-anomaly-row"
+            key={`${title}-${account.handle || 'account'}-${account.batch || 'batch'}-${index}`}
+          >
+            <span>{account.flag || '🌐'} {account.handle || '—'}</span>
+            <strong>{account.batch || '—'}</strong>
+          </div>
+        )) : (
+          <div className="feishu-anomaly-row is-empty">
+            <span>{emptyText}</span>
+            <strong>—</strong>
+          </div>
+        )}
+        {more ? <div className="feishu-anomaly-more">{more}</div> : null}
+      </div>
     </div>
   );
 }
@@ -348,9 +431,9 @@ function FeishuCountryAvgTrendChart({
 
     const labels = Array.from(labelMap.values()).sort((a, b) => a.date.localeCompare(b.date));
     const values = seriesSource.flatMap(country => country.rows.map(row => Number(row.rfAvg || 0)));
-    const width = 440;
-    const height = 210;
-    const pad = { top: 14, right: 14, bottom: 28, left: 48 };
+    const width = 560;
+    const height = 270;
+    const pad = { top: 30, right: 18, bottom: 32, left: 52 };
     const plotWidth = width - pad.left - pad.right;
     const plotHeight = height - pad.top - pad.bottom;
     const range = paddedRange(values);
@@ -414,7 +497,13 @@ function FeishuCountryAvgTrendChart({
           ))}
         </div>
       </div>
-      <svg viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label={title}>
+      <svg
+        viewBox={`0 0 ${chart.width} ${chart.height}`}
+        width={chart.width}
+        height={chart.height}
+        role="img"
+        aria-label={title}
+      >
         {chart.grid.map(line => (
           <g key={`country-grid-${line.y}`}>
             <line x1={chart.pad.left} x2={chart.width - chart.pad.right} y1={line.y} y2={line.y} />
@@ -427,13 +516,23 @@ function FeishuCountryAvgTrendChart({
           <g key={`country-series-${series.countryName}`}>
             <path d={series.path} style={{ stroke: series.color }} />
             {series.points.map(point => (
-              <circle
-                cx={point.x}
-                cy={point.y}
-                r="2.2"
-                style={{ fill: series.color }}
-                key={`${series.countryName}-${point.date}`}
-              />
+              <g key={`${series.countryName}-${point.date}`}>
+                <circle
+                  cx={point.x}
+                  cy={point.y}
+                  r="2.2"
+                  style={{ fill: series.color }}
+                />
+                <text
+                  className="is-point-label"
+                  x={point.x}
+                  y={Math.max(chart.pad.top - 10, point.y - 8)}
+                  textAnchor="middle"
+                  style={{ fill: series.color }}
+                >
+                  {compactAxisMetric(point.value)}
+                </text>
+              </g>
             ))}
           </g>
         ))}
@@ -518,6 +617,10 @@ function FeishuMiniTrendChart({
     };
     const viewPoints = rows.map((row, index) => ({ x: xFor(index), y: yFor(row.view, viewRange), value: row.view }));
     const downloadPoints = rows.map((row, index) => ({ x: xFor(index), y: yFor(row.download, downloadRange), value: row.download }));
+    const labelYFor = (pointY: number, offset: number) => Math.min(
+      height - pad.bottom - 4,
+      Math.max(pad.top + 8, pointY + offset)
+    );
     const pathFor = (points: Array<{ x: number; y: number }>) => {
       if (!points.length) return '';
       if (points.length === 1) return `M${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
@@ -545,6 +648,7 @@ function FeishuMiniTrendChart({
       pad,
       viewPoints,
       downloadPoints,
+      labelYFor,
       viewPath: pathFor(viewPoints),
       downloadPath: pathFor(downloadPoints),
       grid,
@@ -593,6 +697,28 @@ function FeishuMiniTrendChart({
           ))}
           {chart.downloadPoints.map((point, index) => (
             <circle className="is-download-point" cx={point.x} cy={point.y} r="2.2" key={`download-${index}-${chart.rows[index].label}`} />
+          ))}
+          {chart.viewPoints.map((point, index) => (
+            <text
+              className="is-point-label is-view-label"
+              x={point.x}
+              y={chart.labelYFor(point.y, -9)}
+              textAnchor="middle"
+              key={`view-label-${index}-${chart.rows[index].label}`}
+            >
+              {compactAxisMetric(point.value)}
+            </text>
+          ))}
+          {chart.downloadPoints.map((point, index) => (
+            <text
+              className="is-point-label is-download-label"
+              x={point.x}
+              y={chart.labelYFor(point.y, 14)}
+              textAnchor="middle"
+              key={`download-label-${index}-${chart.rows[index].label}`}
+            >
+              {compactAxisMetric(point.value)}
+            </text>
           ))}
           {chart.labelIndexes.map(index => (
             <text
