@@ -54,33 +54,3 @@ export function FeishuReportHero({
     </header>
   );
 }
-
-export function FeishuFlowGrid({
-  sendMode
-}: {
-  sendMode: FeishuSendMode;
-}) {
-  const sendDescription = sendMode === 'template'
-    ? '发送 CardKit 模板卡片，总览和产品卡各一张'
-    : sendMode === 'card'
-      ? '发送 Webhook 兼容卡片'
-      : '优先发送 Webhook 卡片，失败时转文本';
-  const cards = [
-    ['01', 'Data Snapshot', '读取 Daily Metric 当前业务日数据', 'Ready'],
-    ['02', sendMode === 'template' ? 'Template Card' : 'Webhook Card', '生成总览与产品线分段看板', 'Ready'],
-    ['03', 'Feishu Send', sendDescription, 'Ready']
-  ];
-
-  return (
-    <section className="feishu-flow-grid" aria-label="飞书日报流程">
-      {cards.map(([index, title, description, status]) => (
-        <article className="feishu-flow-card" key={title}>
-          <span>{index}</span>
-          <strong>{title}</strong>
-          <p>{description}</p>
-          <small>{status}</small>
-        </article>
-      ))}
-    </section>
-  );
-}

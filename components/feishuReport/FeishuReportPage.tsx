@@ -2,12 +2,10 @@
 
 import { useFeishuReport } from '@/hooks/useFeishuReport';
 import {
-  FeishuFlowGrid,
   FeishuReportHero
 } from './FeishuReportParts';
 import {
   FeishuReportLayout,
-  FeishuReportSummary,
   FeishuStatusMessages
 } from './FeishuReportPanels';
 
@@ -22,9 +20,7 @@ export function FeishuReportPage() {
     sendResult,
     sendMode,
     setSendMode,
-    totals,
     products,
-    downloadRate,
     loadPreview,
     sendReport
   } = useFeishuReport();
@@ -43,8 +39,6 @@ export function FeishuReportPage() {
       />
 
       <FeishuStatusMessages error={error} sendResult={sendResult} />
-      <FeishuFlowGrid sendMode={sendMode} />
-      <FeishuReportSummary totals={totals} downloadRate={downloadRate} />
       <FeishuReportLayout payload={payload} loading={loading} reportDate={reportDate} products={products} sendMode={sendMode} />
     </section>
   );

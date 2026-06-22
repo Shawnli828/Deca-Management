@@ -6,37 +6,9 @@ import type {
   DailyFeishuProductSummary,
   DailyFeishuPreviewPayload,
   DailyFeishuSendResult,
-  DailyFeishuTotals,
   FeishuCardData,
   FeishuSendMode
 } from '@/lib/types';
-
-export function FeishuReportSummary({
-  totals,
-  downloadRate
-}: {
-  totals: DailyFeishuTotals;
-  downloadRate: number | null;
-}) {
-  const summaryItems = [
-    ['总播放', totals.total_views],
-    ['ReelFarm', totals.reelfarm_views],
-    ['Clone', totals.clone_views],
-    ['Onboarding Unique', totals.downloads],
-    ['下载/播放', downloadRate === null ? null : `${downloadRate.toFixed(2)}%`]
-  ];
-
-  return (
-    <section className="feishu-report-summary">
-      {summaryItems.map(([label, value]) => (
-        <article key={label as string}>
-          <span>{label}</span>
-          <strong>{typeof value === 'string' ? value : formatFeishuMetric(value)}</strong>
-        </article>
-      ))}
-    </section>
-  );
-}
 
 export function FeishuReportLayout({
   payload,
@@ -138,46 +110,88 @@ function paddedRange(values: number[]) {
 }
 
 function OverviewNativePreview({ data }: { data: FeishuCardData }) {
-  const products = data.products || [];
+  const overviewTrend = overviewTrendGroup(data);
 
   return (
-    <div className="feishu-native-body">
-      <div className="feishu-native-section-title">各 App 当日数据 · {data.bizDate || '—'}</div>
-      <div className="feishu-native-table-scroll">
-        <div className="feishu-native-daily-table">
-          <div className="feishu-native-daily-row is-head">
-            <span>App</span>
-            <span>发布账号/总账号</span>
-            <span>View</span>
-            <span>RF Avg View</span>
-            <span>Download</span>
-            <span>下载/播放</span>
+    <div className="feishu-native-dashboard">
+      <section className="feishu-native-overview-panel">
+        <div className="feishu-native-panel-head">
+          <div>
+            <div className="feishu-native-section-title">总览 · 甲方产品</div>
+            <p>业务日 {data.bizDate || '—'}</p>
           </div>
-          {products.length ? products.map(product => (
-            <div className="feishu-native-daily-row" key={product.code || product.name}>
-              <strong>{product.name || product.code || 'Product'}</strong>
-              <span>{postCoverage(product)}</span>
-              <span>{cardMetric(product.totalPlays)}</span>
-              <span>{cardMetric(product.rfAvg)}</span>
-              <span>{product.onboarding === null ? '—' : cardMetric(product.onboarding)}</span>
-              <span>{cardRate(product.downloadRate)}</span>
-            </div>
-          )) : (
-            <div className="feishu-native-daily-row">
-              <strong>暂无产品</strong>
-              <span>—</span>
-              <span>—</span>
-              <span>—</span>
-              <span>—</span>
-              <span>—</span>
-            </div>
-          )}
+        </div>
+        <FeishuOverviewKpis global={data.global || {}} />
+        <FeishuTrendPanel groups={[overviewTrend]} />
+      </section>
+      <FeishuProductPreviewPanel products={data.products || []} />
+    </div>
+  );
+}
+
+function overviewTrendGroup(data: FeishuCardData) {
+  const groups = data.trendGroups || [];
+  return (
+    groups.find(group => String(group.key || '').toLowerCase() === 'overview')
+    || groups.find(group => String(group.label || '') === '总览')
+    || { key: 'overview', label: '总览', trend: data.trend || [] }
+  );
+}
+
+function FeishuOverviewKpis({
+  global
+}: {
+  global: NonNullable<FeishuCardData['global']>;
+}) {
+  const items = [
+    ['总播放', cardMetric(global.totalPlays), 'is-primary'],
+    ['ReelFarm', cardMetric(global.rfPlays), ''],
+    ['Clone', cardMetric(global.clonePlays), ''],
+    ['Onboarding Unique', global.onboarding === null ? '—' : cardMetric(global.onboarding), 'is-green'],
+    ['下载/播放', cardRate(global.downloadRate), 'is-amber']
+  ];
+
+  return (
+    <div className="feishu-native-kpi-grid">
+      {items.map(([label, value, tone]) => (
+        <article className={tone ? String(tone) : undefined} key={String(label)}>
+          <span>{label}</span>
+          <strong>{value}</strong>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function FeishuProductPreviewPanel({
+  products
+}: {
+  products: NonNullable<FeishuCardData['products']>;
+}) {
+  return (
+    <aside className="feishu-native-product-panel">
+      <div className="feishu-native-panel-head">
+        <div>
+          <div className="feishu-native-section-title">产品视图</div>
+          <p>单产品数据区</p>
         </div>
       </div>
-      <FeishuTrendPanel
-        groups={data.trendGroups?.length ? data.trendGroups : [{ key: 'overview', label: '总览', trend: data.trend || [] }]}
-      />
-    </div>
+      <div className="feishu-native-product-list">
+        {products.length ? products.map(product => (
+          <article key={product.code || product.name}>
+            <div>
+              <strong>{product.name || product.code || 'Product'}</strong>
+              <span>{postCoverage(product)}</span>
+            </div>
+            <small>
+              View {cardMetric(product.totalPlays)} · RF Avg {cardMetric(product.rfAvg)} · Download {product.onboarding === null ? '—' : cardMetric(product.onboarding)}
+            </small>
+          </article>
+        )) : (
+          <p className="feishu-native-empty">暂无产品数据。</p>
+        )}
+      </div>
+    </aside>
   );
 }
 
@@ -198,7 +212,7 @@ function FeishuTrendPanel({
         </div>
       </div>
       {visibleGroups.length ? (
-        <div className="feishu-native-trend-grid">
+        <div className={`feishu-native-trend-grid${visibleGroups.length === 1 ? ' is-single' : ''}`}>
           {visibleGroups.map(group => (
             <FeishuMiniTrendChart
               key={group.key || group.label}

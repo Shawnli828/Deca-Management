@@ -1139,106 +1139,12 @@
             font-weight: 650;
         }
 
-        .feishu-flow-grid {
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 14px;
-        }
-
-        .feishu-flow-card,
-        .feishu-report-summary article,
         .feishu-message-card,
         .feishu-product-card {
             border: 1px solid var(--line);
             border-radius: 14px;
             background: #ffffff;
             box-shadow: 0 16px 34px rgba(15, 23, 42, 0.04);
-        }
-
-        .feishu-flow-card {
-            display: grid;
-            gap: 8px;
-            padding: 17px;
-        }
-
-        .feishu-flow-card span {
-            color: var(--blue);
-            font-size: 12px;
-            font-weight: 760;
-        }
-
-        .feishu-flow-card strong {
-            color: var(--text);
-            font-size: 17px;
-            font-weight: 720;
-        }
-
-        .feishu-flow-card p {
-            min-height: 42px;
-            margin: 0;
-            color: var(--muted);
-            font-size: 13px;
-            line-height: 1.45;
-            font-weight: 520;
-        }
-
-        .feishu-flow-card small {
-            width: fit-content;
-            border: 1px solid #c7d2fe;
-            border-radius: 999px;
-            padding: 5px 9px;
-            background: #eef2ff;
-            color: #3157d5;
-            font-size: 11px;
-            font-weight: 680;
-        }
-
-        .feishu-report-summary {
-            display: grid;
-            grid-template-columns: repeat(5, minmax(0, 1fr));
-            gap: 14px;
-        }
-
-        .feishu-report-summary article {
-            padding: 18px;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .feishu-report-summary article::after {
-            content: "";
-            position: absolute;
-            inset: auto 0 0;
-            height: 4px;
-            background: var(--blue);
-        }
-
-        .feishu-report-summary span {
-            display: block;
-            color: var(--muted);
-            font-size: 13px;
-            font-weight: 620;
-        }
-
-        .feishu-report-summary strong {
-            display: block;
-            margin-top: 11px;
-            color: var(--text);
-            font-size: clamp(28px, 3.1vw, 42px);
-            line-height: 1;
-            font-weight: 720;
-        }
-
-        .feishu-report-summary article:nth-child(1) strong {
-            color: #3157d5;
-        }
-
-        .feishu-report-summary article:nth-child(4) strong {
-            color: #0f766e;
-        }
-
-        .feishu-report-summary article:nth-child(5) strong {
-            color: #a16207;
         }
 
         .feishu-report-layout {
@@ -1296,6 +1202,85 @@
             display: grid;
             gap: 20px;
             padding: 20px;
+        }
+
+        .feishu-native-dashboard {
+            display: grid;
+            grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.55fr);
+            gap: 16px;
+            padding: 18px;
+            align-items: stretch;
+        }
+
+        .feishu-native-overview-panel,
+        .feishu-native-product-panel {
+            display: grid;
+            align-content: start;
+            gap: 16px;
+            min-width: 0;
+            border: 1px solid #dbe3ef;
+            border-radius: 12px;
+            padding: 16px;
+            background: #ffffff;
+        }
+
+        .feishu-native-panel-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 14px;
+        }
+
+        .feishu-native-panel-head p {
+            margin: 4px 0 0;
+            color: #64748b;
+            font-size: 12px;
+            line-height: 1.45;
+            font-weight: 400;
+        }
+
+        .feishu-native-kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .feishu-native-kpi-grid article {
+            min-width: 0;
+            border: 1px solid #e5eaf2;
+            border-radius: 10px;
+            padding: 12px;
+            background: #f8fafc;
+        }
+
+        .feishu-native-kpi-grid span {
+            display: block;
+            color: #64748b;
+            font-size: 11px;
+            line-height: 1.25;
+            font-weight: 500;
+        }
+
+        .feishu-native-kpi-grid strong {
+            display: block;
+            overflow-wrap: anywhere;
+            margin-top: 8px;
+            color: #0f172a;
+            font-size: 22px;
+            line-height: 1.05;
+            font-weight: 650;
+        }
+
+        .feishu-native-kpi-grid .is-primary strong {
+            color: #245bdb;
+        }
+
+        .feishu-native-kpi-grid .is-green strong {
+            color: #0f766e;
+        }
+
+        .feishu-native-kpi-grid .is-amber strong {
+            color: #a16207;
         }
 
         .feishu-native-section-title {
@@ -1413,6 +1398,10 @@
             gap: 18px 22px;
         }
 
+        .feishu-native-trend-grid.is-single {
+            grid-template-columns: 1fr;
+        }
+
         .feishu-native-mini-chart {
             display: grid;
             gap: 6px;
@@ -1483,6 +1472,56 @@
 
         .feishu-native-mini-chart .is-download-point {
             fill: #ec6a37;
+        }
+
+        .feishu-native-product-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .feishu-native-product-list article {
+            display: grid;
+            gap: 8px;
+            min-width: 0;
+            border: 1px solid #e5eaf2;
+            border-radius: 10px;
+            padding: 12px;
+            background: #f8fafc;
+        }
+
+        .feishu-native-product-list article > div {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            min-width: 0;
+        }
+
+        .feishu-native-product-list strong {
+            min-width: 0;
+            color: #0f172a;
+            font-size: 14px;
+            line-height: 1.25;
+            font-weight: 600;
+        }
+
+        .feishu-native-product-list span {
+            flex: 0 0 auto;
+            border: 1px solid #c7d2fe;
+            border-radius: 999px;
+            padding: 4px 7px;
+            background: #eef2ff;
+            color: #3157d5;
+            font-size: 11px;
+            line-height: 1;
+            font-weight: 600;
+        }
+
+        .feishu-native-product-list small {
+            color: #64748b;
+            font-size: 12px;
+            line-height: 1.45;
+            font-weight: 400;
         }
 
         .feishu-message-card,
@@ -1738,7 +1777,8 @@
             .growth-report-head,
             .business-report-head,
             .feishu-report-hero,
-            .feishu-report-layout {
+            .feishu-report-layout,
+            .feishu-native-dashboard {
                 display: grid;
                 grid-template-columns: 1fr;
             }
@@ -1755,8 +1795,7 @@
             .growth-metric-grid,
             .growth-source-grid,
             .business-report-summary,
-            .feishu-flow-grid,
-            .feishu-report-summary {
+            .feishu-native-kpi-grid {
                 grid-template-columns: 1fr;
             }
 
