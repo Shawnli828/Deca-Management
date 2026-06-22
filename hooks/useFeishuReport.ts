@@ -13,13 +13,31 @@ import type {
   FeishuSendMode
 } from '@/lib/types';
 
+const MIXPANEL_SYNC_PRODUCT_CODES = ['DB', 'DM', 'DL'] as const;
+const MIXPANEL_SYNC_DAYS = 30;
+
+export type FeishuGrowthSyncResult = {
+  ok: boolean;
+  syncedAt: string;
+  products: Array<{
+    productCode: string;
+    count: number;
+  }>;
+  errors: Array<{
+    productCode: string;
+    message: string;
+  }>;
+};
+
 export function useFeishuReport() {
   const [reportDate, setReportDate] = useState(localIsoDate(-1));
   const [payload, setPayload] = useState<DailyFeishuPreviewPayload | null>(null);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [syncingGrowth, setSyncingGrowth] = useState(false);
   const [error, setError] = useState('');
   const [sendResult, setSendResult] = useState<DailyFeishuSendResult | null>(null);
+  const [growthSyncResult, setGrowthSyncResult] = useState<FeishuGrowthSyncResult | null>(null);
   const [sendMode, setSendMode] = useState<FeishuSendMode>('card_with_text_fallback');
   const previewRequestRef = useRef(0);
 
@@ -49,6 +67,7 @@ export function useFeishuReport() {
     setSending(true);
     setError('');
     setSendResult(null);
+    setGrowthSyncResult(null);
     try {
       const result = await api.sendDailyFeishuReport(reportDate, { mode: sendMode });
       setSendResult(result);
@@ -57,6 +76,43 @@ export function useFeishuReport() {
       setError(getErrorMessage(sendError, '飞书发送失败'));
     } finally {
       setSending(false);
+    }
+  }, [loadPreview, reportDate, sendMode]);
+
+  const syncMixpanelGrowth = useCallback(async () => {
+    setSyncingGrowth(true);
+    setError('');
+    setSendResult(null);
+    setGrowthSyncResult(null);
+    const products: FeishuGrowthSyncResult['products'] = [];
+    const errors: FeishuGrowthSyncResult['errors'] = [];
+    try {
+      for (const productCode of MIXPANEL_SYNC_PRODUCT_CODES) {
+        try {
+          const result = await api.syncProductGrowth(productCode, MIXPANEL_SYNC_DAYS);
+          products.push({ productCode, count: result.count || 0 });
+        } catch (syncError: unknown) {
+          errors.push({
+            productCode,
+            message: getErrorMessage(syncError, `${productCode} Mixpanel 同步失败`)
+          });
+        }
+      }
+
+      if (products.length) {
+        await loadPreview(reportDate, sendMode);
+      }
+      setGrowthSyncResult({
+        ok: errors.length === 0,
+        syncedAt: new Date().toISOString(),
+        products,
+        errors
+      });
+      if (errors.length) {
+        setError(`Mixpanel 同步未全部完成：${errors.map(item => `${item.productCode} ${item.message}`).join('；')}`);
+      }
+    } finally {
+      setSyncingGrowth(false);
     }
   }, [loadPreview, reportDate, sendMode]);
 
@@ -71,14 +127,17 @@ export function useFeishuReport() {
     payload,
     loading,
     sending,
+    syncingGrowth,
     error,
     sendResult,
+    growthSyncResult,
     sendMode,
     setSendMode,
     totals,
     products,
     downloadRate,
     loadPreview,
-    sendReport
+    sendReport,
+    syncMixpanelGrowth
   };
 }

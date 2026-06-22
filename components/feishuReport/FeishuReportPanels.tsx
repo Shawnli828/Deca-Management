@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type CSSProperties } from 'react';
 import { formatFeishuMetric } from '@/lib/feishuReportHelpers';
+import type { FeishuGrowthSyncResult } from '@/hooks/useFeishuReport';
 import type {
   DailyFeishuProductSummary,
   DailyFeishuPreviewPayload,
@@ -754,14 +755,22 @@ function FeishuNativeCardPreview({ data, loading }: { data: FeishuCardData | nul
 
 export function FeishuStatusMessages({
   error,
-  sendResult
+  sendResult,
+  growthSyncResult
 }: {
   error: string;
   sendResult: DailyFeishuSendResult | null;
+  growthSyncResult: FeishuGrowthSyncResult | null;
 }) {
   return (
     <>
       {error ? <div className="growth-error">{error}</div> : null}
+      {growthSyncResult?.products.length ? (
+        <div className={growthSyncResult.ok ? 'feishu-success' : 'feishu-sync-partial'}>
+          Mixpanel 缓存同步完成：{growthSyncResult.products.map(item => `${item.productCode} ${item.count} 条快照`).join(' · ')}
+          {growthSyncResult.errors.length ? ` · 失败 ${growthSyncResult.errors.length} 个产品` : ''}
+        </div>
+      ) : null}
       {sendResult?.ok ? (
         <div className="feishu-success">
           已发送到飞书：{sendResult.sent_at || '刚刚'}

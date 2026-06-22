@@ -8,10 +8,12 @@ type FeishuReportHeroProps = {
   setReportDate: (value: string) => void;
   loading: boolean;
   sending: boolean;
+  syncingGrowth: boolean;
   sendMode: FeishuSendMode;
   setSendMode: (value: FeishuSendMode) => void;
   loadPreview: (date: string) => void;
   sendReport: () => void;
+  syncMixpanelGrowth: () => void;
 };
 
 export function FeishuReportHero({
@@ -19,10 +21,12 @@ export function FeishuReportHero({
   setReportDate,
   loading,
   sending,
+  syncingGrowth,
   sendMode,
   setSendMode,
   loadPreview,
-  sendReport
+  sendReport,
+  syncMixpanelGrowth
 }: FeishuReportHeroProps) {
   return (
     <header className="feishu-report-hero">
@@ -46,6 +50,9 @@ export function FeishuReportHero({
         </label>
         <button type="button" onClick={() => loadPreview(reportDate)} disabled={loading}>
           {loading ? '生成中...' : '生成预览'}
+        </button>
+        <button type="button" onClick={syncMixpanelGrowth} disabled={syncingGrowth || loading || sending}>
+          {syncingGrowth ? '同步中...' : '同步 Mixpanel'}
         </button>
         <button className="primary" type="button" onClick={sendReport} disabled={sending || loading}>
           {sending ? '发送中...' : '发送飞书'}
