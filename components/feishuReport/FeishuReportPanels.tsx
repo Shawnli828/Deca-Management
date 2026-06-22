@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
 import { formatFeishuMetric } from '@/lib/feishuReportHelpers';
 import type {
   DailyFeishuProductSummary,
@@ -125,7 +125,7 @@ function OverviewNativePreview({ data }: { data: FeishuCardData }) {
         <FeishuOverviewKpis global={data.global || {}} />
         <FeishuTrendPanel groups={[overviewTrend]} />
       </section>
-      <FeishuProductPreviewPanel products={data.products || []} />
+      <FeishuProductPreviewPanel products={data.products || []} countryAvgTrend={data.countryAvgTrend || {}} />
     </div>
   );
 }
@@ -146,10 +146,11 @@ function FeishuOverviewKpis({
 }) {
   const items = [
     ['总播放', cardMetric(global.totalPlays), 'is-primary'],
-    ['ReelFarm', cardMetric(global.rfPlays), ''],
-    ['Clone', cardMetric(global.clonePlays), ''],
+    ['RF Total View', cardMetric(global.rfPlays), ''],
+    ['Clone Total View', cardMetric(global.clonePlays), ''],
     ['Onboarding Unique', global.onboarding === null ? '—' : cardMetric(global.onboarding), 'is-green'],
-    ['下载/播放', cardRate(global.downloadRate), 'is-amber']
+    ['转化', cardRate(global.downloadRate), 'is-amber'],
+    ['Post', postCoverage(global), '']
   ];
 
   return (
@@ -165,35 +166,290 @@ function FeishuOverviewKpis({
 }
 
 function FeishuProductPreviewPanel({
-  products
+  products,
+  countryAvgTrend
 }: {
   products: NonNullable<FeishuCardData['products']>;
+  countryAvgTrend: NonNullable<FeishuCardData['countryAvgTrend']>;
 }) {
+  const firstCode = productKey(products[0]);
+  const [selectedCode, setSelectedCode] = useState(firstCode);
+  const activeCode = productKey(products.find(product => productKey(product) === selectedCode)) || firstCode;
+  const selectedProduct = products.find(product => productKey(product) === activeCode) || products[0];
+  const selectedTrend = selectedProduct ? countryAvgTrend[productKey(selectedProduct)] || [] : [];
+
   return (
     <aside className="feishu-native-product-panel">
       <div className="feishu-native-panel-head">
         <div>
           <div className="feishu-native-section-title">产品视图</div>
-          <p>单产品数据区</p>
+          <p>单产品业务日数据 · 国家 RF 均播</p>
         </div>
         <span>Webhook 产品卡片</span>
       </div>
-      <div className="feishu-native-product-list">
-        {products.length ? products.map(product => (
-          <article key={product.code || product.name}>
-            <div>
-              <strong>{product.name || product.code || 'Product'}</strong>
-              <span>{postCoverage(product)}</span>
-            </div>
-            <small>
-              View {cardMetric(product.totalPlays)} · RF Avg {cardMetric(product.rfAvg)} · Download {product.onboarding === null ? '—' : cardMetric(product.onboarding)}
-            </small>
-          </article>
+      {products.length && selectedProduct ? (
+        <>
+          <ProductSwitcher products={products} activeCode={activeCode} onSelect={setSelectedCode} />
+          <ProductKpis product={selectedProduct} />
+          <CountryAvgTable countries={selectedProduct.countries || []} />
+          <FeishuCountryAvgTrendChart
+            title={`${selectedProduct.name || selectedProduct.code || 'Product'} · 国家 RF 均播趋势`}
+            countries={selectedTrend}
+          />
+        </>
+      ) : (
+        <p className="feishu-native-empty">暂无产品数据。</p>
+      )}
+    </aside>
+  );
+}
+
+function productKey(product?: NonNullable<FeishuCardData['products']>[number]) {
+  return String(product?.code || product?.name || '').trim().toUpperCase();
+}
+
+function productInitials(product?: NonNullable<FeishuCardData['products']>[number]) {
+  const code = String(product?.code || '').trim().toUpperCase();
+  if (code) return code.slice(0, 3);
+  const label = String(product?.name || product?.code || 'P').trim();
+  const parts = label.split(/[\s_-]+/).filter(Boolean);
+  if (parts.length > 1) return parts.map(part => part[0]).join('').slice(0, 2).toUpperCase();
+  return label.slice(0, 2).toUpperCase();
+}
+
+function ProductSwitcher({
+  products,
+  activeCode,
+  onSelect
+}: {
+  products: NonNullable<FeishuCardData['products']>;
+  activeCode: string;
+  onSelect: (code: string) => void;
+}) {
+  return (
+    <div className="feishu-product-switcher" role="tablist" aria-label="选择产品">
+      {products.map(product => {
+        const key = productKey(product);
+        const active = key === activeCode;
+        return (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={active}
+            className={active ? 'is-active' : undefined}
+            key={key || product.name || product.code}
+            onClick={() => onSelect(key)}
+          >
+            <span className="feishu-product-logo-mark" aria-hidden="true">{productInitials(product)}</span>
+            <span>{product.name || product.code || 'Product'}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ProductKpis({ product }: { product: NonNullable<FeishuCardData['products']>[number] }) {
+  const items = [
+    { label: 'View', value: cardMetric(product.totalPlays), tone: 'is-primary', span: 2 },
+    { label: 'RF Total View', value: cardMetric(product.rfPlays), tone: '', span: 2 },
+    { label: 'Clone Total View', value: cardMetric(product.clonePlays), tone: '', span: 2 },
+    { label: 'Unique Onboarding', value: product.onboarding === null ? '—' : cardMetric(product.onboarding), tone: 'is-green', span: 3 },
+    { label: '转化', value: cardRate(product.downloadRate), tone: 'is-amber', span: 3 },
+    { label: 'Post', value: postCoverage(product), tone: '', span: 3 },
+    {
+      label: '未发 / 0播放',
+      value: `${cardMetric(product.unsent)} / ${cardMetric(product.zeroPlay)}`,
+      tone: (Number(product.unsent || 0) || Number(product.zeroPlay || 0)) ? 'is-red' : '',
+      span: 3,
+    },
+  ];
+
+  return (
+    <div className="feishu-product-kpi-grid">
+      {items.map(item => (
+        <article
+          className={`${item.tone || ''} span-${item.span}`.trim()}
+          key={item.label}
+        >
+          <span>{item.label}</span>
+          <strong>{item.value}</strong>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function CountryAvgTable({
+  countries
+}: {
+  countries: NonNullable<NonNullable<FeishuCardData['products']>[number]['countries']>;
+}) {
+  return (
+    <div className="feishu-country-avg-section">
+      <div className="feishu-native-section-title">国家业务日 RF 均播</div>
+      <div className="feishu-country-avg-table">
+        <div className="feishu-country-avg-row is-head">
+          <span>国家</span>
+          <span>RF Avg View</span>
+          <span>Post</span>
+        </div>
+        {countries.length ? countries.map(country => (
+          <div className="feishu-country-avg-row" key={`${country.name || 'country'}-${country.flag || ''}`}>
+            <span>{country.flag || '🌐'} {country.name || 'Country'}</span>
+            <strong>{country.rfAvg === null ? '—' : cardMetric(country.rfAvg)}</strong>
+            <strong>{cardMetric(country.posts)}</strong>
+          </div>
         )) : (
-          <p className="feishu-native-empty">暂无产品数据。</p>
+          <p className="feishu-native-empty">暂无国家均播数据。</p>
         )}
       </div>
-    </aside>
+    </div>
+  );
+}
+
+const countryTrendColors = ['#2f8af5', '#0f766e', '#a16207', '#7c3aed', '#dc2626', '#475569', '#0891b2'];
+
+function svgSmoothPath(points: Array<{ x: number; y: number }>) {
+  if (!points.length) return '';
+  if (points.length === 1) return `M${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
+  return points.slice(1).reduce((path, point, index) => {
+    const previous = points[index];
+    const midX = (previous.x + point.x) / 2;
+    return `${path} C${midX.toFixed(1)} ${previous.y.toFixed(1)} ${midX.toFixed(1)} ${point.y.toFixed(1)} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`;
+  }, `M${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`);
+}
+
+function FeishuCountryAvgTrendChart({
+  title,
+  countries
+}: {
+  title: string;
+  countries: NonNullable<FeishuCardData['countryAvgTrend']>[string];
+}) {
+  const chart = useMemo(() => {
+    const labelMap = new Map<string, { date: string; label: string }>();
+    const seriesSource = (countries || []).map(country => {
+      const rows = (country.rows || [])
+        .map(row => ({
+          date: String(row.date || '').slice(0, 10),
+          label: row.label || String(row.date || '').slice(5, 10),
+          rfAvg: row.rfAvg === null || row.rfAvg === undefined ? null : Number(row.rfAvg),
+          posts: Number(row.posts || 0),
+        }))
+        .filter(row => row.date && row.rfAvg !== null && Number.isFinite(row.rfAvg));
+      rows.forEach(row => labelMap.set(row.date, { date: row.date, label: row.label }));
+      return {
+        countryName: country.countryName || country.countryCode || 'Country',
+        flag: country.flag || '🌐',
+        rows,
+      };
+    }).filter(country => country.rows.length);
+
+    const labels = Array.from(labelMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+    const values = seriesSource.flatMap(country => country.rows.map(row => Number(row.rfAvg || 0)));
+    const width = 440;
+    const height = 210;
+    const pad = { top: 14, right: 14, bottom: 28, left: 48 };
+    const plotWidth = width - pad.left - pad.right;
+    const plotHeight = height - pad.top - pad.bottom;
+    const range = paddedRange(values);
+    const xFor = (index: number) => pad.left + (labels.length <= 1 ? plotWidth / 2 : (plotWidth / (labels.length - 1)) * index);
+    const yFor = (value: number) => {
+      const ratio = (value - range.min) / Math.max(1, range.max - range.min);
+      return pad.top + plotHeight - ratio * plotHeight;
+    };
+    const labelIndexes = labels.length <= 5
+      ? labels.map((_, index) => index)
+      : Array.from(new Set([0, 2, 4, labels.length - 1])).filter(index => index < labels.length);
+    const series = seriesSource.map((country, index) => {
+      const rowsByDate = new Map(country.rows.map(row => [row.date, row]));
+      const points = labels
+        .map((label, labelIndex) => {
+          const row = rowsByDate.get(label.date);
+          if (!row || row.rfAvg === null) return null;
+          return {
+            x: xFor(labelIndex),
+            y: yFor(row.rfAvg),
+            value: row.rfAvg,
+            date: label.date,
+          };
+        })
+        .filter(Boolean) as Array<{ x: number; y: number; value: number; date: string }>;
+      return {
+        ...country,
+        color: countryTrendColors[index % countryTrendColors.length],
+        points,
+        path: svgSmoothPath(points),
+      };
+    });
+    const grid = Array.from({ length: 4 }, (_, index) => {
+      const ratio = index / 3;
+      return {
+        y: pad.top + ratio * plotHeight,
+        value: range.max - ratio * (range.max - range.min),
+      };
+    });
+    return { labels, width, height, pad, series, grid, labelIndexes };
+  }, [countries]);
+
+  if (!chart.series.length || !chart.labels.length) {
+    return (
+      <div className="feishu-country-trend is-empty">
+        <div className="feishu-native-section-title">{title}</div>
+        <p>暂无国家均播趋势。</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="feishu-country-trend">
+      <div className="feishu-country-trend-head">
+        <div className="feishu-native-section-title">{title}</div>
+        <div className="feishu-country-legend">
+          {chart.series.map(series => (
+            <span key={series.countryName} style={{ '--series-color': series.color } as CSSProperties}>
+              {series.flag} {series.countryName}
+            </span>
+          ))}
+        </div>
+      </div>
+      <svg viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label={title}>
+        {chart.grid.map(line => (
+          <g key={`country-grid-${line.y}`}>
+            <line x1={chart.pad.left} x2={chart.width - chart.pad.right} y1={line.y} y2={line.y} />
+            <text className="is-y-label" x={chart.pad.left - 8} y={line.y + 3} textAnchor="end">
+              {compactAxisMetric(line.value)}
+            </text>
+          </g>
+        ))}
+        {chart.series.map(series => (
+          <g key={`country-series-${series.countryName}`}>
+            <path d={series.path} style={{ stroke: series.color }} />
+            {series.points.map(point => (
+              <circle
+                cx={point.x}
+                cy={point.y}
+                r="2.2"
+                style={{ fill: series.color }}
+                key={`${series.countryName}-${point.date}`}
+              />
+            ))}
+          </g>
+        ))}
+        {chart.labelIndexes.map(index => (
+          <text
+            className="is-x-label"
+            x={chart.pad.left + (chart.labels.length <= 1 ? (chart.width - chart.pad.left - chart.pad.right) / 2 : ((chart.width - chart.pad.left - chart.pad.right) / (chart.labels.length - 1)) * index)}
+            y={chart.height - 7}
+            textAnchor={index === 0 ? 'start' : 'end'}
+            key={`country-label-${chart.labels[index].date}`}
+          >
+            {chart.labels[index].label}
+          </text>
+        ))}
+      </svg>
+    </div>
   );
 }
 

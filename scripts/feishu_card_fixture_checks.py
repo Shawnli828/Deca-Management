@@ -57,7 +57,14 @@ def main():
             ]
         },
         daily_reelfarm_account_alerts=lambda *_args, **_kwargs: {},
-        product_reelfarm_country_avg_views=lambda *_args, **_kwargs: [],
+        product_reelfarm_country_avg_views=lambda *_args, **_kwargs: [
+            {
+                "country_code": "GE",
+                "country_name": "Germany",
+                "reelfarm_avg_views": 321.4,
+                "reelfarm_posts": 2,
+            }
+        ],
         sync_status_payload=lambda: {},
         sync_readiness_payload=lambda *_args, **_kwargs: {},
     )
@@ -66,6 +73,19 @@ def main():
     assert_equal(daily_trend["products"]["DB"][0]["view"], 20, "trend first included day daily view")
     assert_equal(daily_trend["products"]["DB"][1]["view"], 30, "trend second day should not accumulate")
     assert_equal(daily_trend["overview"][1]["download"], 3, "overview download should stay daily")
+    assert_equal(len(daily_trend["country_avg"]["DB"]), 2, "country avg trend has one row per included business date")
+    trend_card_data = daily_report_card_data({
+        "report_date": "2026-06-21",
+        "business_window_local": {},
+        "totals": {},
+        "products": [{"product_code": "DB", "product_name": "DeenBack", "account_alerts": {}}],
+        "trend": daily_trend,
+    })
+    assert_equal(
+        trend_card_data.get("countryAvgTrend", {}).get("DB", [])[0].get("rows", [])[0].get("rfAvg"),
+        321.4,
+        "card data carries country RF avg trend",
+    )
 
     with tempfile.TemporaryDirectory() as tmpdir:
         app_runtime.DB_PATH = Path(tmpdir) / "feishu-card.sqlite3"

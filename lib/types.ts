@@ -219,6 +219,18 @@ export type FeishuCardTrendRow = {
   download?: number;
 };
 
+export type FeishuCountryAvgTrend = {
+  countryCode?: string;
+  countryName?: string;
+  flag?: string;
+  rows?: Array<{
+    date?: string;
+    label?: string;
+    rfAvg?: number | null;
+    posts?: number;
+  }>;
+};
+
 export type FeishuCardData = {
   bizDate?: string;
   window?: string;
@@ -240,6 +252,7 @@ export type FeishuCardData = {
     label?: string;
     trend?: FeishuCardTrendRow[];
   }>;
+  countryAvgTrend?: Record<string, FeishuCountryAvgTrend[]>;
 };
 
 export type DailyFeishuReportError = {

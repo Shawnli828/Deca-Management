@@ -210,6 +210,67 @@ def trend_groups_payload(report, products):
     return groups
 
 
+def country_avg_trend_payload(report, products):
+    trend = report.get("trend") or []
+    if not isinstance(trend, dict):
+        return {}
+
+    source = trend.get("country_avg") or {}
+    output = {}
+    for product in products or []:
+        code = str(product.get("code") or "").strip().upper()
+        if not code:
+            continue
+        countries_by_key = {}
+        for row in source.get(code) or []:
+            country_code = str(row.get("country_code") or "").strip().upper()
+            country_name = str(row.get("country_name") or country_code or "Country")
+            key = country_code or country_name
+            entry = countries_by_key.setdefault(key, {
+                "countryCode": country_code,
+                "countryName": country_name,
+                "flag": country_flag(row),
+                "rows": [],
+            })
+            entry["rows"].append({
+                "date": str(row.get("date") or "")[:10],
+                "label": trend_date_label(row.get("date")),
+                "rfAvg": rounded_metric(row.get("rf_avg")),
+                "posts": safe_int(row.get("posts")),
+            })
+
+        country_trends = []
+        for entry in countries_by_key.values():
+            entry["rows"].sort(key=lambda item: item.get("date") or "")
+            latest = next(
+                (
+                    row
+                    for row in reversed(entry.get("rows") or [])
+                    if row.get("rfAvg") is not None
+                ),
+                {},
+            )
+            country_trends.append({
+                **entry,
+                "_sortRfAvg": float(latest.get("rfAvg") or 0),
+                "_sortPosts": safe_int(latest.get("posts")),
+            })
+
+        country_trends.sort(
+            key=lambda item: (
+                item.get("_sortRfAvg") or 0,
+                item.get("_sortPosts") or 0,
+                item.get("countryName") or "",
+            ),
+            reverse=True,
+        )
+        for item in country_trends:
+            item.pop("_sortRfAvg", None)
+            item.pop("_sortPosts", None)
+        output[code] = country_trends
+    return output
+
+
 def daily_report_card_data(report):
     totals = report.get("totals") or {}
     products = [product_card_data(product) for product in report.get("products") or []]
@@ -231,4 +292,5 @@ def daily_report_card_data(report):
         "products": products,
         "trend": trend_payload(report),
         "trendGroups": trend_groups_payload(report, products),
+        "countryAvgTrend": country_avg_trend_payload(report, products),
     }

@@ -128,19 +128,24 @@ class DailyFeishuReportService:
         start_floor = datetime.strptime(FEISHU_TREND_START_DATE, "%Y-%m-%d").date()
         start_date = max(end_date - timedelta(days=days - 1), start_floor)
         if start_date > end_date:
-            return {"overview": [], "products": {}}
+            return {"overview": [], "products": {}, "country_avg": {}}
         dates = [
             (start_date + timedelta(days=index)).isoformat()
             for index in range((end_date - start_date).days + 1)
         ]
         if not product_codes:
-            return {"overview": [], "products": {}}
+            return {"overview": [], "products": {}, "country_avg": {}}
 
         start_date = dates[0]
         end_date_text = dates[-1]
         products = {}
+        country_avg = {}
         overview_by_date = {
             date: {"date": date, "view": 0, "download": 0}
+            for date in dates
+        }
+        content_windows_by_date = {
+            date: daily_metric_windows(date)["content"]
             for date in dates
         }
 
@@ -175,9 +180,31 @@ class DailyFeishuReportService:
                 overview_by_date[date]["download"] += item.get("download") or 0
             products[code] = product_rows
 
+            country_rows = []
+            for date in dates:
+                window = content_windows_by_date[date]
+                try:
+                    rows = self.product_reelfarm_country_avg_views(
+                        code,
+                        window["utc_start"],
+                        window["utc_end"],
+                    )
+                except Exception:
+                    rows = []
+                for row in rows or []:
+                    country_rows.append({
+                        "date": date,
+                        "country_code": row.get("country_code"),
+                        "country_name": row.get("country_name"),
+                        "rf_avg": self._safe_trend_float(row.get("reelfarm_avg_views")),
+                        "posts": self._safe_trend_int(row.get("reelfarm_posts")),
+                    })
+            country_avg[code] = country_rows
+
         return {
             "overview": [overview_by_date[date] for date in dates],
             "products": products,
+            "country_avg": country_avg,
         }
 
     @staticmethod
@@ -186,6 +213,15 @@ class DailyFeishuReportService:
             return int(value or 0)
         except (TypeError, ValueError):
             return 0
+
+    @staticmethod
+    def _safe_trend_float(value):
+        if value is None or value == "":
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
 
     def report_template_payload(self, report=None, report_date="", view_slot="product_1"):
         report = report or self.report_payload(report_date)
