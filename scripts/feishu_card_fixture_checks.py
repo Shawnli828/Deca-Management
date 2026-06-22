@@ -68,12 +68,17 @@ def main():
         sync_status_payload=lambda: {},
         sync_readiness_payload=lambda *_args, **_kwargs: {},
     )
-    daily_trend = trend_service.report_trend("2026-06-21", ["DB"], days=3)
-    assert_equal([row["date"] for row in daily_trend["products"]["DB"]], ["2026-06-20", "2026-06-21"], "trend should start at configured business date")
-    assert_equal(daily_trend["products"]["DB"][0]["view"], 20, "trend first included day daily view")
-    assert_equal(daily_trend["products"]["DB"][1]["view"], 30, "trend second day should not accumulate")
-    assert_equal(daily_trend["overview"][1]["download"], 3, "overview download should stay daily")
-    assert_equal(len(daily_trend["country_avg"]["DB"]), 2, "country avg trend has one row per included business date")
+    daily_trend = trend_service.report_trend("2026-06-21", ["DB"], days=7)
+    assert_equal(
+        [row["date"] for row in daily_trend["products"]["DB"]],
+        ["2026-06-17", "2026-06-18", "2026-06-19", "2026-06-20", "2026-06-21"],
+        "trend should start at configured business date until seven-day window fills",
+    )
+    assert_equal(daily_trend["products"]["DB"][0]["view"], 0, "trend fills missing early business days with zero")
+    assert_equal(daily_trend["products"]["DB"][2]["view"], 100, "trend first available day daily view")
+    assert_equal(daily_trend["products"]["DB"][4]["view"], 30, "trend last day should not accumulate")
+    assert_equal(daily_trend["overview"][4]["download"], 3, "overview download should stay daily")
+    assert_equal(len(daily_trend["country_avg"]["DB"]), 5, "country avg trend has one row per included business date")
     trend_card_data = daily_report_card_data({
         "report_date": "2026-06-21",
         "business_window_local": {},

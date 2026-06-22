@@ -185,7 +185,7 @@ function FeishuProductPreviewPanel({
           <div className="feishu-native-section-title">产品视图</div>
           <p>单产品业务日数据 · 国家 RF 均播</p>
         </div>
-        <span>Webhook 产品卡片</span>
+        <span>中台产品预览</span>
       </div>
       {products.length && selectedProduct ? (
         <>
@@ -476,6 +476,7 @@ function FeishuTrendPanel({
               key={group.key || group.label}
               title={(group.label || group.key) === '总览' ? '全部汇总' : (group.label || group.key || '趋势')}
               trend={group.trend || []}
+              wide={visibleGroups.length === 1}
             />
           ))}
         </div>
@@ -488,10 +489,12 @@ function FeishuTrendPanel({
 
 function FeishuMiniTrendChart({
   title,
-  trend
+  trend,
+  wide = false
 }: {
   title: string;
   trend: NonNullable<FeishuCardData['trend']>;
+  wide?: boolean;
 }) {
   const chart = useMemo(() => {
     const rows = trend.map(row => ({
@@ -499,9 +502,11 @@ function FeishuMiniTrendChart({
       view: Number(row.view || 0),
       download: Number(row.download || 0)
     }));
-    const width = 320;
-    const height = 170;
-    const pad = { top: 12, right: 36, bottom: 26, left: 42 };
+    const width = wide ? 920 : 320;
+    const height = wide ? 300 : 170;
+    const pad = wide
+      ? { top: 16, right: 58, bottom: 34, left: 58 }
+      : { top: 12, right: 36, bottom: 26, left: 42 };
     const plotWidth = width - pad.left - pad.right;
     const plotHeight = height - pad.top - pad.bottom;
     const viewRange = paddedRange(rows.map(row => row.view));
@@ -545,11 +550,11 @@ function FeishuMiniTrendChart({
       grid,
       labelIndexes,
     };
-  }, [trend]);
+  }, [trend, wide]);
 
   if (!chart.rows.length) {
     return (
-      <div className="feishu-native-mini-chart is-empty">
+      <div className={`feishu-native-mini-chart is-empty${wide ? ' is-wide' : ''}`}>
         <div className="feishu-native-mini-chart-head">
           <strong>{title}</strong>
         </div>
@@ -559,12 +564,14 @@ function FeishuMiniTrendChart({
   }
 
   return (
-    <div className="feishu-native-mini-chart">
+    <div className={`feishu-native-mini-chart${wide ? ' is-wide' : ''}`}>
       <div className="feishu-native-mini-chart-head">
         <strong>{title}</strong>
       </div>
       <svg
         viewBox={`0 0 ${chart.width} ${chart.height}`}
+        width={chart.width}
+        height={chart.height}
         role="img"
         aria-label={`${title} View and Download trend`}
       >

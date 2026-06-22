@@ -1170,7 +1170,7 @@
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 16px;
-            align-items: stretch;
+            align-items: start;
         }
 
         .feishu-native-overview-panel,
@@ -1511,6 +1511,14 @@
             display: block;
             width: 100%;
             height: 170px;
+        }
+
+        .feishu-native-mini-chart.is-wide {
+            min-height: 0;
+        }
+
+        .feishu-native-mini-chart.is-wide svg {
+            height: auto;
         }
 
         .feishu-native-mini-chart line {
