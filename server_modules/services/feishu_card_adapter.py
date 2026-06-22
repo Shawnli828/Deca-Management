@@ -24,6 +24,7 @@ COUNTRY_FLAGS = {
 }
 
 PRODUCT_DISPLAY_ORDER = ("DeenBack", "Demi", "Delust")
+ANOMALY_ACCOUNT_PREVIEW_LIMIT = 24
 
 
 def safe_int(value, default=0):
@@ -98,10 +99,12 @@ def alert_account_payload(account):
 
 
 def anomaly_group(title, accounts, hidden):
+    visible_accounts = list(accounts or [])[:ANOMALY_ACCOUNT_PREVIEW_LIMIT]
+    hidden_total = safe_int(hidden) + max(len(accounts or []) - len(visible_accounts), 0)
     return {
         "title": title,
-        "more": f"另有 {hidden} 个未在源报告列出明细" if hidden else None,
-        "accounts": [alert_account_payload(account) for account in accounts],
+        "more": f"另有 {hidden_total} 个未展示" if hidden_total else None,
+        "accounts": [alert_account_payload(account) for account in visible_accounts],
     }
 
 

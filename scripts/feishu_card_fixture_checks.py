@@ -91,6 +91,31 @@ def main():
         321.4,
         "card data carries country RF avg trend",
     )
+    large_alerts_card_data = daily_report_card_data({
+        "report_date": "2026-06-21",
+        "business_window_local": {},
+        "totals": {},
+        "products": [{
+            "product_code": "DB",
+            "product_name": "DeenBack",
+            "account_alerts": {
+                "missing_account_count": 35,
+                "missing_accounts_truncated": 5,
+                "missing_accounts": [
+                    {
+                        "username": f"account{i}",
+                        "country_code": "GE",
+                        "automation_names": [f"GE-DB-Auto-{i}"],
+                    }
+                    for i in range(30)
+                ],
+            },
+        }],
+        "trend": daily_trend,
+    })
+    large_group = large_alerts_card_data.get("products", [])[0].get("anomalyGroups", [])[0]
+    assert_equal(len(large_group.get("accounts") or []), 24, "anomaly preview account cap")
+    assert_equal(large_group.get("more"), "另有 11 个未展示", "anomaly preview hidden count")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         app_runtime.DB_PATH = Path(tmpdir) / "feishu-card.sqlite3"
