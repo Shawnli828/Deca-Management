@@ -1,4 +1,5 @@
 import json
+import uuid
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -13,6 +14,61 @@ def _post_json(endpoint, payload, headers=None, ssl_context_factory=None, timeou
         endpoint,
         data=body,
         headers={"Content-Type": "application/json", **(headers or {})},
+        method="POST",
+    )
+    context = ssl_context_factory() if ssl_context_factory else None
+    try:
+        with urlopen(request, timeout=timeout, context=context) as response:
+            raw = response.read().decode("utf-8", errors="replace")
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        return {"ok": False, "error": f"Feishu returned HTTP {exc.code}: {detail[:500]}"}
+    except URLError as exc:
+        return {"ok": False, "error": f"Could not reach Feishu OpenAPI: {exc.reason}"}
+    except Exception as exc:
+        return {"ok": False, "error": f"Feishu OpenAPI request failed: {exc}"}
+
+    try:
+        data = json.loads(raw) if raw else {}
+    except json.JSONDecodeError:
+        return {"ok": False, "error": f"Feishu returned non-JSON response: {raw[:300]}"}
+
+    code = data.get("code", 0)
+    if code not in (0, "0", None):
+        return {"ok": False, "error": data.get("msg") or raw[:500], "response": data}
+    return {"ok": True, "response": data}
+
+
+def _post_multipart(endpoint, fields=None, files=None, headers=None, ssl_context_factory=None, timeout=30):
+    boundary = f"----deca-feishu-{uuid.uuid4().hex}"
+    body = bytearray()
+    for name, value in (fields or {}).items():
+        body.extend(f"--{boundary}\r\n".encode("utf-8"))
+        body.extend(f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("utf-8"))
+        body.extend(str(value or "").encode("utf-8"))
+        body.extend(b"\r\n")
+    for file_item in files or []:
+        name = file_item["name"]
+        filename = file_item.get("filename") or "upload.bin"
+        content_type = file_item.get("content_type") or "application/octet-stream"
+        content = file_item.get("content") or b""
+        body.extend(f"--{boundary}\r\n".encode("utf-8"))
+        body.extend(
+            (
+                f'Content-Disposition: form-data; name="{name}"; filename="{filename}"\r\n'
+                f"Content-Type: {content_type}\r\n\r\n"
+            ).encode("utf-8")
+        )
+        body.extend(content)
+        body.extend(b"\r\n")
+    body.extend(f"--{boundary}--\r\n".encode("utf-8"))
+    request = Request(
+        endpoint,
+        data=bytes(body),
+        headers={
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+            **(headers or {}),
+        },
         method="POST",
     )
     context = ssl_context_factory() if ssl_context_factory else None
@@ -80,6 +136,34 @@ def tenant_access_token(app_id, app_secret, ssl_context_factory=None):
     if not token:
         return {"ok": False, "error": "Feishu did not return tenant_access_token.", "response": result.get("response")}
     return {"ok": True, "tenant_access_token": token, "response": result.get("response")}
+
+
+def upload_image(*, app_id, app_secret, image_bytes, filename="deca-growth-report.png", ssl_context_factory=None):
+    if not image_bytes:
+        return {"ok": False, "error": "image_bytes is required."}
+    token_result = tenant_access_token(app_id, app_secret, ssl_context_factory)
+    if not token_result.get("ok"):
+        return token_result
+
+    result = _post_multipart(
+        f"{FEISHU_OPEN_API_BASE}/im/v1/images",
+        fields={"image_type": "message"},
+        files=[{
+            "name": "image",
+            "filename": filename,
+            "content_type": "image/png",
+            "content": image_bytes,
+        }],
+        headers={"Authorization": f"Bearer {token_result.get('tenant_access_token')}"},
+        ssl_context_factory=ssl_context_factory,
+    )
+    if not result.get("ok"):
+        return result
+    response = result.get("response") or {}
+    image_key = ((response.get("data") or {}).get("image_key"))
+    if not image_key:
+        return {"ok": False, "error": "Feishu did not return image_key.", "response": response}
+    return {"ok": True, "image_key": image_key, "response": response}
 
 
 def send_template_card(

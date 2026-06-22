@@ -33,7 +33,7 @@ export function FeishuReportHero({
       <div>
         <p className="dashboard-kicker">Feishu Report</p>
         <h1>Feishu Report</h1>
-        <p>每日业务数据先生成可检查预览，再发送为 Webhook 卡片或 CardKit 模板卡片。</p>
+        <p>每日业务数据先生成可检查预览，再发送为飞书图片看板。</p>
       </div>
       <div className="feishu-report-actions">
         <label>
@@ -43,6 +43,7 @@ export function FeishuReportHero({
         <label>
           <span>发送模式</span>
           <select value={sendMode} onChange={event => setSendMode(event.target.value as FeishuSendMode)}>
+            <option value="image">SVG 图片看板</option>
             <option value="card_with_text_fallback">Webhook 卡片优先</option>
             <option value="card">仅 Webhook 卡片</option>
             <option value="template">模板卡片</option>

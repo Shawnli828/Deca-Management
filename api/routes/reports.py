@@ -21,9 +21,9 @@ def truthy_query_value(value: str) -> bool:
 
 
 def normalize_feishu_mode(mode: str) -> str:
-    normalized = str(mode or "card_with_text_fallback").strip().lower()
-    if normalized not in {"card", "card_with_text_fallback", "template"}:
-        raise ValueError("mode must be card, card_with_text_fallback, or template.")
+    normalized = str(mode or "image").strip().lower()
+    if normalized not in {"image", "card", "card_with_text_fallback", "template"}:
+        raise ValueError("mode must be image, card, card_with_text_fallback, or template.")
     return normalized
 
 
@@ -33,7 +33,7 @@ def post_reports_daily_feishu(
     request: Request,
     date: str = "",
     require_synced: str = "",
-    mode: str = "card_with_text_fallback",
+    mode: str = "image",
 ):
     is_cron_request = cron_authorized(request.headers)
     if not is_cron_request:
@@ -55,7 +55,7 @@ def post_reports_daily_feishu(
 
 
 @router.get("/api/reports/daily-feishu-preview", response_model=FeishuPreviewResponse)
-def get_reports_daily_feishu_preview(request: Request, date: str = "", mode: str = "card_with_text_fallback"):
+def get_reports_daily_feishu_preview(request: Request, date: str = "", mode: str = "image"):
     require_dashboard_auth(request)
     try:
         normalized_mode = normalize_feishu_mode(mode)
@@ -64,8 +64,9 @@ def get_reports_daily_feishu_preview(request: Request, date: str = "", mode: str
         card_data = None
         card = None
         template_preview = None
-        if normalized_mode in {"card", "card_with_text_fallback"}:
+        if normalized_mode in {"image", "card", "card_with_text_fallback"}:
             card_data = daily_feishu_report_card_data(report=report)
+        if normalized_mode in {"card", "card_with_text_fallback"}:
             card = daily_feishu_report_card(report=report)
         if normalized_mode == "template":
             template_preview = daily_feishu_report_template_variables(report=report)

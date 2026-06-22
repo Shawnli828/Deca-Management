@@ -178,7 +178,7 @@ export type DailyFeishuProductSummary = {
   [key: string]: unknown;
 };
 
-export type FeishuSendMode = 'card' | 'card_with_text_fallback' | 'template';
+export type FeishuSendMode = 'image' | 'card' | 'card_with_text_fallback' | 'template';
 
 export type FeishuCardMetricProduct = {
   code?: string;
@@ -296,6 +296,7 @@ export type DailyFeishuSendResult = {
   card_preview?: FeishuCardData | null;
   template_messages?: Record<string, string | undefined>;
   template_preview?: Record<string, unknown> | null;
+  image_key?: string;
   error?: string;
 };
 

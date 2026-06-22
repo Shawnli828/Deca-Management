@@ -38,7 +38,7 @@ export function useFeishuReport() {
   const [error, setError] = useState('');
   const [sendResult, setSendResult] = useState<DailyFeishuSendResult | null>(null);
   const [growthSyncResult, setGrowthSyncResult] = useState<FeishuGrowthSyncResult | null>(null);
-  const [sendMode, setSendMode] = useState<FeishuSendMode>('card_with_text_fallback');
+  const [sendMode, setSendMode] = useState<FeishuSendMode>('image');
   const previewRequestRef = useRef(0);
 
   const totals = useMemo(() => reportTotals(payload?.report), [payload]);

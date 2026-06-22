@@ -8,11 +8,13 @@ from server_modules.daily_report import (
 )
 from server_modules.external_clients import (
     send_feishu_card as send_feishu_card_client,
+    send_feishu_image as send_feishu_image_client,
     send_feishu_message as send_feishu_message_client,
 )
 from server_modules.integrations.feishu_app_client import (
     feishu_template_card_response,
     send_template_card as send_feishu_template_card_client,
+    upload_image as upload_feishu_image_client,
 )
 from server_modules.domain.feishu_card import build_daily_report_card
 from server_modules.metrics_service import (
@@ -22,6 +24,7 @@ from server_modules.metrics_service import (
 )
 from server_modules.services.feishu_card_adapter import daily_report_card_data
 from server_modules.services.feishu_card_snapshot_service import save_daily_report_snapshot
+from server_modules.services.feishu_svg_report import overview_svg, svg_to_png_bytes
 from server_modules.services.feishu_template_variables import (
     overview_template_variables,
     parse_product_names,
@@ -62,6 +65,14 @@ class DailyFeishuReportService:
     def send_feishu_card(self, card):
         return send_feishu_card_client(
             card,
+            self.webhook_url,
+            self.webhook_secret,
+            self.make_ssl_context,
+        )
+
+    def send_feishu_image(self, image_key):
+        return send_feishu_image_client(
+            image_key,
             self.webhook_url,
             self.webhook_secret,
             self.make_ssl_context,
@@ -419,10 +430,56 @@ class DailyFeishuReportService:
         card_data = self.report_card_data(report_date, report=report)
         return build_daily_report_card(card_data)
 
-    def send_report(self, report_date="", require_synced=False, mode="card_with_text_fallback"):
-        mode = str(mode or "card_with_text_fallback").strip().lower()
-        if mode not in {"card", "card_with_text_fallback", "template"}:
-            raise ValueError("mode must be card, card_with_text_fallback, or template.")
+    def report_image_payload(self, report):
+        card_data = self.report_card_data(report=report)
+        svg = overview_svg(card_data)
+        png = svg_to_png_bytes(svg)
+        return {
+            "card_data": card_data,
+            "svg": svg,
+            "png": png,
+        }
+
+    def send_image_report(self, report):
+        config = self.template_config()
+        image_payload = self.report_image_payload(report)
+        upload_result = upload_feishu_image_client(
+            app_id=config.get("app_id"),
+            app_secret=config.get("app_secret"),
+            image_bytes=image_payload.get("png"),
+            filename=f"deca-growth-{report.get('report_date') or 'daily'}.png",
+            ssl_context_factory=self.make_ssl_context,
+        )
+        if not upload_result.get("ok"):
+            return {
+                "ok": False,
+                "error": upload_result.get("error") or "Failed to upload Feishu report image.",
+                "mode": "image",
+                "report": report,
+                "card_preview": image_payload.get("card_data"),
+            }
+
+        sent = self.send_feishu_image(upload_result.get("image_key"))
+        if not sent.get("ok"):
+            sent["mode"] = "image"
+            sent["card_preview"] = image_payload.get("card_data")
+            return sent
+        return {
+            "ok": True,
+            "sent_at": datetime.now(timezone.utc).isoformat(),
+            "report_date": report.get("report_date"),
+            "totals": report.get("totals"),
+            "product_count": len(report.get("products") or []),
+            "error_count": len(report.get("errors") or []),
+            "mode": "image",
+            "image_key": upload_result.get("image_key"),
+            "card_preview": image_payload.get("card_data"),
+        }
+
+    def send_report(self, report_date="", require_synced=False, mode="image"):
+        mode = str(mode or "image").strip().lower()
+        if mode not in {"image", "card", "card_with_text_fallback", "template"}:
+            raise ValueError("mode must be image, card, card_with_text_fallback, or template.")
         report = self.report_payload(report_date)
         if require_synced and not (report.get("sync_ready") or {}).get("ok"):
             return {
@@ -430,6 +487,9 @@ class DailyFeishuReportService:
                 "error": format_sync_readiness_line(report.get("sync_ready")),
                 "report": report,
             }
+
+        if mode == "image":
+            return self.send_image_report(report)
 
         if mode == "template":
             sent_templates = self.send_template_cards(report)

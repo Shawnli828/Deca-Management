@@ -34,7 +34,7 @@ export function FeishuReportLayout({
         <section className="feishu-message-card">
           <div className="feishu-card-head">
             <div>
-              <h2>文本兜底预览</h2>
+              <h2>{sendMode === 'image' ? '图片看板数据预览' : '文本兜底预览'}</h2>
               <p>
                 业务日 {payload?.report?.report_date || reportDate} · 内容窗口{' '}
                 {payload?.report?.business_window_local?.start || '—'} → {payload?.report?.business_window_local?.end || '—'}
@@ -775,7 +775,9 @@ export function FeishuStatusMessages({
         <div className="feishu-success">
           已发送到飞书：{sendResult.sent_at || '刚刚'}
           {sendResult.mode ? ` · ${
-            sendResult.mode === 'template'
+            sendResult.mode === 'image'
+              ? 'SVG 图片看板'
+              : sendResult.mode === 'template'
               ? '模板卡片模式'
               : sendResult.mode === 'card'
                 ? 'Webhook 卡片模式'

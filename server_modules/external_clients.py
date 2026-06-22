@@ -39,6 +39,22 @@ def feishu_signed_card_payload(card, webhook_secret=""):
     return payload
 
 
+def feishu_signed_image_payload(image_key, webhook_secret=""):
+    payload = {
+        "msg_type": "image",
+        "content": {"image_key": image_key},
+    }
+    if webhook_secret:
+        timestamp = str(int(time.time()))
+        string_to_sign = f"{timestamp}\n{webhook_secret}"
+        sign = base64.b64encode(
+            hmac.new(string_to_sign.encode("utf-8"), digestmod=hashlib.sha256).digest()
+        ).decode("utf-8")
+        payload["timestamp"] = timestamp
+        payload["sign"] = sign
+    return payload
+
+
 def send_feishu_payload(payload, webhook_url, ssl_context_factory=None):
     if not webhook_url:
         return {"ok": False, "error": "FEISHU_WEBHOOK_URL is not configured."}
@@ -82,6 +98,14 @@ def send_feishu_message(message, webhook_url, webhook_secret="", ssl_context_fac
 def send_feishu_card(card, webhook_url, webhook_secret="", ssl_context_factory=None):
     return send_feishu_payload(
         feishu_signed_card_payload(card, webhook_secret),
+        webhook_url,
+        ssl_context_factory,
+    )
+
+
+def send_feishu_image(image_key, webhook_url, webhook_secret="", ssl_context_factory=None):
+    return send_feishu_payload(
+        feishu_signed_image_payload(image_key, webhook_secret),
         webhook_url,
         ssl_context_factory,
     )

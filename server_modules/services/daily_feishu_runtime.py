@@ -108,7 +108,7 @@ def report_template_variables(report_date="", report=None, view_slot="product_1"
     return daily_feishu_service().report_template_variables(report, report_date, view_slot)
 
 
-def send_report(report_date="", require_synced=False, mode="card_with_text_fallback"):
+def send_report(report_date="", require_synced=False, mode="image"):
     return daily_feishu_service().send_report(report_date, require_synced=require_synced, mode=mode)
 
 
