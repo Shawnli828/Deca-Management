@@ -37,6 +37,22 @@ def metric_text(value, precision=1):
     return f"{number:,.{precision}f}"
 
 
+def compact_metric_text(value, precision=1):
+    if value is None or value == "":
+        return "—"
+    number = safe_float(value)
+    if number is None:
+        return str(value)
+    abs_number = abs(number)
+    if abs_number >= 1_000_000:
+        return f"{number / 1_000_000:.{precision}f}M"
+    if abs_number >= 1_000:
+        return f"{number / 1_000:.{precision}f}K"
+    if number.is_integer():
+        return f"{int(number):,}"
+    return f"{number:,.{precision}f}"
+
+
 def percent_text(value):
     if value is None or value == "":
         return "—"
@@ -127,19 +143,25 @@ def summarize_products(products):
 
 def common_metric_variables(report, products):
     totals = summarize_products(products)
+    missing_count = totals.get("missing_account_count")
+    zero_count = totals.get("zero_play_account_count")
     return {
         "biz_date": str((report or {}).get("report_date") or ""),
         "window_label": content_window_label(report),
         "total_plays": metric_text(totals.get("total_views"), precision=0),
+        "total_plays_short": compact_metric_text(totals.get("total_views")),
         "rf_plays": metric_text(totals.get("reelfarm_views"), precision=0),
+        "rf_plays_short": compact_metric_text(totals.get("reelfarm_views")),
         "clone_plays": metric_text(totals.get("clone_views"), precision=0),
+        "clone_plays_short": compact_metric_text(totals.get("clone_views")),
         "rf_publish_label": f"{metric_text(totals.get('reelfarm_published_automations'), precision=0)}/{metric_text(totals.get('reelfarm_expected_automations'), precision=0)}",
         "rf_avg": metric_text(totals.get("reelfarm_avg_views")),
         "clone_avg": metric_text(totals.get("clone_avg_views")),
         "onboarding": metric_text(totals.get("downloads"), precision=0),
         "download_rate": percent_text(totals.get("download_rate")),
-        "unsent_accounts": metric_text(totals.get("missing_account_count"), precision=0),
-        "zero_play_accounts": metric_text(totals.get("zero_play_account_count"), precision=0),
+        "unsent_accounts": metric_text(missing_count, precision=0),
+        "zero_play_accounts": metric_text(zero_count, precision=0),
+        "alert_summary_label": f"{metric_text(missing_count, precision=0)} / {metric_text(zero_count, precision=0)}",
     }
 
 
@@ -198,6 +220,85 @@ def line_chart(title, values, y_field, y_title, series_field=None):
     else:
         chart["legends"] = {"visible": False}
     return chart
+
+
+def daily_view_download_chart(title, rows):
+    values = []
+    for row in rows or []:
+        label = date_label(row.get("date"))
+        values.append({"date": label, "metric": "View", "value": safe_int(row.get("view"))})
+        values.append({"date": label, "metric": "Download", "value": safe_int(row.get("download"))})
+    return line_chart(title, values, "value", "数值", "metric")
+
+
+def overview_trend_rows(report):
+    trend = (report or {}).get("trend") or {}
+    if isinstance(trend, dict):
+        return trend.get("overview") or []
+    return trend or []
+
+
+def product_trend_rows(report, product):
+    trend = (report or {}).get("trend") or {}
+    if not isinstance(trend, dict):
+        return []
+    return (trend.get("products") or {}).get(product_code(product)) or []
+
+
+def product_daily_rows(products):
+    rows = []
+    for product in products or []:
+        downloads = product.get("downloads")
+        rows.append({
+            "product": product_name(product),
+            "post": f"{metric_text(product.get('reelfarm_published_automations'), precision=0)}/{metric_text(product.get('reelfarm_expected_automations'), precision=0)}",
+            "view": safe_int(product.get("total_views")),
+            "rf_avg": round(safe_float(product.get("reelfarm_avg_views")) or 0, 1),
+            "download": safe_int(downloads) if downloads is not None else 0,
+            "conversion": percent_text(product.get("download_rate")),
+        })
+    return rows
+
+
+def country_rf_avg_trend_chart(report, product):
+    trend = (report or {}).get("trend") or {}
+    if not isinstance(trend, dict) or not product:
+        return line_chart("国家 RF 均播趋势", [], "rf_avg", "RF 均播", "country")
+
+    source_rows = (trend.get("country_avg") or {}).get(product_code(product)) or []
+    latest_by_country = {}
+    for row in source_rows:
+        key = str(row.get("country_code") or row.get("country_name") or "").strip()
+        if not key:
+            continue
+        date = str(row.get("date") or "")
+        current = latest_by_country.get(key)
+        if current is None or date >= str(current.get("date") or ""):
+            latest_by_country[key] = row
+    top_keys = {
+        key
+        for key, _row in sorted(
+            latest_by_country.items(),
+            key=lambda item: (
+                safe_float(item[1].get("rf_avg")) or 0,
+                safe_int(item[1].get("posts")),
+                str(item[1].get("country_name") or item[0]),
+            ),
+            reverse=True,
+        )[:6]
+    }
+
+    values = []
+    for row in source_rows:
+        key = str(row.get("country_code") or row.get("country_name") or "").strip()
+        if key not in top_keys:
+            continue
+        values.append({
+            "date": date_label(row.get("date")),
+            "country": f"{country_flag(row.get('country_code'))} {row.get('country_name') or row.get('country_code') or 'Country'}",
+            "rf_avg": round(safe_float(row.get("rf_avg")) or 0, 1),
+        })
+    return line_chart("国家 RF 均播趋势", values, "rf_avg", "RF 均播", "country")
 
 
 def product_comparison_charts(products):
@@ -327,6 +428,11 @@ def overview_template_variables(report, *, product_names=None, history_by_code=N
     variables = common_metric_variables(report, products)
     variables.update(product_comparison_charts(products))
     variables.update(trend_charts(report, products, history_by_code, product_series=True))
+    variables["product_daily_rows"] = product_daily_rows(products)
+    variables["view_download_trend_chart"] = daily_view_download_chart(
+        "View / Download 日趋势",
+        overview_trend_rows(report),
+    )
     variables["onboarding_download_rows"] = onboarding_download_rows(products)
     variables["anomaly_status_rows"] = anomaly_status_rows(products)
     return variables
@@ -347,8 +453,14 @@ def product_template_variables(report, *, product_names=None, history_by_code=No
     product = product_for_slot(products, view_slot)
     alerts = product.get("account_alerts") or {}
     variables = product_labels(products)
+    variables["current_product_label"] = product_name(product) if product else "—"
     variables.update(product_metric_variables(report, product))
     variables.update(trend_charts(report, [product] if product else [], history_by_code, product_series=False))
+    variables["view_download_trend_chart"] = daily_view_download_chart(
+        f"{product_name(product)} View / Download 日趋势" if product else "View / Download 日趋势",
+        product_trend_rows(report, product),
+    )
+    variables["country_rf_avg_trend_chart"] = country_rf_avg_trend_chart(report, product)
     variables["country_rf_avg_rows"] = country_rows(product)
     variables["unsent_account_rows"] = account_rows(alerts.get("missing_accounts") or [])
     variables["zero_play_account_rows"] = account_rows(alerts.get("zero_play_accounts") or [])
