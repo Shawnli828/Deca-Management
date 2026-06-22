@@ -118,8 +118,9 @@ function OverviewNativePreview({ data }: { data: FeishuCardData }) {
         <div className="feishu-native-panel-head">
           <div>
             <div className="feishu-native-section-title">总览 · 甲方产品</div>
-            <p>业务日 {data.bizDate || '—'}</p>
+            <p>业务日 {data.bizDate || '—'} · 内容窗口 {data.window || '—'}</p>
           </div>
+          <span>Webhook 总览卡片</span>
         </div>
         <FeishuOverviewKpis global={data.global || {}} />
         <FeishuTrendPanel groups={[overviewTrend]} />
@@ -175,6 +176,7 @@ function FeishuProductPreviewPanel({
           <div className="feishu-native-section-title">产品视图</div>
           <p>单产品数据区</p>
         </div>
+        <span>Webhook 产品卡片</span>
       </div>
       <div className="feishu-native-product-list">
         {products.length ? products.map(product => (
@@ -356,13 +358,6 @@ function FeishuNativeCardPreview({ data, loading }: { data: FeishuCardData | nul
 
   return (
     <section className="feishu-native-preview">
-      <div className="feishu-native-header">
-        <div>
-          <h2>Deca Growth 每日业务数据</h2>
-          <p>业务日 {data.bizDate || '—'} · 内容窗口 {data.window || '—'}</p>
-        </div>
-        <span>Webhook 卡片</span>
-      </div>
       <OverviewNativePreview data={data} />
     </section>
   );

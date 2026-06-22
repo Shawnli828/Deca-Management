@@ -1155,47 +1155,9 @@
         }
 
         .feishu-native-preview {
-            overflow: hidden;
-            border: 1px solid #dbe3ef;
-            border-radius: 14px;
-            background: #ffffff;
+            display: block;
+            min-width: 0;
             font: inherit;
-            box-shadow: 0 16px 34px rgba(15, 23, 42, 0.04);
-        }
-
-        .feishu-native-header {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 16px;
-            padding: 18px 20px;
-            background: #245bdb;
-            color: #ffffff;
-        }
-
-        .feishu-native-header h2 {
-            margin: 0;
-            font-size: 18px;
-            line-height: 1.25;
-            font-weight: 600;
-        }
-
-        .feishu-native-header p {
-            margin: 5px 0 0;
-            color: rgba(255, 255, 255, 0.78);
-            font-size: 12px;
-            line-height: 1.45;
-            font-weight: 400;
-        }
-
-        .feishu-native-header span {
-            flex: 0 0 auto;
-            border: 1px solid rgba(255, 255, 255, 0.34);
-            border-radius: 999px;
-            padding: 5px 9px;
-            background: rgba(255, 255, 255, 0.12);
-            font-size: 11px;
-            font-weight: 500;
         }
 
         .feishu-native-body {
@@ -1206,9 +1168,8 @@
 
         .feishu-native-dashboard {
             display: grid;
-            grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.55fr);
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 16px;
-            padding: 18px;
             align-items: stretch;
         }
 
@@ -1219,9 +1180,10 @@
             gap: 16px;
             min-width: 0;
             border: 1px solid #dbe3ef;
-            border-radius: 12px;
+            border-radius: 14px;
             padding: 16px;
             background: #ffffff;
+            box-shadow: 0 16px 34px rgba(15, 23, 42, 0.04);
         }
 
         .feishu-native-panel-head {
@@ -1237,6 +1199,19 @@
             font-size: 12px;
             line-height: 1.45;
             font-weight: 400;
+        }
+
+        .feishu-native-panel-head span {
+            flex: 0 0 auto;
+            border: 1px solid #dbe3ef;
+            border-radius: 999px;
+            padding: 5px 9px;
+            background: #f8fafc;
+            color: #475569;
+            font-size: 11px;
+            line-height: 1;
+            font-weight: 600;
+            white-space: nowrap;
         }
 
         .feishu-native-kpi-grid {
