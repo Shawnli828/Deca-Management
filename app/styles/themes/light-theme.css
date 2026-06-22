@@ -1842,7 +1842,7 @@
         .feishu-country-trend svg {
             display: block;
             width: 100%;
-            height: 270px;
+            height: auto;
         }
 
         .feishu-country-trend line {

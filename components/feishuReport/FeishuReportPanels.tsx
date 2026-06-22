@@ -431,9 +431,9 @@ function FeishuCountryAvgTrendChart({
 
     const labels = Array.from(labelMap.values()).sort((a, b) => a.date.localeCompare(b.date));
     const values = seriesSource.flatMap(country => country.rows.map(row => Number(row.rfAvg || 0)));
-    const width = 560;
-    const height = 270;
-    const pad = { top: 30, right: 18, bottom: 32, left: 52 };
+    const width = 1040;
+    const height = 300;
+    const pad = { top: 34, right: 36, bottom: 36, left: 58 };
     const plotWidth = width - pad.left - pad.right;
     const plotHeight = height - pad.top - pad.bottom;
     const range = paddedRange(values);
