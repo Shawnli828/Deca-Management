@@ -15,6 +15,7 @@ from server_modules.metrics_service import (
     summarize_business_report_rows,
 )
 from server_modules.mixpanel_client import (
+    mixpanel_event_business_material_counts as mixpanel_event_business_material_counts_impl,
     mixpanel_event_daily_counts as mixpanel_event_daily_counts_impl,
     mixpanel_event_user_unique_query_count as mixpanel_event_user_unique_query_count_impl,
 )
@@ -29,6 +30,8 @@ from server_modules.time_windows import (
     business_material_date_for_utc_datetime,
     growth_report_windows,
     mixpanel_timezone,
+    onboarding_date_for_utc_datetime,
+    onboarding_day_window,
     parse_iso_datetime,
     report_date_for_utc_datetime,
     report_day_window,
@@ -63,6 +66,10 @@ def product_active_reelfarm_expected_schedule_count(product_code):
 
 def latest_snapshot_views_by_source(product_code, snapshot_date):
     return growth_repository.latest_snapshot_views_by_source(product_code, snapshot_date)
+
+
+def product_growth_download_daily(product_code, date_from, date_to):
+    return growth_repository.product_growth_download_daily(product_code, date_from, date_to)
 
 
 def product_business_growth_daily_stats(product_code, windows):
@@ -109,6 +116,22 @@ def mixpanel_event_user_unique_query_count(config, event_name, utc_start, utc_en
     )
 
 
+def mixpanel_event_onboarding_daily_counts(config, event_name, utc_start, utc_end):
+    return mixpanel_event_business_material_counts_impl(
+        config,
+        event_name,
+        utc_start,
+        utc_end,
+        "unique",
+        date_mapper=onboarding_date_for_utc_datetime,
+        default_region=MIXPANEL_REGION,
+        mixpanel_timezone=mixpanel_timezone,
+        source_dates_for_utc_window=source_dates_for_utc_window,
+        business_material_date_for_utc_datetime=business_material_date_for_utc_datetime,
+        make_ssl_context=make_ssl_context,
+    )
+
+
 def mixpanel_event_total(config, event_name, utc_start, utc_end, value_type="general"):
     daily = mixpanel_event_daily_counts(config, event_name, utc_start, utc_end, value_type)
     if not daily and not (config or {}).get("project_id"):
@@ -127,7 +150,13 @@ def sync_product_growth_snapshot(product_code, report_date=""):
     clone = product_channel_views_for_window(product_code, "MUSEON_CLONE", window["utc_start"], window["utc_end"])
     mixpanel_config = product_mixpanel_config(product_code)
     onboarding_event = product_mixpanel_event_name(product_code, "ONBOARDING")
-    onboarding_unique = mixpanel_event_total(mixpanel_config, onboarding_event, window["utc_start"], window["utc_end"], "unique")
+    onboarding_window = onboarding_day_window(window["report_date"])
+    onboarding_unique = mixpanel_event_user_unique_query_count(
+        mixpanel_config,
+        onboarding_event,
+        onboarding_window["utc_start"],
+        onboarding_window["utc_end"],
+    )
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": stable_id("product_daily_growth_snapshot", product_code, window["report_date"]),
@@ -168,7 +197,16 @@ def sync_product_growth_snapshots(product_code, days=30):
     clone_daily = product_channel_daily_views(product_code, "MUSEON_CLONE", overall_utc_start, overall_utc_end)
     mixpanel_config = product_mixpanel_config(product_code)
     onboarding_event = product_mixpanel_event_name(product_code, "ONBOARDING")
-    onboarding_daily = mixpanel_event_daily_counts(mixpanel_config, onboarding_event, overall_utc_start, overall_utc_end, "unique")
+    onboarding_windows = {
+        window["report_date"]: onboarding_day_window(window["report_date"])
+        for window in windows
+    }
+    onboarding_daily = mixpanel_event_onboarding_daily_counts(
+        mixpanel_config,
+        onboarding_event,
+        onboarding_windows[windows[0]["report_date"]]["utc_start"],
+        onboarding_windows[windows[-1]["report_date"]]["utc_end"],
+    )
     now = datetime.now(timezone.utc).isoformat()
     records = []
     for window in windows:
@@ -220,9 +258,7 @@ def business_material_report_payload(query):
         product_business_material_daily_stats=product_business_material_daily_stats,
         product_business_growth_daily_stats=product_business_growth_daily_stats,
         product_active_reelfarm_expected_automation_count=product_active_reelfarm_expected_automation_count,
-        product_mixpanel_config=product_mixpanel_config,
-        product_mixpanel_event_name=product_mixpanel_event_name,
-        mixpanel_event_user_unique_query_count=mixpanel_event_user_unique_query_count,
+        product_growth_download_daily=product_growth_download_daily,
         normalize_business_report_row=normalize_business_report_row,
         summarize_business_report_rows=summarize_business_report_rows,
         report_timezone_name=REPORT_TIMEZONE_NAME,

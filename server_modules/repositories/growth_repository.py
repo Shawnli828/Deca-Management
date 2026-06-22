@@ -212,6 +212,36 @@ def latest_snapshot_views_by_source(product_code, snapshot_date):
     return snapshots
 
 
+def product_growth_download_daily(product_code, date_from, date_to):
+    product_code = str(product_code or "").upper()
+    date_from = str(date_from or "")[:10]
+    date_to = str(date_to or "")[:10]
+    if not product_code or not date_from or not date_to:
+        return {}
+    placeholder = db_placeholder()
+    with connect_db() as conn:
+        init_relational_schema(conn)
+        rows = conn.execute(
+            f"""
+            SELECT report_date, onboarding_unique
+            FROM product_daily_growth_snapshots
+            WHERE product_code = {placeholder}
+              AND report_date >= {placeholder}
+              AND report_date <= {placeholder}
+            ORDER BY report_date
+            """,
+            (product_code, date_from, date_to),
+        ).fetchall()
+    daily = {}
+    for row in rows:
+        item = row_dict(row)
+        report_date = str(item.get("report_date") or "")[:10]
+        if report_date:
+            value = item.get("onboarding_unique")
+            daily[report_date] = int(value) if value is not None else None
+    return daily
+
+
 def upsert_product_daily_growth_snapshot(record):
     with connect_db() as conn:
         init_relational_schema(conn)

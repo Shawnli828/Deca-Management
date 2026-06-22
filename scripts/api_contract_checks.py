@@ -276,6 +276,10 @@ def main():
             ["ok", "product_code", "mode", "report_timezone", "source_timezone", "mixpanel", "date_from", "date_to", "rows", "totals", "generated_at"],
             "business material report contract",
         )
+        assert_true(
+            (business_body.get("mixpanel") or {}).get("method") == "cached_product_daily_growth_snapshots",
+            "business material report should read cached Mixpanel snapshots",
+        )
         business_rows = business_body.get("rows") or []
         assert_true(len(business_rows) == 1, "business material report should return seeded day")
         assert_has_keys(

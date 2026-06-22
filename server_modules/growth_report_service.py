@@ -70,9 +70,7 @@ def business_material_report_payload(
     product_business_material_daily_stats,
     product_business_growth_daily_stats,
     product_active_reelfarm_expected_automation_count,
-    product_mixpanel_config,
-    product_mixpanel_event_name,
-    mixpanel_event_user_unique_query_count,
+    product_growth_download_daily,
     normalize_business_report_row,
     summarize_business_report_rows,
     report_timezone_name,
@@ -107,18 +105,16 @@ def business_material_report_payload(
         material_daily = product_business_growth_daily_stats(product_code, windows)
         material_mode = "growth_delta"
         reelfarm_expected_count = None
-    mixpanel_config = product_mixpanel_config(product_code)
-    onboarding_event = product_mixpanel_event_name(product_code, "ONBOARDING")
-    download_daily = {}
-    for report_date, onboarding_window in onboarding_windows.items():
-        onboarding_unique = mixpanel_event_user_unique_query_count(
-            mixpanel_config,
-            onboarding_event,
-            onboarding_window["utc_start"],
-            onboarding_window["utc_end"],
-        )
-        if onboarding_unique is not None:
-            download_daily[report_date] = onboarding_unique
+    download_daily = product_growth_download_daily(
+        product_code,
+        windows[0]["report_date"],
+        windows[-1]["report_date"],
+    )
+    mixpanel_missing_dates = [
+        window["report_date"]
+        for window in windows
+        if download_daily.get(window["report_date"]) is None
+    ]
     rows = [
         normalize_business_report_row(
             window,
@@ -137,18 +133,11 @@ def business_material_report_payload(
         "report_timezone": report_timezone_name,
         "source_timezone": mixpanel_timezone_name,
         "mixpanel": {
-            "event": onboarding_event,
-            "method": "raw_export_exact_unique",
-            "metric": "user_uniques",
-            "region": mixpanel_config.get("region"),
-            "scope": mixpanel_config.get("scope"),
-            "has_project_id": bool(mixpanel_config.get("project_id")),
-            "has_username": bool(mixpanel_config.get("username")),
-            "has_secret": bool(mixpanel_config.get("secret")),
-            "missing": [
-                key for key in ("project_id", "username", "secret")
-                if not mixpanel_config.get(key)
-            ],
+            "method": "cached_product_daily_growth_snapshots",
+            "metric": "onboarding_unique",
+            "cache_table": "product_daily_growth_snapshots",
+            "cache_field": "onboarding_unique",
+            "missing_dates": mixpanel_missing_dates,
         },
         "date_from": rows[0]["report_date"],
         "date_to": rows[-1]["report_date"],
