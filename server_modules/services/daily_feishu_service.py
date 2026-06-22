@@ -8,11 +8,11 @@ from server_modules.daily_report import (
 )
 from server_modules.external_clients import (
     send_feishu_card as send_feishu_card_client,
-    send_feishu_image as send_feishu_image_client,
     send_feishu_message as send_feishu_message_client,
 )
 from server_modules.integrations.feishu_app_client import (
     feishu_template_card_response,
+    send_image_message as send_feishu_image_message_client,
     send_template_card as send_feishu_template_card_client,
     upload_image as upload_feishu_image_client,
 )
@@ -65,14 +65,6 @@ class DailyFeishuReportService:
     def send_feishu_card(self, card):
         return send_feishu_card_client(
             card,
-            self.webhook_url,
-            self.webhook_secret,
-            self.make_ssl_context,
-        )
-
-    def send_feishu_image(self, image_key):
-        return send_feishu_image_client(
-            image_key,
             self.webhook_url,
             self.webhook_secret,
             self.make_ssl_context,
@@ -459,7 +451,13 @@ class DailyFeishuReportService:
                 "card_preview": image_payload.get("card_data"),
             }
 
-        sent = self.send_feishu_image(upload_result.get("image_key"))
+        sent = send_feishu_image_message_client(
+            app_id=config.get("app_id"),
+            app_secret=config.get("app_secret"),
+            chat_id=config.get("chat_id"),
+            image_key=upload_result.get("image_key"),
+            ssl_context_factory=self.make_ssl_context,
+        )
         if not sent.get("ok"):
             sent["mode"] = "image"
             sent["card_preview"] = image_payload.get("card_data")
@@ -473,6 +471,7 @@ class DailyFeishuReportService:
             "error_count": len(report.get("errors") or []),
             "mode": "image",
             "image_key": upload_result.get("image_key"),
+            "message_id": sent.get("message_id"),
             "card_preview": image_payload.get("card_data"),
         }
 

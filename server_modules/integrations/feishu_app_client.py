@@ -166,6 +166,43 @@ def upload_image(*, app_id, app_secret, image_bytes, filename="deca-growth-repor
     return {"ok": True, "image_key": image_key, "response": response}
 
 
+def feishu_image_content(image_key):
+    return json.dumps({"image_key": image_key}, ensure_ascii=False)
+
+
+def send_image_message(*, app_id, app_secret, chat_id, image_key, ssl_context_factory=None):
+    chat_id = str(chat_id or "").strip()
+    image_key = str(image_key or "").strip()
+    if not chat_id:
+        return {"ok": False, "error": "FEISHU_CHAT_ID is required."}
+    if not image_key:
+        return {"ok": False, "error": "Feishu image_key is required."}
+
+    token_result = tenant_access_token(app_id, app_secret, ssl_context_factory)
+    if not token_result.get("ok"):
+        return token_result
+
+    query = urlencode({"receive_id_type": "chat_id"})
+    result = _post_json(
+        f"{FEISHU_OPEN_API_BASE}/im/v1/messages?{query}",
+        {
+            "receive_id": chat_id,
+            "msg_type": "image",
+            "content": feishu_image_content(image_key),
+        },
+        headers={"Authorization": f"Bearer {token_result.get('tenant_access_token')}"},
+        ssl_context_factory=ssl_context_factory,
+    )
+    if not result.get("ok"):
+        return result
+    response = result.get("response") or {}
+    return {
+        "ok": True,
+        "message_id": ((response.get("data") or {}).get("message_id")),
+        "response": response,
+    }
+
+
 def send_template_card(
     *,
     app_id,

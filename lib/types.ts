@@ -297,6 +297,7 @@ export type DailyFeishuSendResult = {
   template_messages?: Record<string, string | undefined>;
   template_preview?: Record<string, unknown> | null;
   image_key?: string;
+  message_id?: string;
   error?: string;
 };
 
