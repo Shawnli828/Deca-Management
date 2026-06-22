@@ -7,6 +7,8 @@ from api.schemas.requests import (
 )
 from api.schemas.responses import FlexibleResponse, SyncResultResponse
 from server_modules.services.sync_runtime import (
+    sync_all_growth_snapshots,
+    sync_all_museon_clone_records,
     sync_all_reelfarm_records,
     sync_daily_all_records,
     sync_museon_clone_country,
@@ -90,6 +92,18 @@ def post_museon_sync_country(request: Request, payload: MuseonSyncCountryRequest
         raise HTTPException(status_code=502, detail=str(error)) from error
 
 
+@router.get("/api/museon/sync-all", response_model=SyncResultResponse, operation_id="get_museon_sync_all")
+@router.post("/api/museon/sync-all", response_model=SyncResultResponse, operation_id="post_museon_sync_all")
+def museon_sync_all(request: Request):
+    if not cron_authorized(request.headers):
+        require_dashboard_auth(request)
+
+    try:
+        return sync_all_museon_clone_records()
+    except RuntimeError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
 @router.get("/api/reelfarm/sync-all", response_model=SyncResultResponse, operation_id="get_reelfarm_sync_all")
 @router.post("/api/reelfarm/sync-all", response_model=SyncResultResponse, operation_id="post_reelfarm_sync_all")
 def reelfarm_sync_all(request: Request):
@@ -98,5 +112,17 @@ def reelfarm_sync_all(request: Request):
 
     try:
         return sync_all_reelfarm_records()
+    except RuntimeError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@router.get("/api/growth/sync-all", response_model=SyncResultResponse, operation_id="get_growth_sync_all")
+@router.post("/api/growth/sync-all", response_model=SyncResultResponse, operation_id="post_growth_sync_all")
+def growth_sync_all(request: Request, days: int = 30):
+    if not cron_authorized(request.headers):
+        require_dashboard_auth(request)
+
+    try:
+        return sync_all_growth_snapshots(days)
     except RuntimeError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
