@@ -23,7 +23,6 @@ from server_modules.metrics_service import (
     summarize_daily_report_products,
 )
 from server_modules.services.feishu_card_adapter import daily_report_card_data
-from server_modules.services.feishu_card_snapshot_service import save_daily_report_snapshot
 from server_modules.services.feishu_svg_report import overview_png_bytes, overview_svg
 from server_modules.services.feishu_template_variables import (
     overview_template_variables,
@@ -277,38 +276,9 @@ class DailyFeishuReportService:
                 "template_preview": variables,
             }
 
-        product_result = send_feishu_template_card_client(
-            app_id=config.get("app_id"),
-            app_secret=config.get("app_secret"),
-            chat_id=config.get("chat_id"),
-            template_id=config.get("product_template_id"),
-            template_version=config.get("product_template_version"),
-            template_variables=variables.get("product"),
-            ssl_context_factory=self.make_ssl_context,
-        )
-        if not product_result.get("ok"):
-            return {
-                "ok": False,
-                "error": product_result.get("error") or "Failed to send product template card.",
-                "overview": overview_result,
-                "product": product_result,
-                "template_preview": variables,
-            }
-
-        try:
-            save_daily_report_snapshot(
-                (product_result or {}).get("message_id"),
-                report=report,
-                history_by_code=template_payload.get("history_by_code"),
-                product_names=template_payload.get("product_names"),
-            )
-        except Exception:
-            pass
-
         return {
             "ok": True,
             "overview": overview_result,
-            "product": product_result,
             "template_preview": variables,
         }
 
@@ -510,7 +480,6 @@ class DailyFeishuReportService:
                 "mode": "template",
                 "template_messages": {
                     "overview_message_id": (sent_templates.get("overview") or {}).get("message_id"),
-                    "product_message_id": (sent_templates.get("product") or {}).get("message_id"),
                 },
                 "template_preview": sent_templates.get("template_preview"),
             }

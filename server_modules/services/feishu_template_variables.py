@@ -223,12 +223,57 @@ def line_chart(title, values, y_field, y_title, series_field=None):
 
 
 def daily_view_download_chart(title, rows):
-    values = []
+    view_values = []
+    download_values = []
     for row in rows or []:
         label = date_label(row.get("date"))
-        values.append({"date": label, "metric": "View", "value": safe_int(row.get("view"))})
-        values.append({"date": label, "metric": "Download", "value": safe_int(row.get("download"))})
-    return line_chart(title, values, "value", "数值", "metric")
+        view_values.append({"date": label, "metric": "View", "value": safe_int(row.get("view"))})
+        download_values.append({"date": label, "metric": "Download", "value": safe_int(row.get("download"))})
+    return {
+        "type": "common",
+        "title": {"text": title},
+        "color": ["#2F80ED", "#E26A3D"],
+        "seriesField": "metric",
+        "data": [
+            {"id": "view_data", "values": view_values},
+            {"id": "download_data", "values": download_values},
+        ],
+        "series": [
+            {
+                "type": "line",
+                "id": "view_line",
+                "dataIndex": 0,
+                "xField": "date",
+                "yField": "value",
+                "seriesField": "metric",
+                "point": {"visible": True},
+                "label": {"visible": True},
+            },
+            {
+                "type": "line",
+                "id": "download_line",
+                "dataIndex": 1,
+                "xField": "date",
+                "yField": "value",
+                "seriesField": "metric",
+                "point": {"visible": True},
+                "label": {"visible": True},
+                "line": {"style": {"lineDash": [6, 4]}},
+                "stack": False,
+            },
+        ],
+        "axes": [
+            {"orient": "bottom", "type": "band", "label": {"autoRotate": False}},
+            {"orient": "left", "seriesId": ["view_line"], "title": {"visible": True, "text": "View"}},
+            {
+                "orient": "right",
+                "seriesId": ["download_line"],
+                "title": {"visible": True, "text": "Download"},
+                "grid": {"visible": False},
+            },
+        ],
+        "legends": {"visible": True, "orient": "top"},
+    }
 
 
 def overview_trend_rows(report):
