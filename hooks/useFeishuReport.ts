@@ -84,27 +84,23 @@ export function useFeishuReport() {
     setError('');
     setSendResult(null);
     setGrowthSyncResult(null);
-    const products: FeishuGrowthSyncResult['products'] = [];
-    const errors: FeishuGrowthSyncResult['errors'] = [];
     try {
-      for (const productCode of MIXPANEL_SYNC_PRODUCT_CODES) {
-        try {
-          const result = await api.syncProductGrowth(productCode, MIXPANEL_SYNC_DAYS);
-          products.push({ productCode, count: result.count || 0 });
-        } catch (syncError: unknown) {
-          errors.push({
-            productCode,
-            message: getErrorMessage(syncError, `${productCode} Mixpanel 同步失败`)
-          });
-        }
-      }
+      const result = await api.syncProductsGrowth(MIXPANEL_SYNC_PRODUCT_CODES, MIXPANEL_SYNC_DAYS);
+      const products = (result.records || []).map(item => ({
+        productCode: item.product_code || '',
+        count: item.count || 0
+      })).filter(item => item.productCode);
+      const errors = (result.errors || []).map(item => ({
+        productCode: item.product_code || '',
+        message: item.error || item.message || 'Mixpanel 同步失败'
+      }));
 
       if (products.length) {
         await loadPreview(reportDate, sendMode);
       }
       setGrowthSyncResult({
-        ok: errors.length === 0,
-        syncedAt: new Date().toISOString(),
+        ok: Boolean(result.ok) && errors.length === 0,
+        syncedAt: result.finished_at || new Date().toISOString(),
         products,
         errors
       });

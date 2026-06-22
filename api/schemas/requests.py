@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class AuthLoginRequest(BaseModel):
@@ -14,6 +14,11 @@ class DataUpdateRequest(BaseModel):
 
 class GrowthSyncProductRequest(BaseModel):
     product_code: str = ""
+    days: int = 30
+
+
+class GrowthSyncProductsRequest(BaseModel):
+    product_codes: list[str] = Field(default_factory=list)
     days: int = 30
 
 

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Body, Header, HTTPException, Request
 
-from api.schemas.requests import DataUpdateRequest, GrowthSyncProductRequest
+from api.schemas.requests import DataUpdateRequest, GrowthSyncProductRequest, GrowthSyncProductsRequest
 from api.schemas.responses import (
     BusinessMaterialReportResponse,
     DataQueryResponse,
@@ -24,6 +24,7 @@ from server_modules.services.data_runtime import (
     reset_data as reset_data_payload,
     save_data,
     sync_product_growth_snapshots,
+    sync_products_growth_snapshots,
     using_postgres,
 )
 
@@ -127,6 +128,21 @@ def post_growth_sync_product(request: Request, payload: GrowthSyncProductRequest
             payload.days,
         )
         return {"ok": True, "count": len(records), "records": records}
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@router.post("/api/growth/sync-products", response_model=FlexibleResponse)
+def post_growth_sync_products(request: Request, payload: GrowthSyncProductsRequest = Body(default_factory=GrowthSyncProductsRequest)):
+    require_dashboard_auth(request)
+    try:
+        result = sync_products_growth_snapshots(
+            payload.product_codes,
+            payload.days,
+        )
+        return result
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except RuntimeError as error:

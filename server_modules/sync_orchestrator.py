@@ -133,8 +133,9 @@ def sync_all_growth_snapshots(*, configured_product_codes, sync_product_growth_s
         except (RuntimeError, ValueError) as error:
             errors.append({"product_code": product_code, "error": str(error)})
 
+    ok = not errors and successes == len(product_codes)
     return normalized_sync_result("growth_mixpanel", {
-        "ok": True,
+        "ok": ok,
         "synced_count": successes,
         "error_count": len(errors),
         "errors": errors[:20],
