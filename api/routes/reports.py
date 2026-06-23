@@ -9,6 +9,7 @@ from server_modules.services.daily_feishu_runtime import (
     report_template_variables as daily_feishu_report_template_variables,
     send_report as send_daily_feishu_report,
 )
+from server_modules.services.daily_feishu_auto_send import auto_send_daily_feishu_report
 
 from .shared import cron_authorized, require_dashboard_auth
 
@@ -49,6 +50,31 @@ def post_reports_daily_feishu(
         raise HTTPException(status_code=400, detail=str(error)) from error
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result.get("error") or "Failed to send Feishu daily report.")
+    return result
+
+
+@router.get("/api/reports/daily-feishu-auto", response_model=FlexibleResponse, operation_id="get_reports_daily_feishu_auto")
+@router.post("/api/reports/daily-feishu-auto", response_model=FlexibleResponse, operation_id="post_reports_daily_feishu_auto")
+def post_reports_daily_feishu_auto(
+    request: Request,
+    date: str = "",
+    delay_minutes: int = 20,
+    mode: str = "template",
+    force: str = "",
+):
+    if not cron_authorized(request.headers):
+        require_dashboard_auth(request)
+    try:
+        result = auto_send_daily_feishu_report(
+            date,
+            delay_minutes=delay_minutes,
+            mode=normalize_feishu_mode(mode),
+            force=truthy_query_value(force),
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("error") or "Failed to auto-send Feishu daily report.")
     return result
 
 

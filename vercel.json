@@ -25,8 +25,8 @@
       "schedule": "40 1 * * *"
     },
     {
-      "path": "/api/reports/daily-feishu",
-      "schedule": "0 2 * * *"
+      "path": "/api/reports/daily-feishu-auto",
+      "schedule": "*/10 2-5 * * *"
     }
   ],
   "routes": [
