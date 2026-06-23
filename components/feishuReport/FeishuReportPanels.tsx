@@ -122,35 +122,19 @@ function countryTrendAxis(values: number[]) {
     return {
       min: 0,
       max: 1000,
-      focus: null as number | null,
-      lowPortion: 1,
-      ticks: [0, 250, 500, 750, 1000],
+      ticks: [0, 200, 400, 600, 800, 1000],
     };
   }
   const rawMax = Math.max(...finite, 1);
-  const maxStep = rawMax <= 3000 ? 250 : 500;
-  const max = Math.max(1000, ceilToStep(rawMax * 1.08, maxStep));
-  const ticks = new Set<number>();
-  const lowMax = Math.min(1000, max);
-  for (let value = 0; value <= lowMax; value += 250) {
-    ticks.add(value);
-  }
-  if (max > 1000) {
-    for (let value = 1250; value <= Math.min(1500, max); value += 250) {
-      ticks.add(value);
-    }
-    const upperStep = max <= 3000 ? 500 : 1000;
-    for (let value = 2000; value <= max; value += upperStep) {
-      ticks.add(value);
-    }
-    ticks.add(max);
+  const max = Math.max(1000, ceilToStep(rawMax * 1.08, 200));
+  const ticks: number[] = [];
+  for (let value = 0; value <= max; value += 200) {
+    ticks.push(value);
   }
   return {
     min: 0,
     max,
-    focus: max > 1000 ? 1000 : null,
-    lowPortion: max > 1000 ? 0.62 : 1,
-    ticks: Array.from(ticks).sort((a, b) => a - b),
+    ticks,
   };
 }
 
@@ -475,20 +459,16 @@ function FeishuCountryAvgTrendChart({
     const labels = Array.from(labelMap.values()).sort((a, b) => a.date.localeCompare(b.date));
     const values = seriesSource.flatMap(country => country.rows.map(row => Number(row.rfAvg || 0)));
     const width = 1040;
-    const height = 380;
     const pad = { top: 46, right: 36, bottom: 42, left: 62 };
+    const axis = countryTrendAxis(values);
+    const tickIntervals = Math.max(1, (axis.max - axis.min) / 200);
+    const height = pad.top + pad.bottom + Math.max(360, tickIntervals * 38);
     const plotWidth = width - pad.left - pad.right;
     const plotHeight = height - pad.top - pad.bottom;
-    const axis = countryTrendAxis(values);
     const xFor = (index: number) => pad.left + (labels.length <= 1 ? plotWidth / 2 : (plotWidth / (labels.length - 1)) * index);
     const yFor = (value: number) => {
       const clamped = Math.min(axis.max, Math.max(axis.min, value));
-      let ratio = (clamped - axis.min) / Math.max(1, axis.max - axis.min);
-      if (axis.focus && axis.focus > axis.min && axis.max > axis.focus) {
-        ratio = clamped <= axis.focus
-          ? ((clamped - axis.min) / Math.max(1, axis.focus - axis.min)) * axis.lowPortion
-          : axis.lowPortion + ((clamped - axis.focus) / Math.max(1, axis.max - axis.focus)) * (1 - axis.lowPortion);
-      }
+      const ratio = (clamped - axis.min) / Math.max(1, axis.max - axis.min);
       return pad.top + plotHeight - ratio * plotHeight;
     };
     const labelIndexes = labels.length <= 5
