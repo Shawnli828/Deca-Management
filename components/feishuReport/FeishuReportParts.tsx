@@ -9,11 +9,13 @@ type FeishuReportHeroProps = {
   loading: boolean;
   sending: boolean;
   syncingGrowth: boolean;
+  syncingSources: boolean;
   sendMode: FeishuSendMode;
   setSendMode: (value: FeishuSendMode) => void;
   loadPreview: (date: string) => void;
   sendReport: () => void;
   syncMixpanelGrowth: () => void;
+  syncReelfarmAndMuseon: () => void;
 };
 
 export function FeishuReportHero({
@@ -22,11 +24,13 @@ export function FeishuReportHero({
   loading,
   sending,
   syncingGrowth,
+  syncingSources,
   sendMode,
   setSendMode,
   loadPreview,
   sendReport,
-  syncMixpanelGrowth
+  syncMixpanelGrowth,
+  syncReelfarmAndMuseon
 }: FeishuReportHeroProps) {
   return (
     <header className="feishu-report-hero">
@@ -52,10 +56,13 @@ export function FeishuReportHero({
         <button type="button" onClick={() => loadPreview(reportDate)} disabled={loading}>
           {loading ? '生成中...' : '生成预览'}
         </button>
-        <button type="button" onClick={syncMixpanelGrowth} disabled={syncingGrowth || loading || sending}>
+        <button type="button" onClick={syncReelfarmAndMuseon} disabled={syncingSources || syncingGrowth || loading || sending}>
+          {syncingSources ? '同步中...' : '同步 RF + Museon'}
+        </button>
+        <button type="button" onClick={syncMixpanelGrowth} disabled={syncingGrowth || syncingSources || loading || sending}>
           {syncingGrowth ? '同步中...' : '同步 Mixpanel'}
         </button>
-        <button className="primary" type="button" onClick={sendReport} disabled={sending || loading}>
+        <button className="primary" type="button" onClick={sendReport} disabled={sending || syncingSources || syncingGrowth || loading}>
           {sending ? '发送中...' : '发送飞书'}
         </button>
       </div>

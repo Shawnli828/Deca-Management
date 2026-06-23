@@ -12,6 +12,7 @@ import type {
   DailyFeishuSendResult,
   FeishuSendMode
 } from '@/lib/types';
+import type { SyncResultResponse } from '@/lib/api/types';
 
 const MIXPANEL_SYNC_PRODUCT_CODES = ['DB', 'DM', 'DL'] as const;
 const MIXPANEL_SYNC_DAYS = 30;
@@ -29,16 +30,26 @@ export type FeishuGrowthSyncResult = {
   }>;
 };
 
+export type FeishuSourceSyncResult = {
+  ok: boolean;
+  syncedAt: string;
+  reelfarm?: SyncResultResponse;
+  museon?: SyncResultResponse;
+  error?: string;
+};
+
 export function useFeishuReport() {
   const [reportDate, setReportDate] = useState(localIsoDate(-1));
   const [payload, setPayload] = useState<DailyFeishuPreviewPayload | null>(null);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [syncingGrowth, setSyncingGrowth] = useState(false);
+  const [syncingSources, setSyncingSources] = useState(false);
   const [error, setError] = useState('');
   const [sendResult, setSendResult] = useState<DailyFeishuSendResult | null>(null);
   const [growthSyncResult, setGrowthSyncResult] = useState<FeishuGrowthSyncResult | null>(null);
-  const [sendMode, setSendMode] = useState<FeishuSendMode>('image');
+  const [sourceSyncResult, setSourceSyncResult] = useState<FeishuSourceSyncResult | null>(null);
+  const [sendMode, setSendMode] = useState<FeishuSendMode>('template');
   const previewRequestRef = useRef(0);
 
   const totals = useMemo(() => reportTotals(payload?.report), [payload]);
@@ -67,6 +78,7 @@ export function useFeishuReport() {
     setSending(true);
     setError('');
     setSendResult(null);
+    setSourceSyncResult(null);
     setGrowthSyncResult(null);
     try {
       const result = await api.sendDailyFeishuReport(reportDate, { mode: sendMode });
@@ -112,6 +124,34 @@ export function useFeishuReport() {
     }
   }, [loadPreview, reportDate, sendMode]);
 
+  const syncReelfarmAndMuseon = useCallback(async () => {
+    setSyncingSources(true);
+    setError('');
+    setSendResult(null);
+    setSourceSyncResult(null);
+    try {
+      const reelfarm = await api.syncReelfarmAll();
+      const museon = await api.syncMuseonAll();
+      await loadPreview(reportDate, sendMode);
+      setSourceSyncResult({
+        ok: Boolean(reelfarm.ok) && Boolean(museon.ok),
+        syncedAt: museon.finished_at || reelfarm.finished_at || new Date().toISOString(),
+        reelfarm,
+        museon
+      });
+    } catch (syncError: unknown) {
+      const message = getErrorMessage(syncError, 'RF / Museon 同步失败');
+      setSourceSyncResult({
+        ok: false,
+        syncedAt: new Date().toISOString(),
+        error: message
+      });
+      setError(message);
+    } finally {
+      setSyncingSources(false);
+    }
+  }, [loadPreview, reportDate, sendMode]);
+
   useEffect(() => {
     void loadPreview(reportDate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -124,9 +164,11 @@ export function useFeishuReport() {
     loading,
     sending,
     syncingGrowth,
+    syncingSources,
     error,
     sendResult,
     growthSyncResult,
+    sourceSyncResult,
     sendMode,
     setSendMode,
     totals,
@@ -134,6 +176,7 @@ export function useFeishuReport() {
     downloadRate,
     loadPreview,
     sendReport,
-    syncMixpanelGrowth
+    syncMixpanelGrowth,
+    syncReelfarmAndMuseon
   };
 }

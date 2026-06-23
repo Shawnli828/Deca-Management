@@ -17,15 +17,18 @@ export function FeishuReportPage() {
     loading,
     sending,
     syncingGrowth,
+    syncingSources,
     error,
     sendResult,
     growthSyncResult,
+    sourceSyncResult,
     sendMode,
     setSendMode,
     products,
     loadPreview,
     sendReport,
-    syncMixpanelGrowth
+    syncMixpanelGrowth,
+    syncReelfarmAndMuseon
   } = useFeishuReport();
 
   return (
@@ -36,14 +39,21 @@ export function FeishuReportPage() {
         loading={loading}
         sending={sending}
         syncingGrowth={syncingGrowth}
+        syncingSources={syncingSources}
         sendMode={sendMode}
         setSendMode={setSendMode}
         loadPreview={loadPreview}
         sendReport={sendReport}
         syncMixpanelGrowth={syncMixpanelGrowth}
+        syncReelfarmAndMuseon={syncReelfarmAndMuseon}
       />
 
-      <FeishuStatusMessages error={error} sendResult={sendResult} growthSyncResult={growthSyncResult} />
+      <FeishuStatusMessages
+        error={error}
+        sendResult={sendResult}
+        growthSyncResult={growthSyncResult}
+        sourceSyncResult={sourceSyncResult}
+      />
       <FeishuReportLayout payload={payload} loading={loading} reportDate={reportDate} products={products} sendMode={sendMode} />
     </section>
   );

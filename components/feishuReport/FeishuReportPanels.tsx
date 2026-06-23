@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type CSSProperties } from 'react';
 import { formatFeishuMetric } from '@/lib/feishuReportHelpers';
-import type { FeishuGrowthSyncResult } from '@/hooks/useFeishuReport';
+import type { FeishuGrowthSyncResult, FeishuSourceSyncResult } from '@/hooks/useFeishuReport';
 import type {
   DailyFeishuProductSummary,
   DailyFeishuPreviewPayload,
@@ -34,7 +34,7 @@ export function FeishuReportLayout({
         <section className="feishu-message-card">
           <div className="feishu-card-head">
             <div>
-              <h2>{sendMode === 'image' ? '图片看板数据预览' : '文本兜底预览'}</h2>
+              <h2>{sendMode === 'image' ? '图片看板数据预览' : sendMode === 'template' ? '模板卡片数据预览' : '文本兜底预览'}</h2>
               <p>
                 业务日 {payload?.report?.report_date || reportDate} · 内容窗口{' '}
                 {payload?.report?.business_window_local?.start || '—'} → {payload?.report?.business_window_local?.end || '—'}
@@ -756,15 +756,25 @@ function FeishuNativeCardPreview({ data, loading }: { data: FeishuCardData | nul
 export function FeishuStatusMessages({
   error,
   sendResult,
-  growthSyncResult
+  growthSyncResult,
+  sourceSyncResult
 }: {
   error: string;
   sendResult: DailyFeishuSendResult | null;
   growthSyncResult: FeishuGrowthSyncResult | null;
+  sourceSyncResult: FeishuSourceSyncResult | null;
 }) {
   return (
     <>
       {error ? <div className="growth-error">{error}</div> : null}
+      {sourceSyncResult ? (
+        <div className={sourceSyncResult.ok ? 'feishu-success' : 'feishu-sync-partial'}>
+          RF / Museon 同步{sourceSyncResult.ok ? '完成' : '未完成'}
+          {sourceSyncResult.reelfarm ? `：RF ${sourceSyncResult.reelfarm.records_count || 0} 条` : ''}
+          {sourceSyncResult.museon ? ` · Museon ${sourceSyncResult.museon.records_count || 0} 条` : ''}
+          {sourceSyncResult.error ? ` · ${sourceSyncResult.error}` : ''}
+        </div>
+      ) : null}
       {growthSyncResult?.products.length ? (
         <div className={growthSyncResult.ok ? 'feishu-success' : 'feishu-sync-partial'}>
           Mixpanel 缓存同步完成：{growthSyncResult.products.map(item => `${item.productCode} ${item.count} 条快照`).join(' · ')}

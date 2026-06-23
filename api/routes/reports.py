@@ -38,9 +38,7 @@ def post_reports_daily_feishu(
     is_cron_request = cron_authorized(request.headers)
     if not is_cron_request:
         require_dashboard_auth(request)
-    effective_require_synced = truthy_query_value(require_synced) or (
-        is_cron_request and not str(require_synced or "").strip()
-    )
+    effective_require_synced = truthy_query_value(require_synced)
     try:
         result = send_daily_feishu_report(
             date,
@@ -64,7 +62,7 @@ def get_reports_daily_feishu_preview(request: Request, date: str = "", mode: str
         card_data = None
         card = None
         template_preview = None
-        if normalized_mode in {"image", "card", "card_with_text_fallback"}:
+        if normalized_mode in {"image", "card", "card_with_text_fallback", "template"}:
             card_data = daily_feishu_report_card_data(report=report)
         if normalized_mode in {"card", "card_with_text_fallback"}:
             card = daily_feishu_report_card(report=report)

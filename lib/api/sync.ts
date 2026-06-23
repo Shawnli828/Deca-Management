@@ -1,5 +1,10 @@
 import { apiFetch, jsonPostInit } from './client';
-import type { MuseonSyncCountryResponse, ReelfarmSyncCountryResponse, SyncStatusResponse } from './types';
+import type {
+  MuseonSyncCountryResponse,
+  ReelfarmSyncCountryResponse,
+  SyncResultResponse,
+  SyncStatusResponse
+} from './types';
 
 export const syncApi = {
   getSyncStatus: () =>
@@ -19,5 +24,17 @@ export const syncApi = {
       '/api/museon/sync-country',
       jsonPostInit(payload),
       'Failed to sync Museon clone country'
+    ),
+  syncReelfarmAll: () =>
+    apiFetch<SyncResultResponse>(
+      '/api/reelfarm/sync-all',
+      { method: 'POST' },
+      'Failed to sync all ReelFarm records'
+    ),
+  syncMuseonAll: () =>
+    apiFetch<SyncResultResponse>(
+      '/api/museon/sync-all',
+      { method: 'POST' },
+      'Failed to sync all Museon records'
     )
 };
