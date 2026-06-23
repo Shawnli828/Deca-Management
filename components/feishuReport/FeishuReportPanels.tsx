@@ -433,11 +433,16 @@ function FeishuCountryAvgTrendChart({
     const labels = Array.from(labelMap.values()).sort((a, b) => a.date.localeCompare(b.date));
     const values = seriesSource.flatMap(country => country.rows.map(row => Number(row.rfAvg || 0)));
     const width = 1040;
-    const height = 300;
-    const pad = { top: 34, right: 36, bottom: 36, left: 58 };
+    const height = 380;
+    const pad = { top: 46, right: 36, bottom: 42, left: 62 };
     const plotWidth = width - pad.left - pad.right;
     const plotHeight = height - pad.top - pad.bottom;
-    const range = paddedRange(values);
+    const rawRange = paddedRange(values);
+    const span = Math.max(1, rawRange.max - rawRange.min);
+    const range = {
+      min: Math.max(0, rawRange.min - span * 0.18),
+      max: rawRange.max + span * 0.16,
+    };
     const xFor = (index: number) => pad.left + (labels.length <= 1 ? plotWidth / 2 : (plotWidth / (labels.length - 1)) * index);
     const yFor = (value: number) => {
       const ratio = (value - range.min) / Math.max(1, range.max - range.min);
@@ -467,8 +472,8 @@ function FeishuCountryAvgTrendChart({
         path: svgSmoothPath(points),
       };
     });
-    const grid = Array.from({ length: 4 }, (_, index) => {
-      const ratio = index / 3;
+    const grid = Array.from({ length: 7 }, (_, index) => {
+      const ratio = index / 6;
       return {
         y: pad.top + ratio * plotHeight,
         value: range.max - ratio * (range.max - range.min),
