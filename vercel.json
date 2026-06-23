@@ -18,15 +18,15 @@
     },
     {
       "path": "/api/museon/sync-all",
-      "schedule": "35 1 * * *"
+      "schedule": "5 2 * * *"
     },
     {
       "path": "/api/growth/sync-all",
-      "schedule": "40 1 * * *"
+      "schedule": "20 2 * * *"
     },
     {
       "path": "/api/reports/daily-feishu-auto",
-      "schedule": "*/10 2-5 * * *"
+      "schedule": "0 3 * * *"
     }
   ],
   "routes": [
