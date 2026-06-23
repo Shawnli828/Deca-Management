@@ -1091,7 +1091,7 @@
 
         .feishu-report-actions {
             display: grid;
-            grid-template-columns: minmax(150px, 0.8fr) minmax(160px, 1fr) auto auto auto;
+            grid-template-columns: minmax(150px, 0.8fr) minmax(160px, 1fr) repeat(4, max-content);
             gap: 10px;
             align-items: end;
         }
@@ -1904,6 +1904,22 @@
             stroke-width: 1;
         }
 
+        .feishu-country-trend .is-goal-marker line {
+            stroke: rgba(100, 116, 139, 0.6);
+            stroke-width: 1.4;
+            stroke-dasharray: 6 5;
+        }
+
+        .feishu-country-trend .is-goal-marker text {
+            fill: #64748b;
+            font-size: 10px;
+            font-weight: 700;
+            paint-order: stroke;
+            stroke: #ffffff;
+            stroke-linejoin: round;
+            stroke-width: 3px;
+        }
+
         .feishu-country-trend text {
             fill: #64748b;
             font-size: 10px;
@@ -2201,6 +2217,10 @@
                 width: 100%;
                 min-width: 0;
                 justify-content: flex-start;
+            }
+
+            .feishu-report-actions {
+                grid-template-columns: 1fr;
             }
 
             .growth-metric-grid,

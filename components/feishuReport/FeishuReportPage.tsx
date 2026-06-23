@@ -24,7 +24,6 @@ export function FeishuReportPage() {
     sourceSyncResult,
     sendMode,
     setSendMode,
-    products,
     loadPreview,
     sendReport,
     syncMixpanelGrowth,
@@ -54,7 +53,7 @@ export function FeishuReportPage() {
         growthSyncResult={growthSyncResult}
         sourceSyncResult={sourceSyncResult}
       />
-      <FeishuReportLayout payload={payload} loading={loading} reportDate={reportDate} products={products} sendMode={sendMode} />
+      <FeishuReportLayout payload={payload} loading={loading} />
     </section>
   );
 }

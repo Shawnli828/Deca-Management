@@ -4,76 +4,22 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { formatFeishuMetric } from '@/lib/feishuReportHelpers';
 import type { FeishuGrowthSyncResult, FeishuSourceSyncResult } from '@/hooks/useFeishuReport';
 import type {
-  DailyFeishuProductSummary,
   DailyFeishuPreviewPayload,
   DailyFeishuSendResult,
-  FeishuCardData,
-  FeishuSendMode
+  FeishuCardData
 } from '@/lib/types';
 
 type FeishuProductCardData = NonNullable<FeishuCardData['products']>[number];
 
 export function FeishuReportLayout({
   payload,
-  loading,
-  reportDate,
-  products,
-  sendMode
+  loading
 }: {
   payload: DailyFeishuPreviewPayload | null;
   loading: boolean;
-  reportDate: string;
-  products: DailyFeishuProductSummary[];
-  sendMode: FeishuSendMode;
 }) {
   const showCardPreview = Boolean(payload?.card_data);
-  return (
-    <>
-      {showCardPreview ? <FeishuNativeCardPreview data={payload?.card_data || null} loading={loading} /> : null}
-      <div className="feishu-report-layout">
-        <section className="feishu-message-card">
-          <div className="feishu-card-head">
-            <div>
-              <h2>{sendMode === 'image' ? '图片看板数据预览' : sendMode === 'template' ? '模板卡片数据预览' : '文本兜底预览'}</h2>
-              <p>
-                业务日 {payload?.report?.report_date || reportDate} · 内容窗口{' '}
-                {payload?.report?.business_window_local?.start || '—'} → {payload?.report?.business_window_local?.end || '—'}
-              </p>
-            </div>
-          </div>
-          <pre className="feishu-message-preview">{payload?.message || (loading ? '正在生成...' : '暂无预览')}</pre>
-          {sendMode === 'template' && payload?.template_preview ? (
-            <details className="feishu-template-preview">
-              <summary>模板变量预览</summary>
-              <pre>{JSON.stringify(payload.template_preview, null, 2)}</pre>
-            </details>
-          ) : null}
-        </section>
-
-        <aside className="feishu-product-card">
-          <div className="feishu-card-head">
-            <div>
-              <h2>产品拆分</h2>
-              <p>用于检查发送前每个产品的数据是否合理。</p>
-            </div>
-          </div>
-          <div className="feishu-product-list">
-            {products.length ? products.map(product => (
-              <article key={String(product.product_code || product.product_name)}>
-                <div>
-                  <strong>{String(product.product_name || product.product_code || 'Product')}</strong>
-                  <span>{String(product.product_code || '')}</span>
-                </div>
-                <small>播放 {formatFeishuMetric(product.total_views)} · Onboarding {formatFeishuMetric(product.downloads)}</small>
-              </article>
-            )) : (
-              <p className="feishu-empty">暂无产品数据。</p>
-            )}
-          </div>
-        </aside>
-      </div>
-    </>
-  );
+  return showCardPreview ? <FeishuNativeCardPreview data={payload?.card_data || null} loading={loading} /> : null;
 }
 
 function cardMetric(value: unknown) {
@@ -429,6 +375,7 @@ function CountryAvgTable({
 }
 
 const countryTrendColors = ['#2f8af5', '#0f766e', '#a16207', '#7c3aed', '#dc2626', '#475569', '#0891b2'];
+const rfAvgGoalValue = 1000;
 
 function svgSmoothPath(points: Array<{ x: number; y: number }>) {
   if (!points.length) return '';
@@ -530,7 +477,11 @@ function FeishuCountryAvgTrendChart({
       y: yFor(value),
       value,
     }));
-    return { labels, width, height, pad, series, grid, labelIndexes };
+    const goal = {
+      y: yFor(rfAvgGoalValue),
+      value: rfAvgGoalValue,
+    };
+    return { labels, width, height, pad, series, grid, goal, labelIndexes };
   }, [baseChart, selectedIdSet]);
 
   const toggleCountry = (countryId: string) => {
@@ -590,6 +541,12 @@ function FeishuCountryAvgTrendChart({
             </text>
           </g>
         ))}
+        <g className="is-goal-marker">
+          <line x1={chart.pad.left} x2={chart.width - chart.pad.right} y1={chart.goal.y} y2={chart.goal.y} />
+          <text x={chart.width - chart.pad.right - 4} y={chart.goal.y - 6} textAnchor="end">
+            Goal {compactAxisMetric(chart.goal.value)}
+          </text>
+        </g>
         {chart.series.map(series => (
           <g key={`country-series-${series.countryName}`}>
             <path d={series.path} style={{ stroke: series.color }} />
