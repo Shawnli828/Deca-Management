@@ -1056,8 +1056,8 @@
             gap: 16px;
             min-height: 100vh;
             padding: 24px;
-            background: #faf9f7;
-            color: #1f1f1d;
+            background: #ffffff;
+            color: #111827;
             font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
         }
 
@@ -1066,7 +1066,7 @@
             grid-template-columns: minmax(260px, 0.7fr) minmax(560px, auto);
             gap: 18px;
             align-items: end;
-            border: 1px solid #e6e1d9;
+            border: 1px solid #e5e7eb;
             border-radius: 12px;
             padding: 18px 20px;
             background: #ffffff;
@@ -1075,7 +1075,7 @@
 
         .feishu-report-hero h1 {
             margin: 3px 0 0;
-            color: #1f1f1d;
+            color: #111827;
             font-size: clamp(28px, 3vw, 36px);
             line-height: 1.08;
             font-weight: 650;
@@ -1084,7 +1084,7 @@
 
         .feishu-report-hero p {
             margin: 8px 0 0;
-            color: #6f6a62;
+            color: #64748b;
             font-size: 13px;
             line-height: 1.5;
             font-weight: 450;
@@ -1092,7 +1092,7 @@
 
         .feishu-report-page .dashboard-kicker {
             margin: 0;
-            color: #6f6a62;
+            color: #64748b;
             font-size: 12px;
             font-weight: 600;
             letter-spacing: 0;
@@ -1109,7 +1109,7 @@
         .feishu-report-actions label {
             display: grid;
             gap: 6px;
-            color: #6f6a62;
+            color: #64748b;
             font-size: 12px;
             font-weight: 600;
         }
@@ -1118,11 +1118,11 @@
         .feishu-report-actions select,
         .feishu-report-actions button {
             min-height: 44px;
-            border: 1px solid #d8d1c7;
+            border: 1px solid #d1d5db;
             border-radius: 8px;
             padding: 0 14px;
             background: #ffffff;
-            color: #1f1f1d;
+            color: #111827;
             font-size: 13px;
             font-weight: 560;
         }
@@ -1133,8 +1133,8 @@
         }
 
         .feishu-report-actions button.primary {
-            border-color: #1f1f1d;
-            background: #1f1f1d;
+            border-color: #111827;
+            background: #111827;
             color: #ffffff;
             box-shadow: none;
         }
@@ -1204,7 +1204,7 @@
             align-content: start;
             gap: 16px;
             min-width: 0;
-            border: 1px solid #e6e1d9;
+            border: 1px solid #e5e7eb;
             border-radius: 12px;
             padding: 18px;
             background: #ffffff;
@@ -1220,7 +1220,7 @@
 
         .feishu-native-panel-head p {
             margin: 4px 0 0;
-            color: #6f6a62;
+            color: #64748b;
             font-size: 12px;
             line-height: 1.45;
             font-weight: 400;
@@ -1228,11 +1228,11 @@
 
         .feishu-native-panel-head span {
             flex: 0 0 auto;
-            border: 1px solid #e6e1d9;
+            border: 1px solid #e5e7eb;
             border-radius: 999px;
             padding: 5px 9px;
-            background: #f7f6f3;
-            color: #6f6a62;
+            background: #f8f9fb;
+            color: #64748b;
             font-size: 11px;
             line-height: 1;
             font-weight: 600;
@@ -1247,15 +1247,15 @@
 
         .feishu-native-kpi-grid article {
             min-width: 0;
-            border: 1px solid #ebe6de;
+            border: 1px solid #e5e7eb;
             border-radius: 12px;
             padding: 12px;
-            background: #f7f6f3;
+            background: #f8f9fb;
         }
 
         .feishu-native-kpi-grid span {
             display: block;
-            color: #6f6a62;
+            color: #64748b;
             font-size: 11px;
             line-height: 1.25;
             font-weight: 600;
@@ -1265,7 +1265,7 @@
             display: block;
             overflow-wrap: anywhere;
             margin-top: 8px;
-            color: #1f1f1d;
+            color: #111827;
             font-size: 22px;
             line-height: 1.05;
             font-weight: 650;
@@ -1300,11 +1300,11 @@
             align-items: center;
             gap: 8px;
             min-width: 0;
-            border: 1px solid #e6e1d9;
+            border: 1px solid #e5e7eb;
             border-radius: 8px;
             padding: 6px 10px 6px 7px;
             background: #ffffff;
-            color: #6f6a62;
+            color: #64748b;
             font: inherit;
             font-size: 12px;
             line-height: 1;
@@ -1313,8 +1313,8 @@
         }
 
         .feishu-product-switcher button.is-active {
-            border-color: #1f1f1d;
-            background: #1f1f1d;
+            border-color: #111827;
+            background: #111827;
             color: #ffffff;
         }
 
@@ -1324,8 +1324,8 @@
             width: 24px;
             height: 24px;
             border-radius: 8px;
-            background: #f7f6f3;
-            color: #1f1f1d;
+            background: #f8f9fb;
+            color: #111827;
             font-size: 10px;
             font-weight: 700;
             letter-spacing: 0;
@@ -1344,10 +1344,10 @@
 
         .feishu-product-kpi-grid article {
             min-width: 0;
-            border: 1px solid #ebe6de;
+            border: 1px solid #e5e7eb;
             border-radius: 12px;
             padding: 12px;
-            background: #f7f6f3;
+            background: #f8f9fb;
         }
 
         .feishu-product-kpi-grid article.span-2 {
@@ -1360,7 +1360,7 @@
 
         .feishu-product-kpi-grid span {
             display: block;
-            color: #6f6a62;
+            color: #64748b;
             font-size: 11px;
             line-height: 1.25;
             font-weight: 600;
@@ -1370,7 +1370,7 @@
             display: block;
             overflow-wrap: anywhere;
             margin-top: 8px;
-            color: #1f1f1d;
+            color: #111827;
             font-size: 21px;
             line-height: 1.05;
             font-weight: 650;
@@ -1392,7 +1392,7 @@
             display: grid;
             gap: 10px;
             min-width: 0;
-            border-top: 1px solid #e6e1d9;
+            border-top: 1px solid #e5e7eb;
             padding-top: 14px;
         }
 
@@ -1407,7 +1407,7 @@
             display: grid;
             overflow: hidden;
             min-width: 0;
-            border: 1px solid #e6e1d9;
+            border: 1px solid #e5e7eb;
             border-radius: 10px;
             background: #ffffff;
         }
@@ -1418,14 +1418,14 @@
             justify-content: space-between;
             gap: 8px;
             min-width: 0;
-            border-bottom: 1px solid #e6e1d9;
+            border-bottom: 1px solid #e5e7eb;
             padding: 9px 11px;
-            background: #f7f6f3;
+            background: #f8f9fb;
         }
 
         .feishu-anomaly-table-title strong {
             min-width: 0;
-            color: #1f1f1d;
+            color: #111827;
             font-size: 12px;
             line-height: 1.25;
             font-weight: 650;
@@ -1436,7 +1436,7 @@
             border-radius: 999px;
             padding: 3px 7px;
             background: #f1f0ed;
-            color: #1f1f1d;
+            color: #111827;
             font-size: 11px;
             line-height: 1;
             font-weight: 650;
@@ -1463,9 +1463,9 @@
             gap: 10px;
             align-items: center;
             min-height: 36px;
-            border-top: 1px solid #f0ece6;
+            border-top: 1px solid #eef0f3;
             padding: 8px 11px;
-            color: #1f1f1d;
+            color: #111827;
             font-size: 12px;
             line-height: 1.3;
         }
@@ -1473,7 +1473,7 @@
         .feishu-anomaly-row.is-head {
             min-height: 32px;
             border-top: 0;
-            color: #6f6a62;
+            color: #64748b;
             font-size: 11px;
             font-weight: 600;
         }
@@ -1487,27 +1487,27 @@
         }
 
         .feishu-anomaly-row strong {
-            color: #6f6a62;
+            color: #64748b;
             font-size: 11px;
             font-weight: 650;
             text-align: right;
         }
 
         .feishu-anomaly-row.is-empty {
-            color: #6f6a62;
+            color: #64748b;
         }
 
         .feishu-anomaly-more {
-            border-top: 1px solid #f0ece6;
+            border-top: 1px solid #eef0f3;
             padding: 8px 11px;
-            color: #6f6a62;
+            color: #64748b;
             font-size: 11px;
             line-height: 1.35;
             font-weight: 500;
         }
 
         .feishu-native-section-title {
-            color: #1f1f1d;
+            color: #111827;
             font-size: 14px;
             font-weight: 650;
             line-height: 1.3;
@@ -1521,7 +1521,7 @@
             display: grid;
             min-width: 820px;
             overflow: hidden;
-            border: 1px solid #e6e1d9;
+            border: 1px solid #e5e7eb;
             border-radius: 8px;
             background: #ffffff;
         }
@@ -1532,9 +1532,9 @@
             gap: 12px;
             align-items: center;
             min-height: 48px;
-            border-top: 1px solid #f0ece6;
+            border-top: 1px solid #eef0f3;
             padding: 10px 14px;
-            color: #1f1f1d;
+            color: #111827;
             font-size: 13px;
             font-weight: 400;
         }
@@ -1545,14 +1545,14 @@
 
         .feishu-native-daily-row.is-head {
             min-height: 40px;
-            background: #f7f6f3;
-            color: #6f6a62;
+            background: #f8f9fb;
+            color: #64748b;
             font-size: 11px;
             font-weight: 600;
         }
 
         .feishu-native-daily-row strong {
-            color: #1f1f1d;
+            color: #111827;
             font-size: 15px;
             font-weight: 600;
         }
@@ -1569,7 +1569,7 @@
         .feishu-native-trend {
             display: grid;
             gap: 12px;
-            border-top: 1px solid #e6e1d9;
+            border-top: 1px solid #e5e7eb;
             padding-top: 16px;
         }
 
@@ -1583,7 +1583,7 @@
         .feishu-native-trend p,
         .feishu-native-empty {
             margin: 0;
-            color: #6f6a62;
+            color: #64748b;
             font-size: 13px;
             font-weight: 400;
         }
@@ -1592,7 +1592,7 @@
             display: flex;
             flex-wrap: wrap;
             gap: 18px;
-            color: #6f6a62;
+            color: #64748b;
             font-size: 12px;
             font-weight: 400;
         }
@@ -1644,7 +1644,7 @@
         }
 
         .feishu-native-mini-chart-head strong {
-            color: #1f1f1d;
+            color: #111827;
             font-size: 12px;
             font-weight: 600;
             line-height: 1.25;
@@ -1670,13 +1670,13 @@
         }
 
         .feishu-native-mini-chart text {
-            fill: #6f6a62;
+            fill: #64748b;
             font-size: 9px;
             font-weight: 400;
         }
 
         .feishu-native-mini-chart .is-x-label {
-            fill: #4f4a43;
+            fill: #334155;
             font-size: 9px;
             font-weight: 400;
         }
@@ -1731,10 +1731,10 @@
             display: grid;
             gap: 8px;
             min-width: 0;
-            border: 1px solid #ebe6de;
+            border: 1px solid #e5e7eb;
             border-radius: 10px;
             padding: 12px;
-            background: #f7f6f3;
+            background: #f8f9fb;
         }
 
         .feishu-native-product-list article > div {
@@ -1747,7 +1747,7 @@
 
         .feishu-native-product-list strong {
             min-width: 0;
-            color: #1f1f1d;
+            color: #111827;
             font-size: 14px;
             line-height: 1.25;
             font-weight: 600;
@@ -1755,18 +1755,18 @@
 
         .feishu-native-product-list span {
             flex: 0 0 auto;
-            border: 1px solid #d8d1c7;
+            border: 1px solid #d1d5db;
             border-radius: 999px;
             padding: 4px 7px;
             background: #ffffff;
-            color: #6f6a62;
+            color: #64748b;
             font-size: 11px;
             line-height: 1;
             font-weight: 600;
         }
 
         .feishu-native-product-list small {
-            color: #6f6a62;
+            color: #64748b;
             font-size: 12px;
             line-height: 1.45;
             font-weight: 400;
@@ -1776,14 +1776,14 @@
             display: grid;
             gap: 10px;
             min-width: 0;
-            border-top: 1px solid #e6e1d9;
+            border-top: 1px solid #e5e7eb;
             padding-top: 14px;
         }
 
         .feishu-country-avg-table {
             display: grid;
             overflow: hidden;
-            border: 1px solid #e6e1d9;
+            border: 1px solid #e5e7eb;
             border-radius: 10px;
             background: #ffffff;
         }
@@ -1794,9 +1794,9 @@
             gap: 10px;
             align-items: center;
             min-height: 38px;
-            border-top: 1px solid #f0ece6;
+            border-top: 1px solid #eef0f3;
             padding: 9px 11px;
-            color: #1f1f1d;
+            color: #111827;
             font-size: 12px;
             line-height: 1.3;
         }
@@ -1807,8 +1807,8 @@
 
         .feishu-country-avg-row.is-head {
             min-height: 34px;
-            background: #f7f6f3;
-            color: #6f6a62;
+            background: #f8f9fb;
+            color: #64748b;
             font-size: 11px;
             font-weight: 600;
         }
@@ -1824,7 +1824,7 @@
         }
 
         .feishu-country-avg-row strong {
-            color: #1f1f1d;
+            color: #111827;
             font-size: 12px;
             font-weight: 650;
         }
@@ -1833,7 +1833,7 @@
             display: grid;
             gap: 10px;
             min-width: 0;
-            border-top: 1px solid #e6e1d9;
+            border-top: 1px solid #e5e7eb;
             padding-top: 14px;
         }
 
@@ -1859,7 +1859,7 @@
             min-width: 0;
             border: 0;
             background: transparent;
-            color: #6f6a62;
+            color: #64748b;
             cursor: pointer;
             font: inherit;
             line-height: inherit;
@@ -1878,22 +1878,22 @@
         }
 
         .feishu-country-legend button.is-active {
-            color: #1f1f1d;
+            color: #111827;
             opacity: 1;
         }
 
         .feishu-country-legend button.is-muted {
-            color: #9a958c;
+            color: #94a3b8;
             opacity: 0.46;
         }
 
         .feishu-country-legend button.is-muted::before {
-            background: #d8d1c7;
+            background: #d1d5db;
         }
 
         .feishu-country-legend button:hover,
         .feishu-country-legend button:focus-visible {
-            color: #1f1f1d;
+            color: #111827;
             opacity: 1;
             outline: none;
         }
@@ -1921,7 +1921,7 @@
         }
 
         .feishu-country-trend .is-goal-marker text {
-            fill: #6f6a62;
+            fill: #64748b;
             font-size: 10px;
             font-weight: 700;
             paint-order: stroke;
@@ -1931,13 +1931,13 @@
         }
 
         .feishu-country-trend text {
-            fill: #6f6a62;
+            fill: #64748b;
             font-size: 10px;
             font-weight: 400;
         }
 
         .feishu-country-trend .is-x-label {
-            fill: #4f4a43;
+            fill: #334155;
             font-size: 10px;
         }
 

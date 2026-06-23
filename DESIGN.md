@@ -2,12 +2,12 @@
 
 ## Direction
 
-Deca Growth uses a Notion-inspired operational workspace style: warm minimal surfaces, dense but readable data, restrained controls, and chart colors that remain distinct for analysis. The UI should feel like a daily workbench, not a landing page.
+Deca Growth uses a Notion-inspired operational workspace style: clean white surfaces, dense but readable data, restrained controls, and chart colors that remain distinct for analysis. The UI should feel like a daily workbench, not a landing page.
 
 ## Principles
 
 - Data first: tables, KPIs, and charts carry the hierarchy.
-- Warm minimalism: use white and warm off-white surfaces with subtle borders.
+- Clean minimalism: use pure white and neutral light-gray surfaces with subtle borders.
 - Low decoration: no large hero treatments, no decorative gradients, no bento filler.
 - Stable density: keep repeated controls compact and predictable.
 - Chart clarity: preserve distinct series colors; use neutral reference lines and grid lines.
@@ -15,16 +15,16 @@ Deca Growth uses a Notion-inspired operational workspace style: warm minimal sur
 
 ## Tokens
 
-- Page: `#faf9f7`
+- Page: `#ffffff`
 - Canvas: `#ffffff`
-- Surface: `#f7f6f3`
-- Surface soft: `#fbfaf8`
-- Border: `#e6e1d9`
-- Border strong: `#d8d1c7`
-- Text: `#1f1f1d`
-- Secondary text: `#6f6a62`
-- Muted text: `#9a958c`
-- Primary action: `#1f1f1d`
+- Surface: `#f8f9fb`
+- Surface soft: `#f9fafb`
+- Border: `#e5e7eb`
+- Border strong: `#d1d5db`
+- Text: `#111827`
+- Secondary text: `#64748b`
+- Muted text: `#94a3b8`
+- Primary action: `#111827`
 - Primary action text: `#ffffff`
 - Blue metric / View: `#2f80ed`
 - Orange metric / Download: `#df6b3b`
@@ -46,13 +46,13 @@ Deca Growth uses a Notion-inspired operational workspace style: warm minimal sur
 
 - Buttons: 8px radius, 44-46px height, subtle border for secondary actions.
 - Primary buttons: near-black background; use blue only for data, links, or existing system emphasis.
-- Inputs/selects: white surface, warm border, 8px radius, 44px height.
-- Panels: white canvas, 12px radius, `1px` warm border, minimal shadow.
-- KPI cards: warm off-white fill, 12px radius, no heavy shadow.
-- Tables: white rows, warm hairlines, muted headers.
+- Inputs/selects: white surface, neutral border, 8px radius, 44px height.
+- Panels: white canvas, 12px radius, `1px` neutral border, minimal shadow.
+- KPI cards: neutral light-gray fill, 12px radius, no heavy shadow.
+- Tables: white rows, neutral hairlines, muted headers.
 - Status messages: soft semantic backgrounds, border + concise text.
 - Chart legends: clickable text or compact controls with visible color strokes.
-- Chart grid: neutral warm gray; reference lines dashed and neutral.
+- Chart grid: neutral gray; reference lines dashed and neutral.
 
 ## Feishu Report Page
 
