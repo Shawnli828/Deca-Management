@@ -138,6 +138,16 @@ function countryTrendAxis(values: number[]) {
   };
 }
 
+function allLabelIndexes(count: number) {
+  return Array.from({ length: count }, (_, index) => index);
+}
+
+function xAxisLabelAnchor(index: number, count: number) {
+  if (index === 0) return 'start';
+  if (index === count - 1) return 'end';
+  return 'middle';
+}
+
 function OverviewNativePreview({ data }: { data: FeishuCardData }) {
   const overviewTrend = overviewTrendGroup(data);
 
@@ -471,9 +481,7 @@ function FeishuCountryAvgTrendChart({
       const ratio = (clamped - axis.min) / Math.max(1, axis.max - axis.min);
       return pad.top + plotHeight - ratio * plotHeight;
     };
-    const labelIndexes = labels.length <= 5
-      ? labels.map((_, index) => index)
-      : Array.from(new Set([0, 2, 4, labels.length - 1])).filter(index => index < labels.length);
+    const labelIndexes = allLabelIndexes(labels.length);
     const series = seriesSource.map((country, index) => {
       const rowsByDate = new Map(country.rows.map(row => [row.date, row]));
       const points = labels
@@ -567,7 +575,7 @@ function FeishuCountryAvgTrendChart({
             className="is-x-label"
             x={chart.pad.left + (chart.labels.length <= 1 ? (chart.width - chart.pad.left - chart.pad.right) / 2 : ((chart.width - chart.pad.left - chart.pad.right) / (chart.labels.length - 1)) * index)}
             y={chart.height - 7}
-            textAnchor={index === 0 ? 'start' : 'end'}
+            textAnchor={xAxisLabelAnchor(index, chart.labels.length)}
             key={`country-label-${chart.labels[index].date}`}
           >
             {chart.labels[index].label}
@@ -664,9 +672,7 @@ function FeishuMiniTrendChart({
         download: downloadRange.max - ratio * (downloadRange.max - downloadRange.min),
       };
     });
-    const labelIndexes = rows.length <= 5
-      ? rows.map((_, index) => index)
-      : Array.from(new Set([0, 2, 4, rows.length - 1])).filter(index => index < rows.length);
+    const labelIndexes = allLabelIndexes(rows.length);
     return {
       rows,
       width,
@@ -751,7 +757,7 @@ function FeishuMiniTrendChart({
               className="is-x-label"
               x={chart.viewPoints[index].x}
               y={chart.height - 6}
-              textAnchor={index === 0 ? 'start' : 'end'}
+              textAnchor={xAxisLabelAnchor(index, chart.rows.length)}
               key={`label-${index}-${chart.rows[index].label}`}
             >
               {chart.rows[index].label}
