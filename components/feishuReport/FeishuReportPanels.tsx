@@ -112,6 +112,48 @@ function paddedRange(values: number[]) {
   return { min: Math.max(0, min - pad), max: max + pad };
 }
 
+function ceilToStep(value: number, step: number) {
+  return Math.ceil(value / step) * step;
+}
+
+function countryTrendAxis(values: number[]) {
+  const finite = values.filter(value => Number.isFinite(value));
+  if (!finite.length) {
+    return {
+      min: 0,
+      max: 1000,
+      focus: null as number | null,
+      lowPortion: 1,
+      ticks: [0, 250, 500, 750, 1000],
+    };
+  }
+  const rawMax = Math.max(...finite, 1);
+  const maxStep = rawMax <= 3000 ? 250 : 500;
+  const max = Math.max(1000, ceilToStep(rawMax * 1.08, maxStep));
+  const ticks = new Set<number>();
+  const lowMax = Math.min(1000, max);
+  for (let value = 0; value <= lowMax; value += 250) {
+    ticks.add(value);
+  }
+  if (max > 1000) {
+    for (let value = 1250; value <= Math.min(1500, max); value += 250) {
+      ticks.add(value);
+    }
+    const upperStep = max <= 3000 ? 500 : 1000;
+    for (let value = 2000; value <= max; value += upperStep) {
+      ticks.add(value);
+    }
+    ticks.add(max);
+  }
+  return {
+    min: 0,
+    max,
+    focus: max > 1000 ? 1000 : null,
+    lowPortion: max > 1000 ? 0.62 : 1,
+    ticks: Array.from(ticks).sort((a, b) => a - b),
+  };
+}
+
 function OverviewNativePreview({ data }: { data: FeishuCardData }) {
   const overviewTrend = overviewTrendGroup(data);
 
@@ -437,15 +479,16 @@ function FeishuCountryAvgTrendChart({
     const pad = { top: 46, right: 36, bottom: 42, left: 62 };
     const plotWidth = width - pad.left - pad.right;
     const plotHeight = height - pad.top - pad.bottom;
-    const rawRange = paddedRange(values);
-    const span = Math.max(1, rawRange.max - rawRange.min);
-    const range = {
-      min: Math.max(0, rawRange.min - span * 0.18),
-      max: rawRange.max + span * 0.16,
-    };
+    const axis = countryTrendAxis(values);
     const xFor = (index: number) => pad.left + (labels.length <= 1 ? plotWidth / 2 : (plotWidth / (labels.length - 1)) * index);
     const yFor = (value: number) => {
-      const ratio = (value - range.min) / Math.max(1, range.max - range.min);
+      const clamped = Math.min(axis.max, Math.max(axis.min, value));
+      let ratio = (clamped - axis.min) / Math.max(1, axis.max - axis.min);
+      if (axis.focus && axis.focus > axis.min && axis.max > axis.focus) {
+        ratio = clamped <= axis.focus
+          ? ((clamped - axis.min) / Math.max(1, axis.focus - axis.min)) * axis.lowPortion
+          : axis.lowPortion + ((clamped - axis.focus) / Math.max(1, axis.max - axis.focus)) * (1 - axis.lowPortion);
+      }
       return pad.top + plotHeight - ratio * plotHeight;
     };
     const labelIndexes = labels.length <= 5
@@ -472,13 +515,10 @@ function FeishuCountryAvgTrendChart({
         path: svgSmoothPath(points),
       };
     });
-    const grid = Array.from({ length: 7 }, (_, index) => {
-      const ratio = index / 6;
-      return {
-        y: pad.top + ratio * plotHeight,
-        value: range.max - ratio * (range.max - range.min),
-      };
-    });
+    const grid = axis.ticks.map(value => ({
+      y: yFor(value),
+      value,
+    }));
     return { labels, width, height, pad, series, grid, labelIndexes };
   }, [countries]);
 
