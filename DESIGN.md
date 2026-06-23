@@ -61,3 +61,11 @@ Deca Growth uses a Notion-inspired operational workspace style: clean white surf
 - Overview and product panels share the same panel anatomy.
 - Chart series colors must stay distinct; do not collapse them into monochrome.
 - The 1K RF Avg goal line is neutral and should not compete with country series colors.
+
+## App-Wide Pages
+
+- Other tools reuse the same pure-white workspace shell as Feishu Report.
+- Page heads are compact bordered toolbars, not decorative hero blocks.
+- Product, country, API, publish-check, cloud-phone, slideshow, and report pages share the same button, input, table, KPI, and panel treatments.
+- Keep chart and semantic colors only where they encode data or state.
+- Avoid adding new page-specific gradients or heavy shadows; add page-specific visual hierarchy through spacing, labels, table structure, and selected states.

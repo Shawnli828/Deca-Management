@@ -2712,3 +2712,543 @@
         body :where(.coverage-pill, .metric-main, .total-views-cell, .download-cell) {
             font-weight: 680 !important;
         }
+
+        /* Deca app-wide neutral workspace rollout.
+           Keep Feishu chart colors intact, but make every management page use the same pure-white shell. */
+        :root {
+            color-scheme: light;
+            --page: #ffffff;
+            --surface: #ffffff;
+            --surface-soft: #f8f9fb;
+            --surface-tint: #f3f6fb;
+            --line: #e5e7eb;
+            --line-strong: #d1d5db;
+            --text: #111827;
+            --muted: #64748b;
+            --subtle: #94a3b8;
+            --accent: #111827;
+            --accent-strong: #111827;
+            --accent-soft: #f3f4f6;
+            --blue: #2f80ed;
+            --plum: #7c3aed;
+            --gold: #9a5b04;
+            --red: #c9352b;
+            --shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+            --radius: 8px;
+        }
+
+        html,
+        body,
+        .app,
+        .app-layout,
+        .main,
+        .shell,
+        .tool-page,
+        .tool-page.active {
+            background: #ffffff !important;
+            color: var(--text) !important;
+        }
+
+        .shell {
+            overflow: visible !important;
+            min-height: 100vh !important;
+            border: 0 !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            backdrop-filter: none !important;
+        }
+
+        .side-menu {
+            border-right: 1px solid var(--line) !important;
+            background: #ffffff !important;
+            box-shadow: none !important;
+        }
+
+        .side-brand,
+        .brand-mark,
+        .brand-cn {
+            color: var(--text) !important;
+            font-weight: 680 !important;
+        }
+
+        .brand-dot {
+            color: var(--blue) !important;
+        }
+
+        .side-collapse-btn {
+            border-color: var(--line) !important;
+            border-radius: 8px !important;
+            background: var(--surface-soft) !important;
+            color: var(--text) !important;
+            box-shadow: none !important;
+        }
+
+        .side-nav {
+            gap: 6px !important;
+        }
+
+        .side-nav-btn {
+            border-radius: 8px !important;
+            padding: 10px !important;
+            color: var(--muted) !important;
+        }
+
+        .side-nav-icon {
+            border-color: var(--line) !important;
+            border-radius: 8px !important;
+            background: #ffffff !important;
+            color: var(--muted) !important;
+        }
+
+        .side-nav-btn:hover,
+        .side-nav-btn.active {
+            border-color: var(--line) !important;
+            background: var(--surface-soft) !important;
+            color: var(--text) !important;
+        }
+
+        .side-nav-btn.active .side-nav-icon {
+            border-color: var(--text) !important;
+            background: var(--text) !important;
+            color: #ffffff !important;
+        }
+
+        .side-nav-title {
+            font-weight: 650 !important;
+        }
+
+        .side-nav-meta {
+            color: var(--subtle) !important;
+            font-weight: 540 !important;
+        }
+
+        .topbar,
+        .growth-report-head,
+        .growth-hero,
+        .business-report-head,
+        .publish-check-hero,
+        .api-key-page-head,
+        .cloud-phone-hero,
+        .tag-board-hero,
+        .api-reference-hero,
+        .account-pool-head {
+            border: 1px solid var(--line) !important;
+            border-radius: 12px !important;
+            background: #ffffff !important;
+            box-shadow: none !important;
+        }
+
+        .topbar {
+            margin: 24px 24px 0 !important;
+            padding: 18px 20px !important;
+            border-bottom: 1px solid var(--line) !important;
+        }
+
+        .growth-page,
+        .business-report-page,
+        .api-key-page,
+        .cloud-phone-page,
+        .slideshow-shell,
+        .page-shell,
+        .publish-check-board,
+        .api-reference {
+            background: #ffffff !important;
+        }
+
+        .growth-page,
+        .business-report-page,
+        .api-key-page,
+        .cloud-phone-page {
+            padding: 24px !important;
+        }
+
+        .page-shell,
+        .publish-check-board {
+            padding: 24px !important;
+        }
+
+        .dashboard-kicker,
+        .api-reference-kicker {
+            color: var(--muted) !important;
+            font-size: 12px !important;
+            font-weight: 600 !important;
+            text-transform: none !important;
+        }
+
+        .growth-report-head h1,
+        .growth-hero h1,
+        .business-report-head h1,
+        .api-key-page-head h1,
+        .cloud-phone-hero h1,
+        .topbar h1,
+        .section-head h2 {
+            color: var(--text) !important;
+            font-size: clamp(24px, 2.2vw, 32px) !important;
+            font-weight: 650 !important;
+            line-height: 1.15 !important;
+        }
+
+        .growth-report-head p,
+        .growth-hero p,
+        .business-report-head p,
+        .api-key-page-head p,
+        .cloud-phone-hero p,
+        .topbar .subtitle,
+        .section-head p {
+            color: var(--muted) !important;
+            font-size: 13px !important;
+            font-weight: 520 !important;
+            line-height: 1.5 !important;
+        }
+
+        .btn,
+        .icon-btn,
+        .crumb-btn,
+        .text-input,
+        .number-input,
+        .search-input,
+        .date-filter,
+        .date-range-trigger,
+        .growth-actions select,
+        .growth-actions button,
+        .growth-report-controls select,
+        .growth-report-controls input,
+        .growth-report-controls button,
+        .business-report-controls select,
+        .business-report-controls input,
+        .business-report-controls button,
+        .cloud-phone-page button,
+        .cloud-phone-page select,
+        .api-key-page input,
+        .api-key-page button,
+        .api-reference button,
+        .api-reference input,
+        .auth-field input {
+            border-color: var(--line) !important;
+            border-radius: 8px !important;
+            background: #ffffff !important;
+            color: var(--text) !important;
+            box-shadow: none !important;
+            font-size: 13px !important;
+            font-weight: 560 !important;
+        }
+
+        .btn:hover,
+        .icon-btn:hover,
+        .crumb-btn:hover,
+        .growth-actions button:hover,
+        .growth-report-controls button:hover,
+        .business-report-controls button:hover,
+        .api-key-page button:hover,
+        .api-reference button:hover {
+            background: var(--surface-soft) !important;
+            border-color: var(--line-strong) !important;
+            transform: none !important;
+            box-shadow: none !important;
+        }
+
+        .btn.primary,
+        .primary,
+        .auth-submit,
+        .growth-actions button,
+        .growth-report-controls > button,
+        .business-report-controls > button,
+        .business-report-preset button.active,
+        .growth-report-preset button.active,
+        .date-range-actions button.primary,
+        .tag-filter-actions .primary {
+            border-color: var(--text) !important;
+            background: var(--text) !important;
+            color: #ffffff !important;
+            box-shadow: none !important;
+        }
+
+        .btn.ghost,
+        .status-pill,
+        .coverage-pill,
+        .pool-pill,
+        .tag-chip,
+        .creator-tag-pill,
+        .product-count-pill,
+        .api-reference-pills span {
+            border-color: var(--line) !important;
+            background: var(--surface-soft) !important;
+            color: var(--muted) !important;
+            box-shadow: none !important;
+            font-weight: 560 !important;
+        }
+
+        .growth-metric-card,
+        .growth-daily-card,
+        .growth-source-card,
+        .growth-source-grid div,
+        .business-report-summary article,
+        .business-report-table-card,
+        .api-key-page-card,
+        .api-key-panel,
+        .api-key-row,
+        .api-code-card,
+        .api-base-card,
+        .api-resource-card,
+        .api-reference-section,
+        .publish-check-panel,
+        .publish-check-hero,
+        .publish-result-card,
+        .publish-check-summary,
+        .publish-check-window,
+        .product-folder,
+        .product-card,
+        .product-stat,
+        .country-sidebar,
+        .country-workspace,
+        .topic-panel,
+        .concept-group,
+        .detail,
+        .detail-grid,
+        .tag-card,
+        .tag-country-group,
+        .pool-performance,
+        .pool-performance-card,
+        .account-pool-table-wrap,
+        .database-panel,
+        .database-stat,
+        .database-json,
+        .slideshow-list,
+        .slideshow-item,
+        .reelfarm-card,
+        .cloud-product-rail,
+        .cloud-seat-map,
+        .cloud-product-card,
+        .cloud-country-head,
+        .cloud-country-block,
+        .cloud-ip-group-card,
+        .cloud-phone-slot,
+        .cloud-phone-detail-card,
+        .cloud-phone-status,
+        .cloud-seat-summary,
+        .cloud-inline-warning {
+            border-color: var(--line) !important;
+            border-radius: 12px !important;
+            background: #ffffff !important;
+            box-shadow: var(--shadow) !important;
+            color: var(--text) !important;
+        }
+
+        .metric,
+        .metric-card,
+        .database-stat,
+        .tag-kpis div,
+        .tag-country-kpis div,
+        .business-report-summary article,
+        .growth-metric-card,
+        .pool-performance-card,
+        .product-kpi-card,
+        .product-stat-grid,
+        .material-data-cell,
+        .cloud-phone-status {
+            background: var(--surface-soft) !important;
+        }
+
+        .business-report-summary article::after,
+        .product-kpi-card::after {
+            height: 2px !important;
+            opacity: 0.85 !important;
+        }
+
+        .business-report-summary strong,
+        .growth-metric-card strong,
+        .metric-value,
+        .database-stat-value,
+        .product-stat strong,
+        .total-views-cell,
+        .metric-main {
+            color: var(--text) !important;
+            font-weight: 650 !important;
+        }
+
+        .business-report-summary article:nth-child(1) strong,
+        .growth-metric-card:nth-child(1) strong,
+        .total-views-cell {
+            color: var(--blue) !important;
+        }
+
+        .business-report-summary article:nth-child(2) strong,
+        .download-cell {
+            color: #0f766e !important;
+        }
+
+        .business-report-summary article:nth-child(4) strong,
+        .rate-cell {
+            color: var(--gold) !important;
+        }
+
+        .growth-daily-table-wrap,
+        .business-report-table-wrap,
+        .account-pool-table-wrap,
+        .roaster-table-wrap,
+        .assignment-table,
+        .creator-table,
+        .database-table-wrap {
+            border: 1px solid var(--line) !important;
+            border-radius: 12px !important;
+            background: #ffffff !important;
+            box-shadow: none !important;
+        }
+
+        .growth-daily-table,
+        .business-report-table,
+        .account-pool-table,
+        .roaster-table,
+        .assignment-table,
+        .creator-table,
+        .database-table {
+            background: #ffffff !important;
+            color: var(--text) !important;
+        }
+
+        .growth-daily-table th,
+        .business-report-table th,
+        .account-pool-table th,
+        .roaster-table th,
+        .assignment-table-head,
+        .creator-table-head,
+        .database-table th {
+            background: var(--surface-soft) !important;
+            color: var(--muted) !important;
+            border-color: var(--line) !important;
+            font-weight: 560 !important;
+            text-transform: none !important;
+        }
+
+        .growth-daily-table td,
+        .business-report-table td,
+        .account-pool-table td,
+        .roaster-table td,
+        .assignment-cell,
+        .creator-row,
+        .database-table td {
+            border-color: var(--line) !important;
+            color: var(--text) !important;
+            font-weight: 520 !important;
+        }
+
+        .product-list {
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)) !important;
+            gap: 14px !important;
+        }
+
+        .product-card {
+            min-height: 210px !important;
+            overflow: hidden !important;
+        }
+
+        .product-main .product-logo,
+        .product-logo,
+        .product-logo-display,
+        .cloud-product-logo,
+        .reelfarm-avatar,
+        .tag-account-avatar {
+            border-color: var(--line) !important;
+            border-radius: 10px !important;
+            background: #ffffff !important;
+            box-shadow: none !important;
+        }
+
+        .product-stat-grid {
+            border-top: 1px solid var(--line) !important;
+            background: #ffffff !important;
+        }
+
+        .product-stat {
+            border-radius: 0 !important;
+            box-shadow: none !important;
+        }
+
+        .product-stat:hover,
+        .cloud-product-card:hover,
+        .cloud-product-card.active,
+        .cloud-phone-slot:hover,
+        .cloud-phone-slot.selected {
+            background: var(--surface-soft) !important;
+            border-color: var(--line-strong) !important;
+            transform: none !important;
+            box-shadow: none !important;
+        }
+
+        .cloud-phone-layout,
+        .workspace,
+        .country-workspace,
+        .cloud-country-head {
+            background: #ffffff !important;
+        }
+
+        .cloud-product-card.active {
+            box-shadow: inset 3px 0 0 var(--text) !important;
+        }
+
+        .cloud-phone-slot.running {
+            background: #ecfdf5 !important;
+            color: #047857 !important;
+        }
+
+        .cloud-phone-slot.ready {
+            background: #eff6ff !important;
+            color: #2563eb !important;
+        }
+
+        .cloud-phone-slot.warming {
+            background: #fffbeb !important;
+            color: #b45309 !important;
+        }
+
+        .cloud-phone-slot.offline,
+        .cloud-phone-slot.empty {
+            background: #f8f9fb !important;
+            color: var(--subtle) !important;
+        }
+
+        .auth-overlay {
+            background: #ffffff !important;
+        }
+
+        .auth-card {
+            border-color: var(--line) !important;
+            border-radius: 12px !important;
+            background: #ffffff !important;
+            box-shadow: var(--shadow) !important;
+        }
+
+        .auth-dot {
+            display: none !important;
+        }
+
+        .empty-state,
+        .growth-loading {
+            border: 1px solid var(--line) !important;
+            border-radius: 12px !important;
+            background: var(--surface-soft) !important;
+            color: var(--muted) !important;
+        }
+
+        .growth-error,
+        .account-pool-error,
+        .auth-error {
+            border-color: #f3c5c1 !important;
+            background: #fff7f7 !important;
+            color: var(--red) !important;
+        }
+
+        @media (max-width: 980px) {
+            .topbar {
+                margin: 18px 18px 0 !important;
+            }
+
+            .growth-page,
+            .business-report-page,
+            .api-key-page,
+            .cloud-phone-page,
+            .page-shell,
+            .publish-check-board {
+                padding: 18px !important;
+            }
+        }
