@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { formatFeishuMetric } from '@/lib/feishuReportHelpers';
 import type { FeishuGrowthSyncResult, FeishuSourceSyncResult } from '@/hooks/useFeishuReport';
 import type {
@@ -447,9 +447,9 @@ function FeishuCountryAvgTrendChart({
   title: string;
   countries: NonNullable<FeishuCardData['countryAvgTrend']>[string];
 }) {
-  const chart = useMemo(() => {
+  const baseChart = useMemo(() => {
     const labelMap = new Map<string, { date: string; label: string }>();
-    const seriesSource = (countries || []).map(country => {
+    const seriesSource = (countries || []).map((country, index) => {
       const rows = (country.rows || [])
         .map(row => ({
           date: String(row.date || '').slice(0, 10),
@@ -459,14 +459,38 @@ function FeishuCountryAvgTrendChart({
         }))
         .filter(row => row.date && row.rfAvg !== null && Number.isFinite(row.rfAvg));
       rows.forEach(row => labelMap.set(row.date, { date: row.date, label: row.label }));
+      const countryName = country.countryName || country.countryCode || 'Country';
       return {
-        countryName: country.countryName || country.countryCode || 'Country',
+        id: `${country.countryCode || countryName}-${index}`,
+        countryName,
         flag: country.flag || '🌐',
+        color: countryTrendColors[index % countryTrendColors.length],
         rows,
       };
     }).filter(country => country.rows.length);
 
     const labels = Array.from(labelMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+    return { labels, seriesSource };
+  }, [countries]);
+
+  const countrySelectionKey = baseChart.seriesSource.map(series => series.id).join('|');
+  const [selectedCountryIds, setSelectedCountryIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    setSelectedCountryIds(baseChart.seriesSource.map(series => series.id));
+  }, [countrySelectionKey, baseChart.seriesSource]);
+
+  const selectedIdSet = useMemo(() => {
+    const activeIds = selectedCountryIds.length
+      ? selectedCountryIds
+      : baseChart.seriesSource.map(series => series.id);
+    return new Set(activeIds);
+  }, [selectedCountryIds, baseChart.seriesSource]);
+
+  const chart = useMemo(() => {
+    const labels = baseChart.labels;
+    const visibleSource = baseChart.seriesSource.filter(country => selectedIdSet.has(country.id));
+    const seriesSource = visibleSource.length ? visibleSource : baseChart.seriesSource;
     const values = seriesSource.flatMap(country => country.rows.map(row => Number(row.rfAvg || 0)));
     const width = 1040;
     const pad = { top: 46, right: 36, bottom: 42, left: 62 };
@@ -482,7 +506,7 @@ function FeishuCountryAvgTrendChart({
       return pad.top + plotHeight - ratio * plotHeight;
     };
     const labelIndexes = allLabelIndexes(labels.length);
-    const series = seriesSource.map((country, index) => {
+    const series = seriesSource.map(country => {
       const rowsByDate = new Map(country.rows.map(row => [row.date, row]));
       const points = labels
         .map((label, labelIndex) => {
@@ -498,7 +522,6 @@ function FeishuCountryAvgTrendChart({
         .filter(Boolean) as Array<{ x: number; y: number; value: number; date: string }>;
       return {
         ...country,
-        color: countryTrendColors[index % countryTrendColors.length],
         points,
         path: svgSmoothPath(points),
       };
@@ -508,9 +531,20 @@ function FeishuCountryAvgTrendChart({
       value,
     }));
     return { labels, width, height, pad, series, grid, labelIndexes };
-  }, [countries]);
+  }, [baseChart, selectedIdSet]);
 
-  if (!chart.series.length || !chart.labels.length) {
+  const toggleCountry = (countryId: string) => {
+    setSelectedCountryIds(current => {
+      const activeIds = current.length ? current : baseChart.seriesSource.map(series => series.id);
+      const isActive = activeIds.includes(countryId);
+      if (isActive && activeIds.length <= 1) return activeIds;
+      return isActive
+        ? activeIds.filter(id => id !== countryId)
+        : [...activeIds, countryId];
+    });
+  };
+
+  if (!baseChart.seriesSource.length || !baseChart.labels.length) {
     return (
       <div className="feishu-country-trend is-empty">
         <div className="feishu-native-section-title">{title}</div>
@@ -524,11 +558,21 @@ function FeishuCountryAvgTrendChart({
       <div className="feishu-country-trend-head">
         <div className="feishu-native-section-title">{title}</div>
         <div className="feishu-country-legend">
-          {chart.series.map(series => (
-            <span key={series.countryName} style={{ '--series-color': series.color } as CSSProperties}>
-              {series.flag} {series.countryName}
-            </span>
-          ))}
+          {baseChart.seriesSource.map(series => {
+            const active = selectedIdSet.has(series.id);
+            return (
+              <button
+                type="button"
+                key={series.id}
+                className={active ? 'is-active' : 'is-muted'}
+                style={{ '--series-color': series.color } as CSSProperties}
+                aria-pressed={active}
+                onClick={() => toggleCountry(series.id)}
+              >
+                {series.flag} {series.countryName}
+              </button>
+            );
+          })}
         </div>
       </div>
       <svg

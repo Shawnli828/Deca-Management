@@ -1837,21 +1837,60 @@
             display: flex;
             flex-wrap: wrap;
             gap: 8px 12px;
-            color: #64748b;
             font-size: 11px;
             line-height: 1.2;
             font-weight: 500;
         }
 
-        .feishu-country-legend span::before {
+        .feishu-country-legend button {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            min-width: 0;
+            border: 0;
+            background: transparent;
+            color: #64748b;
+            cursor: pointer;
+            font: inherit;
+            line-height: inherit;
+            padding: 0;
+            transition: color 0.15s ease, opacity 0.15s ease;
+        }
+
+        .feishu-country-legend button::before {
             content: "";
             display: inline-block;
             width: 14px;
             height: 3px;
-            margin-right: 5px;
             border-radius: 999px;
             background: var(--series-color);
-            vertical-align: middle;
+            flex: 0 0 auto;
+        }
+
+        .feishu-country-legend button.is-active {
+            color: #334155;
+            opacity: 1;
+        }
+
+        .feishu-country-legend button.is-muted {
+            color: #94a3b8;
+            opacity: 0.46;
+        }
+
+        .feishu-country-legend button.is-muted::before {
+            background: #cbd5e1;
+        }
+
+        .feishu-country-legend button:hover,
+        .feishu-country-legend button:focus-visible {
+            color: #0f172a;
+            opacity: 1;
+            outline: none;
+        }
+
+        .feishu-country-legend button:focus-visible {
+            text-decoration: underline;
+            text-underline-offset: 3px;
         }
 
         .feishu-country-trend svg {
