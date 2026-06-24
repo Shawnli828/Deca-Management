@@ -292,16 +292,58 @@ def product_trend_rows(report, product):
 
 def product_daily_rows(products):
     rows = []
+    total_views = 0
+    total_rf_views = 0
+    total_clone_views = 0
+    total_downloads = 0
+    total_published = 0
+    total_expected = 0
+    has_downloads = False
     for product in products or []:
         downloads = product.get("downloads")
+        total_view = safe_int(product.get("total_views"))
+        rf_view = safe_int(product.get("reelfarm_views"))
+        clone_view = safe_int(product.get("clone_views"))
+        published = safe_int(product.get("reelfarm_published_automations"))
+        expected = safe_int(product.get("reelfarm_expected_automations"))
+        total_views += total_view
+        total_rf_views += rf_view
+        total_clone_views += clone_view
+        total_published += published
+        total_expected += expected
+        if downloads is not None:
+            has_downloads = True
+            total_downloads += safe_int(downloads)
         rows.append({
             "product": product_name(product),
-            "post": f"{metric_text(product.get('reelfarm_published_automations'), precision=0)}/{metric_text(product.get('reelfarm_expected_automations'), precision=0)}",
-            "view": safe_int(product.get("total_views")),
+            "post": f"{metric_text(published, precision=0)}/{metric_text(expected, precision=0)}",
+            "view": total_view,
             "rf_avg": round(safe_float(product.get("reelfarm_avg_views")) or 0, 1),
             "download": safe_int(downloads) if downloads is not None else 0,
             "conversion": percent_text(product.get("download_rate")),
+            "ttl_view": metric_text(total_view, precision=0),
+            "rf_view": metric_text(rf_view, precision=0),
+            "clone_view": metric_text(clone_view, precision=0),
+            "download_text": metric_text(downloads, precision=0),
+            "download_ttl_view": percent_text(product.get("download_rate")),
+            "posted_supposed": f"{metric_text(published, precision=0)}/{metric_text(expected, precision=0)}",
         })
+    total_download_value = total_downloads if has_downloads else None
+    total_rate = total_downloads / total_views * 100 if has_downloads and total_views else None
+    rows.append({
+        "product": "合计",
+        "post": f"{metric_text(total_published, precision=0)}/{metric_text(total_expected, precision=0)}",
+        "view": total_views,
+        "rf_avg": None,
+        "download": total_downloads if has_downloads else 0,
+        "conversion": percent_text(total_rate),
+        "ttl_view": metric_text(total_views, precision=0),
+        "rf_view": metric_text(total_rf_views, precision=0),
+        "clone_view": metric_text(total_clone_views, precision=0),
+        "download_text": metric_text(total_download_value, precision=0),
+        "download_ttl_view": percent_text(total_rate),
+        "posted_supposed": f"{metric_text(total_published, precision=0)}/{metric_text(total_expected, precision=0)}",
+    })
     return rows
 
 
@@ -473,7 +515,9 @@ def overview_template_variables(report, *, product_names=None, history_by_code=N
     variables = common_metric_variables(report, products)
     variables.update(product_comparison_charts(products))
     variables.update(trend_charts(report, products, history_by_code, product_series=True))
-    variables["product_daily_rows"] = product_daily_rows(products)
+    overview_rows = product_daily_rows(products)
+    variables["product_daily_rows"] = overview_rows
+    variables["overview_product_rows"] = overview_rows
     variables["view_download_trend_chart"] = daily_view_download_chart(
         "View / Download 日趋势",
         overview_trend_rows(report),
