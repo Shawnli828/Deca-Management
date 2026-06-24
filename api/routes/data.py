@@ -184,3 +184,39 @@ def get_growth_sync_party_a(request: Request, days: int = 30):
         raise HTTPException(status_code=400, detail=str(error)) from error
     except RuntimeError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@router.get("/api/growth/sync-db", response_model=FlexibleResponse, operation_id="get_growth_sync_db")
+def get_growth_sync_db(request: Request, days: int = 30):
+    if not cron_authorized(request.headers):
+        require_dashboard_auth(request)
+    try:
+        return sync_products_growth_snapshots(("DB",), days)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@router.get("/api/growth/sync-dm", response_model=FlexibleResponse, operation_id="get_growth_sync_dm")
+def get_growth_sync_dm(request: Request, days: int = 30):
+    if not cron_authorized(request.headers):
+        require_dashboard_auth(request)
+    try:
+        return sync_products_growth_snapshots(("DM",), days)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@router.get("/api/growth/sync-dl", response_model=FlexibleResponse, operation_id="get_growth_sync_dl")
+def get_growth_sync_dl(request: Request, days: int = 30):
+    if not cron_authorized(request.headers):
+        require_dashboard_auth(request)
+    try:
+        return sync_products_growth_snapshots(("DL",), days)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
