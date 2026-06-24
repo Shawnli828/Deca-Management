@@ -13,20 +13,12 @@
   ],
   "crons": [
     {
-      "path": "/api/reelfarm/sync-all",
+      "path": "/api/sync/daily-all",
       "schedule": "30 1 * * *"
     },
     {
-      "path": "/api/museon/sync-all",
-      "schedule": "5 2 * * *"
-    },
-    {
-      "path": "/api/growth/sync-all",
-      "schedule": "20 2 * * *"
-    },
-    {
       "path": "/api/reports/daily-feishu-auto",
-      "schedule": "0 3 * * *"
+      "schedule": "30 3 * * *"
     }
   ],
   "routes": [
