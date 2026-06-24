@@ -29,6 +29,7 @@ from server_modules.services.data_runtime import (
 )
 
 from .shared import (
+    cron_authorized,
     query_as_lists,
     require_dashboard_auth,
     require_data_query_auth,
@@ -37,6 +38,18 @@ from .shared import (
 
 
 router = APIRouter()
+
+
+PARTY_A_GROWTH_PRODUCT_CODES = ("DB", "DM", "DL")
+
+
+def _growth_codes_from_query(value: str):
+    codes = []
+    for item in str(value or "").split(","):
+        code = item.strip().upper()
+        if code and code not in codes:
+            codes.append(code)
+    return codes
 
 
 @router.get("/api/data", response_model=DataResponse)
@@ -143,6 +156,30 @@ def post_growth_sync_products(request: Request, payload: GrowthSyncProductsReque
             payload.days,
         )
         return result
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@router.get("/api/growth/sync-products", response_model=FlexibleResponse, operation_id="get_growth_sync_products")
+def get_growth_sync_products(request: Request, product_codes: str = "", days: int = 30):
+    if not cron_authorized(request.headers):
+        require_dashboard_auth(request)
+    try:
+        return sync_products_growth_snapshots(_growth_codes_from_query(product_codes), days)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@router.get("/api/growth/sync-party-a", response_model=FlexibleResponse, operation_id="get_growth_sync_party_a")
+def get_growth_sync_party_a(request: Request, days: int = 30):
+    if not cron_authorized(request.headers):
+        require_dashboard_auth(request)
+    try:
+        return sync_products_growth_snapshots(PARTY_A_GROWTH_PRODUCT_CODES, days)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except RuntimeError as error:
