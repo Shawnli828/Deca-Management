@@ -13,8 +13,16 @@
   ],
   "crons": [
     {
-      "path": "/api/sync/daily-all",
+      "path": "/api/reelfarm/sync-all",
       "schedule": "30 1 * * *"
+    },
+    {
+      "path": "/api/museon/sync-all",
+      "schedule": "50 1 * * *"
+    },
+    {
+      "path": "/api/growth/sync-party-a",
+      "schedule": "20 2 * * *"
     },
     {
       "path": "/api/reports/daily-feishu-auto",
