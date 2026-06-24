@@ -40,6 +40,7 @@ def main():
     from server_modules.services.daily_feishu_runtime import report_payload
     from server_modules.services.daily_feishu_service import DailyFeishuReportService
     from server_modules.services.feishu_card_adapter import daily_report_card_data
+    from server_modules.services.feishu_template_variables import overview_template_variables
 
     trend_service = DailyFeishuReportService(
         env={},
@@ -154,6 +155,26 @@ def main():
     trend_groups = card_data.get("trendGroups") or []
     assert_equal([group.get("label") for group in trend_groups], ["总览", "Demi"], "card trend groups")
     assert_equal(len(trend_groups[1].get("trend") or []), 0, "product trend before configured start should be empty")
+    template_variables = overview_template_variables(report, product_names=["Demi"])
+    overview_product_rows = template_variables.get("overview_product_rows") or []
+    allowed_overview_row_fields = {
+        "product",
+        "ttl_view",
+        "rf_view",
+        "clone_view",
+        "download_text",
+        "download_ttl_view",
+        "posted_supposed",
+    }
+    assert_true(overview_product_rows, "template overview product table rows should exist")
+    assert_true(
+        all(set(row.keys()) <= allowed_overview_row_fields for row in overview_product_rows),
+        "overview product table rows should only include CardKit table columns",
+    )
+    assert_true(
+        any("download" in row for row in template_variables.get("product_daily_rows") or []),
+        "legacy product daily rows should keep old fields",
+    )
 
     assert_equal(card.get("schema"), "2.0", "card schema")
     assert_equal(card.get("header", {}).get("template"), "blue", "card header template")

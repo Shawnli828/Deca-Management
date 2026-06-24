@@ -347,6 +347,22 @@ def product_daily_rows(products):
     return rows
 
 
+def overview_product_table_rows(rows):
+    allowed_fields = (
+        "product",
+        "ttl_view",
+        "rf_view",
+        "clone_view",
+        "download_text",
+        "download_ttl_view",
+        "posted_supposed",
+    )
+    return [
+        {field: row.get(field) for field in allowed_fields}
+        for row in rows or []
+    ]
+
+
 def country_rf_avg_trend_chart(report, product):
     trend = (report or {}).get("trend") or {}
     if not isinstance(trend, dict) or not product:
@@ -517,7 +533,7 @@ def overview_template_variables(report, *, product_names=None, history_by_code=N
     variables.update(trend_charts(report, products, history_by_code, product_series=True))
     overview_rows = product_daily_rows(products)
     variables["product_daily_rows"] = overview_rows
-    variables["overview_product_rows"] = overview_rows
+    variables["overview_product_rows"] = overview_product_table_rows(overview_rows)
     variables["view_download_trend_chart"] = daily_view_download_chart(
         "View / Download 日趋势",
         overview_trend_rows(report),
