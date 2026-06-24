@@ -34,7 +34,8 @@ from server_modules.sync_status import format_sync_readiness_line
 
 DEFAULT_FEISHU_OVERVIEW_TEMPLATE_ID = "AAqNdTzlwzkaC"
 DEFAULT_FEISHU_PRODUCT_TEMPLATE_ID = "AAqNBsXlJdHqX"
-DEFAULT_FEISHU_TEMPLATE_VERSION = "1.0.0"
+DEFAULT_FEISHU_OVERVIEW_TEMPLATE_VERSION = "1.0.1"
+DEFAULT_FEISHU_PRODUCT_TEMPLATE_VERSION = "1.0.0"
 DEFAULT_DAILY_REPORT_CHAT_ID = "oc_8a24e41ee7f2872b17724d830d818d84"
 FEISHU_TREND_START_DATE = "2026-06-17"
 
@@ -71,6 +72,20 @@ class DailyFeishuReportService:
         )
 
     def template_config(self):
+        overview_template_id = (
+            self.env.get("FEISHU_OVERVIEW_TEMPLATE_ID", "").strip()
+            or DEFAULT_FEISHU_OVERVIEW_TEMPLATE_ID
+        )
+        overview_template_version = (
+            self.env.get("FEISHU_OVERVIEW_TEMPLATE_VERSION", "").strip()
+            or DEFAULT_FEISHU_OVERVIEW_TEMPLATE_VERSION
+        )
+        if (
+            overview_template_id == DEFAULT_FEISHU_OVERVIEW_TEMPLATE_ID
+            and overview_template_version == "1.0.0"
+        ):
+            overview_template_version = DEFAULT_FEISHU_OVERVIEW_TEMPLATE_VERSION
+
         return {
             "app_id": self.env.get("FEISHU_APP_ID", "").strip(),
             "app_secret": self.env.get("FEISHU_APP_SECRET", "").strip(),
@@ -79,21 +94,15 @@ class DailyFeishuReportService:
                 or DEFAULT_DAILY_REPORT_CHAT_ID
                 or self.env.get("FEISHU_CHAT_ID", "").strip()
             ),
-            "overview_template_id": (
-                self.env.get("FEISHU_OVERVIEW_TEMPLATE_ID", "").strip()
-                or DEFAULT_FEISHU_OVERVIEW_TEMPLATE_ID
-            ),
-            "overview_template_version": (
-                self.env.get("FEISHU_OVERVIEW_TEMPLATE_VERSION", "").strip()
-                or DEFAULT_FEISHU_TEMPLATE_VERSION
-            ),
+            "overview_template_id": overview_template_id,
+            "overview_template_version": overview_template_version,
             "product_template_id": (
                 self.env.get("FEISHU_PRODUCT_TEMPLATE_ID", "").strip()
                 or DEFAULT_FEISHU_PRODUCT_TEMPLATE_ID
             ),
             "product_template_version": (
                 self.env.get("FEISHU_PRODUCT_TEMPLATE_VERSION", "").strip()
-                or DEFAULT_FEISHU_TEMPLATE_VERSION
+                or DEFAULT_FEISHU_PRODUCT_TEMPLATE_VERSION
             ),
             "product_names": parse_product_names(self.env.get("FEISHU_TEMPLATE_PRODUCT_NAMES", "")),
         }
