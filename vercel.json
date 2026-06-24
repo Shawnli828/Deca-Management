@@ -21,8 +21,16 @@
       "schedule": "50 1 * * *"
     },
     {
-      "path": "/api/growth/sync-party-a",
-      "schedule": "20 2 * * *"
+      "path": "/api/growth/sync-db",
+      "schedule": "10 2 * * *"
+    },
+    {
+      "path": "/api/growth/sync-dm",
+      "schedule": "25 2 * * *"
+    },
+    {
+      "path": "/api/growth/sync-dl",
+      "schedule": "40 2 * * *"
     },
     {
       "path": "/api/reports/daily-feishu-auto",
