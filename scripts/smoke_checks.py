@@ -186,6 +186,33 @@ def main():
     assert_equal(normalized_sync["status"], "success", "normalized sync status")
     assert_equal(normalized_sync["records_count"], 2, "normalized sync records count")
 
+    from server_modules.services import sync_runtime  # noqa: E402
+
+    recorded_sync_runs = []
+    original_safe_record_sync_run = sync_runtime.safe_record_sync_run
+    sync_runtime.safe_record_sync_run = lambda *args, **kwargs: recorded_sync_runs.append((args, kwargs)) or {"ok": True}
+    try:
+        recorded_result = sync_runtime.run_recorded_sync(
+            "reelfarm",
+            lambda: {"ok": True, "records": [{"id": "rf-1"}]},
+        )
+        assert_equal(recorded_result["source"], "reelfarm", "recorded sync source")
+        assert_equal(recorded_result["status"], "success", "recorded sync status")
+        assert_equal(recorded_result["records_count"], 1, "recorded sync records count")
+        assert_equal(recorded_sync_runs[0][0][0], "reelfarm", "recorded sync run source")
+        assert_equal(recorded_sync_runs[0][0][1], "success", "recorded sync run status")
+        assert_equal(recorded_sync_runs[0][1]["records_count"], 1, "recorded sync run records count")
+        try:
+            sync_runtime.run_recorded_sync("museon_clone", lambda: (_ for _ in ()).throw(RuntimeError("timeout")))
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError("recorded sync should re-raise runner failures")
+        assert_equal(recorded_sync_runs[1][0][0], "museon_clone", "failed recorded sync run source")
+        assert_equal(recorded_sync_runs[1][0][1], "error", "failed recorded sync run status")
+    finally:
+        sync_runtime.safe_record_sync_run = original_safe_record_sync_run
+
     failed_sync = error_sync_result("museon_clone", "timeout")
     assert_equal(failed_sync["ok"], False, "failed sync ok flag")
     assert_equal(failed_sync["status"], "error", "failed sync status")

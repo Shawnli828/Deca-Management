@@ -55,7 +55,7 @@ def sync_all_reelfarm_records(
 
     save_data(data)
     return normalized_sync_result("reelfarm", {
-        "ok": True,
+        "ok": not errors,
         "synced_at": synced_at,
         "synced_count": successes,
         "error_count": len(errors),
@@ -110,7 +110,7 @@ def sync_all_museon_clone_records(
                 errors.append({"product_code": product_code, "country_code": country_code, "error": str(error)})
 
     return normalized_sync_result("museon_clone", {
-        "ok": True,
+        "ok": not errors,
         "synced_count": successes,
         "skipped_count": skipped,
         "error_count": len(errors),

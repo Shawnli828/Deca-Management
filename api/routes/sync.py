@@ -7,6 +7,7 @@ from api.schemas.requests import (
 )
 from api.schemas.responses import FlexibleResponse, SyncResultResponse
 from server_modules.services.sync_runtime import (
+    run_recorded_sync,
     sync_all_growth_snapshots,
     sync_all_museon_clone_records,
     sync_all_reelfarm_records,
@@ -99,7 +100,7 @@ def museon_sync_all(request: Request):
         require_dashboard_auth(request)
 
     try:
-        return sync_all_museon_clone_records()
+        return run_recorded_sync("museon_clone", sync_all_museon_clone_records)
     except RuntimeError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
 
@@ -111,7 +112,7 @@ def reelfarm_sync_all(request: Request):
         require_dashboard_auth(request)
 
     try:
-        return sync_all_reelfarm_records()
+        return run_recorded_sync("reelfarm", sync_all_reelfarm_records)
     except RuntimeError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
 
@@ -123,6 +124,6 @@ def growth_sync_all(request: Request, days: int = 30):
         require_dashboard_auth(request)
 
     try:
-        return sync_all_growth_snapshots(days)
+        return run_recorded_sync("growth_mixpanel", lambda: sync_all_growth_snapshots(days))
     except RuntimeError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error

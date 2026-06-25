@@ -1,3 +1,5 @@
+import json
+import time
 from datetime import datetime, timezone
 
 from server_modules.app_runtime import connect_db, db_placeholder, init_relational_schema, load_data, save_data
@@ -60,6 +62,53 @@ def safe_record_sync_run(*args, **kwargs):
         return record_sync_run(*args, **kwargs)
     except Exception as error:
         return {"error": str(error)}
+
+
+def run_recorded_sync(source, runner, *, product_code="", country_code=""):
+    started = time.perf_counter()
+    started_at = datetime.now(timezone.utc).isoformat()
+    try:
+        payload = runner()
+        duration = round(time.perf_counter() - started, 3)
+        finished_at = datetime.now(timezone.utc).isoformat()
+        result = normalized_sync_result(
+            source,
+            payload,
+            product_code=product_code,
+            country_code=country_code,
+            started_at=started_at,
+            finished_at=finished_at,
+            duration_seconds=duration,
+        )
+        ok = bool(result.get("ok"))
+        safe_record_sync_run(
+            source,
+            "success" if ok else "error",
+            started_at,
+            finished_at,
+            duration,
+            product_code=product_code or result.get("product_code") or "",
+            country_code=country_code or result.get("country_code") or "",
+            records_count=sync_run_records_count(result),
+            error="" if ok else json.dumps(result.get("errors") or result.get("error") or "", ensure_ascii=False)[:1000],
+            meta=compact_sync_run_meta(result),
+        )
+        return result
+    except Exception as error:
+        duration = round(time.perf_counter() - started, 3)
+        finished_at = datetime.now(timezone.utc).isoformat()
+        safe_record_sync_run(
+            source,
+            "error",
+            started_at,
+            finished_at,
+            duration,
+            product_code=product_code,
+            country_code=country_code,
+            error=str(error),
+            meta={"error": str(error)},
+        )
+        raise
 
 
 def latest_sync_runs(sources=None):
