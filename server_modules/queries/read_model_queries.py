@@ -256,11 +256,22 @@ def query_product_kpis(query):
     placeholder = db_placeholder()
     now_utc = datetime.now(timezone.utc)
     beijing = timezone(timedelta(hours=8))
-    current_local = now_utc.astimezone(beijing)
-    today_start_local = datetime(current_local.year, current_local.month, current_local.day, tzinfo=beijing)
+    date_from = query_value(query, "date_from")
+    date_to = query_value(query, "date_to")
+    if date_to:
+        end_day = datetime.strptime(date_to[:10], "%Y-%m-%d").date()
+        today_start_local = datetime(end_day.year, end_day.month, end_day.day, tzinfo=beijing) + timedelta(days=1)
+    else:
+        current_local = now_utc.astimezone(beijing)
+        today_start_local = datetime(current_local.year, current_local.month, current_local.day, tzinfo=beijing)
     yesterday_start_local = today_start_local - timedelta(days=1)
-    seven_start_local = yesterday_start_local - timedelta(days=6)
+    if date_from:
+        start_day = datetime.strptime(date_from[:10], "%Y-%m-%d").date()
+        seven_start_local = datetime(start_day.year, start_day.month, start_day.day, tzinfo=beijing)
+    else:
+        seven_start_local = yesterday_start_local - timedelta(days=6)
     seven_end_local = today_start_local
+    window_days = max(1, (seven_end_local.date() - seven_start_local.date()).days)
     yesterday_start = yesterday_start_local.astimezone(timezone.utc).isoformat()
     yesterday_end = today_start_local.astimezone(timezone.utc).isoformat()
     seven_start = seven_start_local.astimezone(timezone.utc).isoformat()
@@ -325,7 +336,7 @@ def query_product_kpis(query):
     data = row_dict(row)
     daily_creator_sets = {
         (seven_start_local + timedelta(days=day_index)).date().isoformat(): set()
-        for day_index in range(7)
+        for day_index in range(window_days)
     }
     for daily_row in daily_rows:
         daily_data = row_dict(daily_row)
@@ -335,7 +346,7 @@ def query_product_kpis(query):
         local_day = parsed.astimezone(beijing).date().isoformat()
         if local_day in daily_creator_sets and daily_data.get("account_id"):
             daily_creator_sets[local_day].add(daily_data["account_id"])
-    average_daily_creators = sum(len(accounts) for accounts in daily_creator_sets.values()) / 7
+    average_daily_creators = sum(len(accounts) for accounts in daily_creator_sets.values()) / window_days
     today_creators = int(data.get("today_creators") or 0)
     today_posts = int(data.get("today_posts") or 0)
     today_views = int(data.get("today_views") or 0)
@@ -367,10 +378,10 @@ def query_product_kpis(query):
             "views": seven_views,
             "likes": seven_likes,
             "average_creators": average_daily_creators,
-            "average_posts": seven_posts / 7,
+            "average_posts": seven_posts / window_days,
             "average_views": round(seven_views / seven_posts) if seven_posts else 0,
-            "average_views_per_day": seven_views / 7,
-            "average_likes": seven_likes / 7,
+            "average_views_per_day": seven_views / window_days,
+            "average_likes": seven_likes / window_days,
             "average_er": (interactions / seven_views * 100) if seven_views else 0,
             "interactions": interactions,
             "utc_window": {"start": seven_start, "end": seven_end},

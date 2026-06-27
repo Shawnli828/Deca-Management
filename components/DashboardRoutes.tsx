@@ -1,6 +1,7 @@
 'use client';
 
 import { ApiKeyPage } from '@/components/ApiKeyPage';
+import { AutomationCoveragePage } from '@/components/automationCoverage/AutomationCoveragePage';
 import { BusinessMaterialReport } from '@/components/BusinessMaterialReport';
 import { CloudPhoneMap } from '@/components/cloudPhone/CloudPhoneMap';
 import { FeishuReportPage } from '@/components/feishuReport/FeishuReportPage';
@@ -26,6 +27,7 @@ export type DashboardTool =
   | 'slideshow'
   | 'cloneSlideshow'
   | 'cloudPhones'
+  | 'automationCoverage'
   | 'publishCheck'
   | 'apiKeys';
 
@@ -201,6 +203,9 @@ export function DashboardRoutes({
       </DashboardToolSection>
       <DashboardToolSection active={tool === 'cloudPhones'}>
         <CloudPhoneMap products={products} />
+      </DashboardToolSection>
+      <DashboardToolSection active={tool === 'automationCoverage'}>
+        <AutomationCoveragePage active={tool === 'automationCoverage'} />
       </DashboardToolSection>
       <DashboardToolSection active={tool === 'apiKeys'}>
         <ApiKeyPage

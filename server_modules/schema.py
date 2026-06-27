@@ -354,6 +354,34 @@ def init_relational_schema(conn, is_postgres=False, placeholder="?"):
         )
         """,
         """
+        CREATE TABLE IF NOT EXISTS automation_coverage_targets (
+            id TEXT PRIMARY KEY,
+            product_code TEXT NOT NULL,
+            country_code TEXT NOT NULL,
+            target_count INTEGER NOT NULL DEFAULT 0,
+            note TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(product_code, country_code)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS automation_warmup_batches (
+            id TEXT PRIMARY KEY,
+            product_code TEXT NOT NULL,
+            country_code TEXT NOT NULL,
+            batch_name TEXT,
+            account_count INTEGER NOT NULL DEFAULT 0,
+            warmup_start_date TEXT NOT NULL,
+            warmup_days INTEGER NOT NULL DEFAULT 7,
+            warmup_end_date TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'warming',
+            note TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """,
+        """
         CREATE TABLE IF NOT EXISTS schema_migrations (
             version TEXT PRIMARY KEY,
             applied_at TEXT NOT NULL
@@ -392,6 +420,9 @@ def init_relational_schema(conn, is_postgres=False, placeholder="?"):
         "CREATE INDEX IF NOT EXISTS idx_automations_pmc_account_status ON automations(product_market_channel_id, account_id, status)",
         "CREATE INDEX IF NOT EXISTS idx_product_daily_growth_snapshots_product_date ON product_daily_growth_snapshots(product_code, report_date)",
         "CREATE INDEX IF NOT EXISTS idx_product_daily_growth_snapshots_report_date ON product_daily_growth_snapshots(report_date)",
+        "CREATE INDEX IF NOT EXISTS idx_automation_coverage_targets_product_country ON automation_coverage_targets(product_code, country_code)",
+        "CREATE INDEX IF NOT EXISTS idx_automation_warmup_batches_product_country ON automation_warmup_batches(product_code, country_code)",
+        "CREATE INDEX IF NOT EXISTS idx_automation_warmup_batches_status ON automation_warmup_batches(status)",
         "CREATE INDEX IF NOT EXISTS idx_sync_runs_source_finished_at ON sync_runs(source, finished_at)",
         "CREATE INDEX IF NOT EXISTS idx_sync_runs_product_source_finished_at ON sync_runs(product_code, source, finished_at)",
     ]

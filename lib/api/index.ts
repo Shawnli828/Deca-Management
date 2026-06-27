@@ -1,3 +1,4 @@
+import { automationCoverageApi } from './automationCoverage';
 import { authApi } from './auth';
 import { catalogApi } from './catalog';
 import { databaseApi } from './database';
@@ -21,7 +22,8 @@ export const api = {
   ...syncApi,
   ...publishCheckApi,
   ...tagsApi,
-  ...databaseApi
+  ...databaseApi,
+  ...automationCoverageApi
 };
 
 export type ApiClient = typeof api;

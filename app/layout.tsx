@@ -5,6 +5,7 @@ import './styles/features/database-api.css';
 import './styles/features/product-country.css';
 import './styles/features/reelfarm-dashboard.css';
 import './styles/features/account-pool.css';
+import './styles/features/automation-coverage.css';
 import './styles/themes/dark-theme.css';
 import './styles/themes/light-theme.css';
 import './styles/features/cloud-phone.css';

@@ -33,6 +33,72 @@ export type Product = {
   postCount?: number;
 };
 
+export type AutomationCoverageStatus =
+  | 'unset'
+  | 'achieved'
+  | 'ready_to_cover'
+  | 'warming_to_cover'
+  | 'behind'
+  | 'critical';
+
+export type AutomationWarmupBatch = {
+  id: string;
+  product_code: string;
+  country_code: string;
+  batch_name?: string;
+  account_count: number;
+  warmup_start_date: string;
+  warmup_days: number;
+  warmup_end_date: string;
+  remaining_days?: number | null;
+  progress: number;
+  status: 'warming' | 'ready' | 'completed' | 'activated' | 'cancelled' | string;
+  note?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type AutomationCoverageCountry = {
+  country_id?: string;
+  country_code: string;
+  country_name: string;
+  active_count: number;
+  target_count: number;
+  gap_count: number;
+  surplus_count: number;
+  completion_rate?: number | null;
+  warming_count: number;
+  ready_count: number;
+  warmup_progress: number;
+  next_ready_date?: string;
+  next_ready_days?: number | null;
+  status: AutomationCoverageStatus;
+  target_note?: string;
+  warmups: AutomationWarmupBatch[];
+};
+
+export type AutomationCoverageProduct = {
+  product_id?: string;
+  product_code: string;
+  product_name: string;
+  logo_url?: string;
+  active_count: number;
+  target_count: number;
+  gap_count: number;
+  surplus_count: number;
+  warming_count: number;
+  ready_count: number;
+  completion_rate?: number | null;
+  countries: AutomationCoverageCountry[];
+  warmups: AutomationWarmupBatch[];
+};
+
+export type AutomationCoveragePayload = {
+  ok: boolean;
+  generated_at?: string;
+  products: AutomationCoverageProduct[];
+};
+
 export type ProductKpis = {
   product_code?: string;
   today?: {

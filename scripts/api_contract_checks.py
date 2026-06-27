@@ -232,7 +232,13 @@ def main():
             "country row contract",
         )
 
-        product_kpis = client.get("/api/data/query", params={"resource": "product_kpis", "product_code": "DM", "country_code": "GE"})
+        product_kpis = client.get("/api/data/query", params={
+            "resource": "product_kpis",
+            "product_code": "DM",
+            "country_code": "GE",
+            "date_from": "2026-06-13",
+            "date_to": "2026-06-19",
+        })
         assert_status(product_kpis, 200, "product kpis query")
         assert_has_keys(product_kpis.json().get("data") or {}, ["product_code", "country_code", "today", "seven_day"], "product kpis contract")
         assert_true((product_kpis.json().get("data") or {}).get("seven_day", {}).get("views") == 1234, "product kpis should include seeded seven-day views")
