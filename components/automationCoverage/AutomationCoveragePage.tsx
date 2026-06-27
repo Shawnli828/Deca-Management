@@ -117,7 +117,7 @@ function ProductCard({
       </header>
 
       <div className="automation-product-stats" aria-label={`${product.product_name} automation summary`}>
-        <div className="automation-stat primary">
+        <div className="automation-stat featured">
           <span>Active / Target</span>
           <strong>{formatNumber(product.active_count)} / {product.target_count ? formatNumber(product.target_count) : '未设'}</strong>
           <div className="automation-mini-bar"><i style={{ width: progressWidth(completion) }} /></div>

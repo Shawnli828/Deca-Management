@@ -207,14 +207,14 @@ def get_automation_coverage_payload() -> dict[str, Any]:
         product["countries"].append(country)
         product["active_count"] += active_count
         product["target_count"] += target_count
+        product["gap_count"] += gap_count
+        product["surplus_count"] += surplus_count
         product["warming_count"] += warmup_summary["warming_count"]
         product["ready_count"] += warmup_summary["ready_count"]
         product["warmups"].extend(warmups_by_key.get(key, []))
 
     for product in products.values():
         product["countries"].sort(key=lambda country: (country["status"] == "achieved", -country["gap_count"], country["country_name"]))
-        product["gap_count"] = max(product["target_count"] - product["active_count"], 0) if product["target_count"] > 0 else 0
-        product["surplus_count"] = max(product["active_count"] - product["target_count"], 0) if product["target_count"] > 0 else 0
         product["completion_rate"] = _completion(product["active_count"], product["target_count"])
 
     product_list = sorted(
