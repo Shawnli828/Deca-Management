@@ -40,7 +40,7 @@ from .shared import (
 router = APIRouter()
 
 
-PARTY_A_GROWTH_PRODUCT_CODES = ("DB", "DM", "DL")
+PARTY_A_GROWTH_PRODUCT_CODES = ("DB", "DM", "DL", "DU")
 
 
 def _growth_codes_from_query(value: str):
