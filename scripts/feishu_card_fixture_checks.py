@@ -175,6 +175,32 @@ def main():
         any("download" in row for row in template_variables.get("product_daily_rows") or []),
         "legacy product daily rows should keep old fields",
     )
+    dynamic_product_report = {
+        **report,
+        "products": [
+            *(report.get("products") or []),
+            {
+                "product_code": "DP",
+                "product_name": "DP",
+                "total_views": 4321,
+                "reelfarm_views": 3210,
+                "clone_views": 1111,
+                "downloads": 4,
+                "download_rate": 0.09,
+                "reelfarm_published_automations": 3,
+                "reelfarm_expected_automations": 5,
+                "account_alerts": {},
+            },
+        ],
+    }
+    dynamic_rows = overview_template_variables(
+        dynamic_product_report,
+        product_names=["DeenBack", "Demi", "Delust"],
+    ).get("overview_product_rows") or []
+    assert_true(
+        any(row.get("product") == "DP" for row in dynamic_rows),
+        "template product names should order known products, not filter new Party A products",
+    )
 
     assert_equal(card.get("schema"), "2.0", "card schema")
     assert_equal(card.get("header", {}).get("template"), "blue", "card header template")

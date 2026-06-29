@@ -34,7 +34,7 @@ from server_modules.sync_status import format_sync_readiness_line
 
 DEFAULT_FEISHU_OVERVIEW_TEMPLATE_ID = "AAqNdTzlwzkaC"
 DEFAULT_FEISHU_PRODUCT_TEMPLATE_ID = "AAqNBsXlJdHqX"
-DEFAULT_FEISHU_OVERVIEW_TEMPLATE_VERSION = "1.0.1"
+DEFAULT_FEISHU_OVERVIEW_TEMPLATE_VERSION = "1.0.2"
 DEFAULT_FEISHU_PRODUCT_TEMPLATE_VERSION = "1.0.0"
 DEFAULT_DAILY_REPORT_CHAT_ID = "oc_8a24e41ee7f2872b17724d830d818d84"
 FEISHU_TREND_START_DATE = "2026-06-17"
@@ -108,7 +108,6 @@ class DailyFeishuReportService:
         }
 
     def template_history(self, report, product_names=None, days=7):
-        product_names = product_names or self.template_config().get("product_names")
         report_date = str((report or {}).get("report_date") or "").strip()
         try:
             end_date = datetime.strptime(report_date, "%Y-%m-%d").date()
@@ -116,13 +115,8 @@ class DailyFeishuReportService:
             end_date = datetime.strptime(default_daily_report_date(), "%Y-%m-%d").date()
         start_date = (end_date - timedelta(days=max(1, int(days or 7)) - 1)).isoformat()
         date_to = end_date.isoformat()
-        names = self.configured_product_name_map()
-        wanted_names = {str(name or "").strip().lower() for name in product_names or [] if str(name or "").strip()}
         history = {}
         for product_code in self.configured_product_codes():
-            product_name = names.get(product_code, product_code)
-            if wanted_names and str(product_name or "").strip().lower() not in wanted_names:
-                continue
             try:
                 payload = self.business_material_report_payload({
                     "product_code": [product_code],

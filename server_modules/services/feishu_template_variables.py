@@ -87,11 +87,35 @@ def product_code(product):
 def ordered_template_products(report, product_names=None):
     products = [item for item in (report or {}).get("products") or [] if isinstance(item, dict)]
     names = parse_product_names(",".join(product_names or [])) if product_names else list(DEFAULT_TEMPLATE_PRODUCT_NAMES)
-    by_name = {product_name(item).strip().lower(): item for item in products}
-    ordered = [by_name[name.strip().lower()] for name in names if name.strip().lower() in by_name]
-    if ordered:
-        return ordered
-    return products[: len(names)]
+    by_name = {}
+    for item in products:
+        key = product_name(item).strip().lower()
+        if key and key not in by_name:
+            by_name[key] = item
+
+    ordered = []
+    seen_codes = set()
+    seen_names = set()
+    for name in names:
+        key = name.strip().lower()
+        item = by_name.get(key)
+        if not item:
+            continue
+        ordered.append(item)
+        code = product_code(item)
+        if code:
+            seen_codes.add(code)
+        seen_names.add(product_name(item).strip().lower())
+
+    remaining = [
+        item for item in products
+        if not (
+            (product_code(item) and product_code(item) in seen_codes)
+            or product_name(item).strip().lower() in seen_names
+        )
+    ]
+    remaining.sort(key=lambda item: (product_name(item).strip().lower(), product_code(item)))
+    return ordered + remaining
 
 
 def summarize_products(products):
