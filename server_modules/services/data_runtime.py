@@ -12,6 +12,7 @@ from server_modules.app_runtime import (
     using_postgres,
 )
 from server_modules.queries.ai_materials_query import ai_materials_payload as ai_materials_payload_impl
+from server_modules.product_config import feishu_product_codes, growth_product_codes, product_registry
 from server_modules.schema import relational_table_counts
 from server_modules.services.data_enrichment import enrich_data_with_relational_rollups
 from server_modules.services.data_query_runtime import data_query_payload as data_query_payload_impl
@@ -34,6 +35,17 @@ def data_query_payload(query):
     return data_query_payload_impl(query)
 
 
+def product_registry_payload():
+    products = load_data()
+    return {
+        "ok": True,
+        "products": product_registry(products),
+        "growth_product_codes": growth_product_codes(products),
+        "feishu_product_codes": feishu_product_codes(products),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 def ai_materials_payload(query):
     return ai_materials_payload_impl(query)
 
@@ -48,6 +60,10 @@ def business_material_report_payload(query):
 
 def sync_product_growth_snapshots(product_code, days):
     return growth_runtime.sync_product_growth_snapshots(product_code, days)
+
+
+def sync_party_a_growth_snapshots(days):
+    return sync_products_growth_snapshots(growth_product_codes(load_data()), days)
 
 
 def sync_products_growth_snapshots(product_codes, days):

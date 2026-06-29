@@ -10,6 +10,9 @@ from server_modules.db_core import upsert_row as upsert_row_impl
 from server_modules.product_config import (
     configured_product_codes as configured_product_codes_impl,
     country_code_for,
+    feishu_product_codes as feishu_product_codes_impl,
+    growth_product_codes as growth_product_codes_impl,
+    product_registry as product_registry_impl,
     product_code_for,
 )
 from server_modules.reelfarm_lifecycle import cleanup_reelfarm_product_from_latest_automations as cleanup_reelfarm_product_from_latest_automations_impl
@@ -123,10 +126,18 @@ def latest_sync_runs(sources=None):
 
 
 def sync_status_payload():
-    return sync_status_payload_from_runs(
-        latest_sync_runs(),
+    runs = latest_sync_runs()
+    products = load_data()
+    payload = sync_status_payload_from_runs(
+        runs,
         datetime.now(timezone.utc).isoformat(),
     )
+    payload["sync_plan"] = {
+        "growth_product_codes": growth_product_codes_impl(products),
+        "feishu_product_codes": feishu_product_codes_impl(products),
+    }
+    payload["product_registry"] = product_registry_impl(products)
+    return payload
 
 
 def project_synced_country_to_relational(product, country):
@@ -273,6 +284,10 @@ def configured_product_codes():
     return configured_product_codes_impl(load_data())
 
 
+def configured_growth_product_codes():
+    return growth_product_codes_impl(load_data())
+
+
 def sync_all_museon_clone_records():
     return sync_all_museon_clone_records_impl(
         load_data=load_data,
@@ -284,7 +299,7 @@ def sync_all_museon_clone_records():
 
 def sync_all_growth_snapshots(days=30):
     return sync_all_growth_snapshots_impl(
-        configured_product_codes=configured_product_codes,
+        configured_product_codes=configured_growth_product_codes,
         sync_product_growth_snapshots=sync_product_growth_snapshots,
         days=days,
     )

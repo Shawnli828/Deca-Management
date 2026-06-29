@@ -1164,6 +1164,17 @@
             font-weight: 600;
         }
 
+        .feishu-sync-plan {
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 12px 14px;
+            background: #f8fafc;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 650;
+            overflow-wrap: anywhere;
+        }
+
         .feishu-message-card,
         .feishu-product-card {
             border: 1px solid var(--line);

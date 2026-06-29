@@ -39,8 +39,15 @@ def main():
     from server_modules.external_clients import feishu_signed_card_payload
     from server_modules.services.daily_feishu_runtime import report_payload
     from server_modules.services.daily_feishu_service import DailyFeishuReportService
+    from server_modules.services.daily_feishu_config import daily_feishu_template_config
     from server_modules.services.feishu_card_adapter import daily_report_card_data
     from server_modules.services.feishu_template_variables import overview_template_variables
+
+    template_config = daily_feishu_template_config({
+        "FEISHU_OVERVIEW_TEMPLATE_ID": "AAqNdTzlwzkaC",
+        "FEISHU_OVERVIEW_TEMPLATE_VERSION": "1.0.0",
+    })
+    assert_equal(template_config.get("overview_template_version"), "1.0.2", "default overview template version is normalized")
 
     trend_service = DailyFeishuReportService(
         env={},

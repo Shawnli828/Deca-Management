@@ -81,10 +81,25 @@ def seed_contract_database(app_runtime):
             "id": "product-demi",
             "name": "Demi",
             "folder": "甲方",
+            "reelFarmCode": "DM",
             "countries": [
                 {"id": "country-germany", "name": "Germany", "concepts": []},
                 {"id": "country-us", "name": "United States", "concepts": []},
             ],
+        },
+        {
+            "id": "product-du",
+            "name": "DU",
+            "folder": "甲方",
+            "reelFarmCode": "DU",
+            "countries": [],
+        },
+        {
+            "id": "product-vendor",
+            "name": "Vendor App",
+            "folder": "乙方",
+            "reelFarmCode": "VA",
+            "countries": [],
         }
     ])
 
@@ -144,6 +159,9 @@ def main():
         assert_status(sync_status, 200, "sync status")
         assert_has_keys(sync_status.json(), ["ok", "sources", "freshness", "generated_at"], "sync status contract")
         assert_has_keys(sync_status.json().get("freshness") or {}, ["ok", "sources"], "sync freshness contract")
+        assert_has_keys(sync_status.json().get("sync_plan") or {}, ["growth_product_codes", "feishu_product_codes"], "sync plan contract")
+        assert_true("DU" in (sync_status.json().get("sync_plan") or {}).get("growth_product_codes", []), "sync plan should include new Party A products")
+        assert_true("VA" not in (sync_status.json().get("sync_plan") or {}).get("growth_product_codes", []), "sync plan should exclude vendor products")
 
         data = client.get("/api/data")
         assert_status(data, 200, "data")
@@ -151,6 +169,16 @@ def main():
         assert_true(products and products[0].get("reelFarmCode") == "DM", "Demi should resolve to DM")
         countries = products[0].get("countries") or []
         assert_true(any(country.get("name") == "Germany" and country.get("reelFarmCode") == "GE" for country in countries), "Germany should resolve to GE")
+
+        product_registry = client.get("/api/product-registry")
+        assert_status(product_registry, 200, "product registry")
+        registry_body = product_registry.json()
+        assert_has_keys(registry_body, ["ok", "products", "growth_product_codes", "feishu_product_codes", "generated_at"], "product registry contract")
+        registry_rows = registry_body.get("products") or []
+        assert_true(any(row.get("product_code") == "DU" and row.get("enabled_in_growth") for row in registry_rows), "product registry should include DU growth flag")
+        assert_true(any(row.get("product_code") == "VA" and row.get("is_party_a") is False for row in registry_rows), "product registry should classify vendor products")
+        assert_true("VA" not in registry_body.get("growth_product_codes", []), "product registry growth codes should exclude vendor products")
+        assert_true("VA" not in registry_body.get("feishu_product_codes", []), "product registry Feishu codes should exclude vendor products")
 
         accounts = client.get("/api/data/query", params={
             "resource": "accounts",

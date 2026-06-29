@@ -2,6 +2,7 @@
 
 import { BusinessReportControls } from '@/components/BusinessReportControls';
 import { BusinessReportSummaryGrid, BusinessReportTable } from '@/components/BusinessMaterialReportParts';
+import { WorkspaceHeader } from '@/components/dashboard/WorkspaceHeader';
 import { useBusinessMaterialReport } from '@/hooks/useBusinessMaterialReport';
 import { metric, metricDetail, numberValue, percent } from '@/lib/businessReportFormatters';
 import type { Product } from '@/lib/types';
@@ -67,28 +68,29 @@ export function BusinessMaterialReport({ products }: { products: Product[] }) {
 
   return (
     <section className="business-report-page">
-      <header className="business-report-head">
-        <div>
-          <p className="dashboard-kicker">Daily Metric</p>
-          <h1>Daily Metric</h1>
-          <p>内容按北京时间 23:59 到次日 23:59 归属；Onboarding 按前一天 08:00 到当天 08:00 统计。</p>
-        </div>
-        <BusinessReportControls
-          products={products}
-          selectedProductId={selectedProduct?.id || ''}
-          days={days}
-          customRange={customRange}
-          dateFrom={dateFrom}
-          dateTo={dateTo}
-          loading={loading}
-          productCode={productCode}
-          onProductChange={setProductId}
-          onDaysChange={setDays}
-          onDateFromChange={setDateFrom}
-          onDateToChange={setDateTo}
-          onApply={loadReport}
-        />
-      </header>
+      <WorkspaceHeader
+        className="business-report-head"
+        kicker="Daily Metric"
+        title="Daily Metric"
+        description="内容按北京时间 23:59 到次日 23:59 归属；Onboarding 按前一天 08:00 到当天 08:00 统计。"
+        actions={(
+          <BusinessReportControls
+            products={products}
+            selectedProductId={selectedProduct?.id || ''}
+            days={days}
+            customRange={customRange}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            loading={loading}
+            productCode={productCode}
+            onProductChange={setProductId}
+            onDaysChange={setDays}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+            onApply={loadReport}
+          />
+        )}
+      />
 
       {error ? <div className="growth-error">{error}</div> : null}
       {loading ? <div className="growth-loading">正在读取业务日数据...</div> : null}

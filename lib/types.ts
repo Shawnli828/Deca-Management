@@ -335,6 +335,18 @@ export type DailyFeishuReport = {
   totals?: DailyFeishuTotals;
   products?: DailyFeishuProductSummary[];
   errors?: DailyFeishuReportError[];
+  sync_status?: {
+    sync_plan?: {
+      growth_product_codes?: string[];
+      feishu_product_codes?: string[];
+    };
+    [key: string]: unknown;
+  };
+  sync_ready?: {
+    ok?: boolean;
+    warnings?: string[];
+    [key: string]: unknown;
+  };
   generated_at?: string;
 };
 

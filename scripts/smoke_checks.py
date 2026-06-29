@@ -28,6 +28,11 @@ from server_modules.metrics_service import (  # noqa: E402
 )
 from server_modules.sync_status import format_sync_readiness_line, sync_freshness_from_runs, sync_status_from_runs  # noqa: E402
 from server_modules.sync_result import error_sync_result, normalized_sync_result  # noqa: E402
+from server_modules.product_config import (  # noqa: E402
+    feishu_product_codes,
+    growth_product_codes,
+    product_registry,
+)
 
 
 def assert_equal(actual, expected, label):
@@ -36,6 +41,16 @@ def assert_equal(actual, expected, label):
 
 
 def main():
+    registry_products = [
+        {"id": "db", "name": "DeenBack", "folder": "甲方", "reelFarmCode": "DB"},
+        {"id": "du", "name": "DU", "folder": "甲方", "reelFarmCode": "DU", "enabledInFeishu": False},
+        {"id": "vendor", "name": "Vendor", "folder": "乙方", "reelFarmCode": "VD"},
+    ]
+    registry = product_registry(registry_products)
+    assert_equal(growth_product_codes(registry_products), ["DB", "DU"], "registry growth product codes")
+    assert_equal(feishu_product_codes(registry_products), ["DB"], "registry Feishu product codes")
+    assert_equal(next(item for item in registry if item["product_code"] == "VD")["is_party_a"], False, "registry vendor party flag")
+
     material_window = business_material_day_window("2026-06-13")
     assert_equal(material_window["start_local"].isoformat(), "2026-06-12T23:59:00+08:00", "material start local")
     assert_equal(material_window["end_local"].isoformat(), "2026-06-13T23:59:00+08:00", "material end local")

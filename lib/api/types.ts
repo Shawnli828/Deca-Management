@@ -57,12 +57,30 @@ export type SyncFreshnessSource = {
   error?: string;
 };
 
+export type ProductRegistryItem = {
+  product_id?: string;
+  product_code?: string;
+  product_name?: string;
+  owner_type?: string;
+  is_party_a?: boolean;
+  enabled_in_feishu?: boolean;
+  enabled_in_growth?: boolean;
+  enabled_in_automation_coverage?: boolean;
+  logo_url?: string;
+  sort_order?: number;
+};
+
 export type SyncStatusResponse = ApiResponseBase & {
   sources: Record<string, SyncFreshnessSource>;
   freshness?: {
     ok: boolean;
     sources: Record<string, SyncFreshnessSource>;
   };
+  sync_plan?: {
+    growth_product_codes?: string[];
+    feishu_product_codes?: string[];
+  };
+  product_registry?: ProductRegistryItem[];
 };
 
 export type ReelfarmSyncCountryResponse = SyncResultResponse & {

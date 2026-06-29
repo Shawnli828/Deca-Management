@@ -1,6 +1,7 @@
 'use client';
 
 import { BusinessReportControls } from '@/components/BusinessReportControls';
+import { WorkspaceHeader } from '@/components/dashboard/WorkspaceHeader';
 import { useBusinessMaterialReport } from '@/hooks/useBusinessMaterialReport';
 import { businessWindowText, downloadRate, metric, percent } from '@/lib/businessReportFormatters';
 import type { Product } from '@/lib/types';
@@ -54,28 +55,29 @@ export function GrowthDashboard({ products }: { products: Product[] }) {
 
   return (
     <section className="business-report-page">
-      <header className="business-report-head">
-        <div>
-          <p className="dashboard-kicker">Growth 情况</p>
-          <h1>Growth 情况</h1>
-          <p>按北京时间 23:59 → 23:59 归档，播放量使用每日快照差值计算。</p>
-        </div>
-        <BusinessReportControls
-          products={products}
-          selectedProductId={selectedProduct?.id || ''}
-          days={days}
-          customRange={customRange}
-          dateFrom={dateFrom}
-          dateTo={dateTo}
-          loading={loading}
-          productCode={productCode}
-          onProductChange={setProductId}
-          onDaysChange={setDays}
-          onDateFromChange={setDateFrom}
-          onDateToChange={setDateTo}
-          onApply={loadGrowth}
-        />
-      </header>
+      <WorkspaceHeader
+        className="business-report-head"
+        kicker="Growth 情况"
+        title="Growth 情况"
+        description="按北京时间 23:59 → 23:59 归档，播放量使用每日快照差值计算。"
+        actions={(
+          <BusinessReportControls
+            products={products}
+            selectedProductId={selectedProduct?.id || ''}
+            days={days}
+            customRange={customRange}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            loading={loading}
+            productCode={productCode}
+            onProductChange={setProductId}
+            onDaysChange={setDays}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+            onApply={loadGrowth}
+          />
+        )}
+      />
 
       {error ? <div className="growth-error">{error}</div> : null}
       {loading ? <div className="growth-loading">正在读取业务日增量...</div> : null}

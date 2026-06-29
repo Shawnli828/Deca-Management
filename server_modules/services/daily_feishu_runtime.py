@@ -7,6 +7,10 @@ from server_modules.data_query_helpers import row_dict
 from server_modules.product_config import (
     configured_product_codes as configured_product_codes_impl,
     configured_product_name_map as configured_product_name_map_impl,
+    feishu_product_codes,
+    feishu_report_products,
+    growth_product_codes,
+    product_registry,
 )
 from server_modules.repositories.daily_feishu_repository import (
     product_reelfarm_country_avg_views as product_reelfarm_country_avg_views_from_db,
@@ -28,10 +32,7 @@ from server_modules.sync_status import (
 
 
 def daily_feishu_products():
-    products = load_data()
-    return [
-        product for product in products if str(product.get("folder") or product.get("owner_type") or "").strip() != "乙方"
-    ]
+    return feishu_report_products(load_data())
 
 
 def configured_product_codes():
@@ -55,7 +56,14 @@ def latest_sync_runs(sources=None):
 
 def sync_status_payload():
     runs = latest_sync_runs()
-    return sync_status_payload_from_runs(runs, datetime.now(timezone.utc).isoformat())
+    products = load_data()
+    payload = sync_status_payload_from_runs(runs, datetime.now(timezone.utc).isoformat())
+    payload["sync_plan"] = {
+        "growth_product_codes": growth_product_codes(products),
+        "feishu_product_codes": feishu_product_codes(products),
+    }
+    payload["product_registry"] = product_registry(products)
+    return payload
 
 
 def daily_reelfarm_account_alerts(product_code, utc_start, utc_end, limit=120):

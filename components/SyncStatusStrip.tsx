@@ -14,20 +14,29 @@ export function SyncStatusStrip({
   onRefresh: () => void | Promise<unknown>;
 }) {
   const sources = syncStatusSources(syncStatus);
+  const growthCodes = syncStatus?.sync_plan?.growth_product_codes || [];
+  const feishuCodes = syncStatus?.sync_plan?.feishu_product_codes || [];
 
   return (
     <div className="sync-status-strip">
-      <div className="sync-status-items">
-        {SYNC_STATUS_SOURCE_ORDER.map(source => {
-          const item = sources[source] || {};
-          const state = syncStatusPillState(item);
-          return (
-            <span className={`sync-status-pill ${state}`} key={source}>
-              <b>{item.label || source}</b>
-              <small>{item.last_finished_at ? formatUtcReadable(item.last_finished_at) : '暂无记录'}</small>
-            </span>
-          );
-        })}
+      <div className="sync-status-main">
+        <div className="sync-status-items">
+          {SYNC_STATUS_SOURCE_ORDER.map(source => {
+            const item = sources[source] || {};
+            const state = syncStatusPillState(item);
+            return (
+              <span className={`sync-status-pill ${state}`} key={source}>
+                <b>{item.label || source}</b>
+                <small>{item.last_finished_at ? formatUtcReadable(item.last_finished_at) : '暂无记录'}</small>
+              </span>
+            );
+          })}
+        </div>
+        {(growthCodes.length || feishuCodes.length) ? (
+          <p className="sync-status-plan">
+            Growth {growthCodes.join(' / ') || '—'} · Feishu {feishuCodes.join(' / ') || '—'}
+          </p>
+        ) : null}
       </div>
       <button className="btn ghost sync-status-refresh" type="button" onClick={onRefresh} disabled={loading}>
         {loading ? 'Checking...' : '同步状态'}

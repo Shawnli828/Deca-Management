@@ -20,9 +20,11 @@ from server_modules.services.data_runtime import (
     enriched_data,
     growth_dashboard_payload,
     init_relational_schema,
+    product_registry_payload,
     relational_table_counts,
     reset_data as reset_data_payload,
     save_data,
+    sync_party_a_growth_snapshots,
     sync_product_growth_snapshots,
     sync_products_growth_snapshots,
     using_postgres,
@@ -38,9 +40,6 @@ from .shared import (
 
 
 router = APIRouter()
-
-
-PARTY_A_GROWTH_PRODUCT_CODES = ("DB", "DM", "DL", "DU")
 
 
 def _growth_codes_from_query(value: str):
@@ -85,6 +84,12 @@ def get_relational_database(request: Request):
             "database_backend": "postgres" if using_postgres() else "sqlite",
             "tables": relational_table_counts(conn),
         }
+
+
+@router.get("/api/product-registry", response_model=FlexibleResponse)
+def get_product_registry(request: Request):
+    require_dashboard_auth(request)
+    return product_registry_payload()
 
 
 @router.post("/api/reset", response_model=OkDataResponse)
@@ -179,7 +184,7 @@ def get_growth_sync_party_a(request: Request, days: int = 30):
     if not cron_authorized(request.headers):
         require_dashboard_auth(request)
     try:
-        return sync_products_growth_snapshots(PARTY_A_GROWTH_PRODUCT_CODES, days)
+        return sync_party_a_growth_snapshots(days)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except RuntimeError as error:

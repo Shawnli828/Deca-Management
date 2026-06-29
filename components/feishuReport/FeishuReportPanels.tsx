@@ -861,18 +861,29 @@ function FeishuNativeCardPreview({ data, loading }: { data: FeishuCardData | nul
 
 export function FeishuStatusMessages({
   error,
+  payload,
   sendResult,
   growthSyncResult,
   sourceSyncResult
 }: {
   error: string;
+  payload: DailyFeishuPreviewPayload | null;
   sendResult: DailyFeishuSendResult | null;
   growthSyncResult: FeishuGrowthSyncResult | null;
   sourceSyncResult: FeishuSourceSyncResult | null;
 }) {
+  const syncPlan = payload?.report?.sync_status?.sync_plan;
+  const growthCodes = syncPlan?.growth_product_codes || [];
+  const feishuCodes = syncPlan?.feishu_product_codes || [];
+
   return (
     <>
       {error ? <div className="growth-error">{error}</div> : null}
+      {(growthCodes.length || feishuCodes.length) ? (
+        <div className="feishu-sync-plan">
+          同步计划：Growth {growthCodes.join(' / ') || '—'} · Feishu {feishuCodes.join(' / ') || '—'}
+        </div>
+      ) : null}
       {sourceSyncResult ? (
         <div className={sourceSyncResult.ok ? 'feishu-success' : 'feishu-sync-partial'}>
           RF / Museon 同步{sourceSyncResult.ok ? '完成' : '未完成'}

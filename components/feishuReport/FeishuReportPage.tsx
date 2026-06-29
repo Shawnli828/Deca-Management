@@ -49,6 +49,7 @@ export function FeishuReportPage() {
 
       <FeishuStatusMessages
         error={error}
+        payload={payload}
         sendResult={sendResult}
         growthSyncResult={growthSyncResult}
         sourceSyncResult={sourceSyncResult}
