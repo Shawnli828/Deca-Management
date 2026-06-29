@@ -117,6 +117,9 @@ def seed_contract_database(app_runtime):
             ("materials", {"id": "material-dm-ge-1", "automation_id": "automation-dm-ge-1", "product_market_channel_id": "pmc-dm-ge-tiktok", "account_id": "account-dm-ge-1", "concept_id": None, "format_id": None, "reelfarm_video_id": "rf-video-1", "video_type": "slideshow", "hook": "contract hook", "prompt": "contract prompt", "images_json": "[]", "slide_count": 3, "status": "Finished", "created_at": "2026-06-15T00:00:00+00:00", "finished_at": "2026-06-15T00:01:00+00:00", "synced_at": synced_at}),
             ("posts", {"id": "post-dm-ge-1", "material_id": "material-dm-ge-1", "account_id": "account-dm-ge-1", "reelfarm_post_id": "rf-post-1", "status": "published", "title": "contract post", "published_at": "2026-06-15T01:00:00+00:00", "published_at_readable": "2026/06/15 01:00 UTC", "view_count": 1234, "like_count": 100, "comment_count": 10, "share_count": 5, "bookmark_count": 2, "synced_at": synced_at}),
             ("post_daily_snapshots", {"id": "snapshot-dm-ge-1", "post_id": "post-dm-ge-1", "snapshot_date": "2026-06-15", "view_count": 1234, "like_count": 100, "comment_count": 10, "share_count": 5, "bookmark_count": 2, "synced_at": synced_at}),
+            ("materials", {"id": "material-dm-ge-2", "automation_id": "automation-dm-ge-1", "product_market_channel_id": "pmc-dm-ge-tiktok", "account_id": "account-dm-ge-1", "concept_id": None, "format_id": None, "reelfarm_video_id": "rf-video-2", "video_type": "slideshow", "hook": "contract hook 2", "prompt": "contract prompt 2", "images_json": "[]", "slide_count": 3, "status": "Finished", "created_at": "2026-06-18T00:00:00+00:00", "finished_at": "2026-06-18T00:01:00+00:00", "synced_at": synced_at}),
+            ("posts", {"id": "post-dm-ge-2", "material_id": "material-dm-ge-2", "account_id": "account-dm-ge-1", "reelfarm_post_id": "rf-post-2", "status": "published", "title": "contract post outside published window", "published_at": "2026-06-21T01:00:00+00:00", "published_at_readable": "2026/06/21 01:00 UTC", "view_count": 200, "like_count": 20, "comment_count": 2, "share_count": 1, "bookmark_count": 0, "synced_at": synced_at}),
+            ("post_daily_snapshots", {"id": "snapshot-dm-ge-2", "post_id": "post-dm-ge-2", "snapshot_date": "2026-06-21", "view_count": 200, "like_count": 20, "comment_count": 2, "share_count": 1, "bookmark_count": 0, "synced_at": synced_at}),
         ]
         for table, values in rows:
             upsert_row(conn, table, values, [next(iter(values.keys()))], app_runtime.db_placeholder())
@@ -207,7 +210,8 @@ def main():
             ],
             "account row contract",
         )
-        assert_true(account_rows[0].get("total_views") == 1234, "account query should return seeded views")
+        assert_true(account_rows[0].get("post_count") == 2, "account query should count ReelFarm posts by material date")
+        assert_true(account_rows[0].get("total_views") == 1434, "account query should return seeded views by material date")
 
         posts = client.get("/api/data/query", params={
             "resource": "posts",
@@ -221,6 +225,18 @@ def main():
         assert_true(len(post_rows) == 1, "post query should return seeded post")
         assert_has_keys(post_rows[0], ["product", "country", "account", "automation", "material", "post", "metrics"], "post row contract")
         assert_true((post_rows[0].get("metrics") or {}).get("view_count") == 1234, "post query should return seeded metrics")
+
+        account_posts = client.get("/api/data/query", params={
+            "resource": "account_posts",
+            "product_code": "DM",
+            "country_code": "GE",
+            "account_id": "account-dm-ge-1",
+            "date_from": "2026-06-13",
+            "date_to": "2026-06-19",
+        })
+        assert_status(account_posts, 200, "account post query")
+        account_post_rows = account_posts.json().get("data") or []
+        assert_true(len(account_post_rows) == 2, "account post query should match account summary material-date count")
 
         materials = client.get("/api/data/query", params={
             "resource": "materials",
@@ -253,7 +269,7 @@ def main():
         countries = client.get("/api/data/query", params={"resource": "countries", "product_code": "DM", "country_code": "GE"})
         assert_status(countries, 200, "countries query")
         country_rows = countries.json().get("data") or []
-        assert_true(country_rows and country_rows[0].get("total_views") == 1234, "countries query should return seeded country totals")
+        assert_true(country_rows and country_rows[0].get("total_views") == 1434, "countries query should return seeded country totals")
         assert_has_keys(
             country_rows[0],
             ["product_code", "country_code", "creator_count", "material_count", "post_count", "total_views", "issues"],
@@ -376,7 +392,7 @@ def main():
             headers={"Authorization": f"Bearer {api_key_body.get('key')}"},
         )
         assert_status(ai_materials_valid, 200, "ai materials with valid api key")
-        assert_true(ai_materials_valid.json().get("totals", {}).get("materials") == 1, "ai materials should expose seeded material")
+        assert_true(ai_materials_valid.json().get("totals", {}).get("materials") == 2, "ai materials should expose seeded materials")
         revoked = client.post("/api/api-keys/revoke", json={"id": key_id})
         assert_status(revoked, 200, "revoke api key")
         assert_true((revoked.json().get("record") or {}).get("active") is False, "revoked api key should be inactive")

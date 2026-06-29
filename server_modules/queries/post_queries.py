@@ -21,13 +21,16 @@ def query_posts(
 ):
     max_limit = 100 if top_metric else 500
     limit, offset = query_limit_offset(query, max_limit=max_limit)
-    where_sql, params = common_where(query)
+    resource = query_value(query, "resource").lower()
+    channel_code = data_source_channel_code(query_value(query, "source"))
+    date_column = "mat.created_at" if resource == "account_posts" and channel_code == "TIKTOK" else "post.published_at"
+    where_sql, params = common_where(query, date_column=date_column)
     order_sql = f"post.{top_metric} DESC, post.published_at DESC" if top_metric else "post.published_at DESC"
     placeholder = db_placeholder()
     hydrate_rows = None
     if (
-        query_value(query, "resource").lower() == "account_posts"
-        and data_source_channel_code(query_value(query, "source")) == "MUSEON_CLONE"
+        resource == "account_posts"
+        and channel_code == "MUSEON_CLONE"
     ):
         hydrate_rows = hydrate_museon_images_for_rows
     row_data, total = fetch_post_rows(
