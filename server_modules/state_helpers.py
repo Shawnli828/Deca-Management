@@ -70,47 +70,5 @@ def strip_reelfarm_state(value):
     return clean
 
 
-def default_publish_check_state():
-    return {"assignments": [], "last_result": None}
-
-
-def parse_publish_check_state(raw):
-    if not raw:
-        return default_publish_check_state()
-    try:
-        state = json.loads(raw)
-    except json.JSONDecodeError:
-        return default_publish_check_state()
-    if not isinstance(state, dict):
-        return default_publish_check_state()
-    assignments = state.get("assignments")
-    if not isinstance(assignments, list):
-        assignments = []
-    return {
-        "assignments": assignments,
-        "last_result": state.get("last_result") if isinstance(state.get("last_result"), dict) else None,
-    }
-
-
-def clean_publish_check_state(state, generate_id):
-    clean = default_publish_check_state()
-    assignments = state.get("assignments") if isinstance(state, dict) else []
-    if isinstance(assignments, list):
-        clean["assignments"] = [
-            {
-                "id": str(item.get("id") or generate_id()),
-                "person_id": str(item.get("person_id") or ""),
-                "person_name": str(item.get("person_name") or ""),
-                "product_id": str(item.get("product_id") or ""),
-                "country_id": str(item.get("country_id") or ""),
-            }
-            for item in assignments
-            if isinstance(item, dict) and item.get("product_id") and item.get("country_id")
-        ]
-    if isinstance(state, dict) and isinstance(state.get("last_result"), dict):
-        clean["last_result"] = state["last_result"]
-    return clean
-
-
 def data_source_channel_code(source):
     return "MUSEON_CLONE" if str(source or "").strip().lower() in {"museon_clone", "clone", "museon"} else "TIKTOK"

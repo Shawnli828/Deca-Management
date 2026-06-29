@@ -45,7 +45,6 @@
         .roaster-board,
         .tag-page,
         .tag-board,
-        .publish-check-board,
         .country-sidebar,
         .country-workspace,
         .topic-panel,
@@ -157,8 +156,6 @@
         .side-brand-text,
         .side-nav-title,
         .roaster-toolbar h2,
-        .publish-check-hero h2,
-        .publish-check-panel h3,
         .tag-board-hero h2,
         .tag-name,
         .tag-country-group h3,
@@ -183,9 +180,6 @@
         .roaster-dropzone,
         .roaster-product-cell,
         .roaster-product-logo,
-        .publish-check-hero,
-        .publish-check-panel,
-        .publish-check-window,
         .assignment-table,
         .assignment-list,
         .assignment-row,
@@ -218,7 +212,6 @@
         .assignment-table-head,
         .assignment-cell,
         .assignment-actions,
-        .publish-check-window,
         .publish-result-card,
         .missing-account-row,
         .tag-country-group {
@@ -229,7 +222,6 @@
         .roaster-empty-cell-label,
         .person-chip,
         .assignment-chip,
-        .publish-check-summary,
         .publish-result-count,
         .assignment-product-logo,
         .tag-kpis div,
@@ -246,9 +238,6 @@
 
         .roaster-empty-cell-label,
         .roaster-empty-people,
-        .publish-check-hero p,
-        .publish-check-panel p,
-        .publish-check-window,
         .assignment-table-head button,
         .assignment-table-head span,
         .tag-board-hero p,
@@ -261,8 +250,7 @@
         }
 
         .tag-kpis strong,
-        .tag-country-kpis strong,
-        .publish-check-summary strong {
+        .tag-country-kpis strong {
             color: var(--accent-strong) !important;
         }
 
@@ -2918,7 +2906,6 @@
         .growth-report-head,
         .growth-hero,
         .business-report-head,
-        .publish-check-hero,
         .api-key-page-head,
         .cloud-phone-hero,
         .tag-board-hero,
@@ -2942,7 +2929,6 @@
         .cloud-phone-page,
         .slideshow-shell,
         .page-shell,
-        .publish-check-board,
         .api-reference {
             background: #ffffff !important;
         }
@@ -2954,8 +2940,7 @@
             padding: 24px !important;
         }
 
-        .page-shell,
-        .publish-check-board {
+        .page-shell {
             padding: 24px !important;
         }
 
@@ -3083,11 +3068,7 @@
         .api-base-card,
         .api-resource-card,
         .api-reference-section,
-        .publish-check-panel,
-        .publish-check-hero,
         .publish-result-card,
-        .publish-check-summary,
-        .publish-check-window,
         .product-folder,
         .product-card,
         .product-stat,
@@ -3339,8 +3320,7 @@
             .business-report-page,
             .api-key-page,
             .cloud-phone-page,
-            .page-shell,
-            .publish-check-board {
+            .page-shell {
                 padding: 18px !important;
             }
         }

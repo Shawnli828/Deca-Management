@@ -407,23 +407,6 @@ def main():
         assert_status(reelfarm_config_clear, 200, "clear reelfarm config")
         assert_true(reelfarm_config_clear.json().get("configured") is False, "reelfarm config should clear api key")
 
-        publish_state = {
-            "assignments": [
-                {
-                    "id": "assignment-1",
-                    "person_id": "person-1",
-                    "person_name": "Owner",
-                    "product_id": "product-demi",
-                    "country_id": "country-germany",
-                }
-            ]
-        }
-        publish_post = client.post("/api/publish-check", json={"state": publish_state})
-        assert_status(publish_post, 200, "save publish check state")
-        publish_get = client.get("/api/publish-check")
-        assert_status(publish_get, 200, "get publish check state")
-        assert_true((publish_get.json().get("state") or {}).get("assignments") == publish_state["assignments"], "publish check state should round trip")
-
         stored_country = client.get("/api/reelfarm/stored-country", params={"product_code": "DM", "country_code": "GE"})
         assert_status(stored_country, 200, "stored country")
         assert_true(stored_country.json().get("count") == 1, "stored country should return seeded card")

@@ -29,7 +29,6 @@ from server_modules.settings import (
     DATABASE_URL,
     DB_PATH,
     EXTERNAL_API_KEYS_KEY,
-    PUBLISH_CHECK_STATE_KEY,
     REELFARM_API_KEY,
     SEED_DATA_PATH,
     SESSION_COOKIE,
@@ -38,11 +37,9 @@ from server_modules.settings import (
     STATE_KEY,
 )
 from server_modules.state_helpers import (
-    clean_publish_check_state,
     data_source_channel_code as data_source_channel_code_impl,
     default_data as default_data_impl,
     initial_data as initial_data_impl,
-    parse_publish_check_state,
     strip_reelfarm_state as strip_reelfarm_state_impl,
 )
 
@@ -137,16 +134,6 @@ def load_data():
     if clean_data != data:
         save_data(clean_data)
     return clean_data
-
-
-def load_publish_check_state():
-    return parse_publish_check_state(load_app_value(PUBLISH_CHECK_STATE_KEY))
-
-
-def save_publish_check_state(state):
-    clean = clean_publish_check_state(state, generate_id)
-    save_app_value(PUBLISH_CHECK_STATE_KEY, clean)
-    return clean
 
 
 def data_source_channel_code(source):

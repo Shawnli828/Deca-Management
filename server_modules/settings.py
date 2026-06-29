@@ -13,7 +13,6 @@ DATABASE_URL = (
 
 STATE_KEY = "product_distribution"
 REELFARM_API_KEY = "reel_farm_api_key"
-PUBLISH_CHECK_STATE_KEY = "publish_check_state"
 EXTERNAL_API_KEYS_KEY = "external_api_keys"
 SEED_DATA_PATH = BASE_DIR / "seed_data.json"
 

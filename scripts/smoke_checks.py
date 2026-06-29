@@ -16,6 +16,8 @@ from server_modules.time_windows import (  # noqa: E402
     onboarding_day_window,
     parse_iso_datetime,
     previous_complete_windows,
+    rolling_business_days_utc_window,
+    rolling_snapshot_date_window,
 )
 from server_modules.metrics_service import (  # noqa: E402
     build_daily_report_product_item,
@@ -156,6 +158,13 @@ def main():
     assert_equal(windows["yesterday_end"], "2026-06-13T16:00:00+00:00", "previous complete yesterday end")
     assert_equal(windows["seven_start"], "2026-06-06T16:00:00+00:00", "previous complete seven start")
     assert_equal(windows["seven_end"], "2026-06-13T16:00:00+00:00", "previous complete seven end")
+
+    query_window = rolling_business_days_utc_window(7, fixed_now)
+    assert_equal(query_window[0], "2026-06-06T16:00:00+00:00", "query days business window start")
+    assert_equal(query_window[1], "2026-06-13T16:00:00+00:00", "query days business window end")
+    snapshot_window = rolling_snapshot_date_window(7, fixed_now)
+    assert_equal(snapshot_window[0], "2026-06-08", "snapshot days window start")
+    assert_equal(snapshot_window[1], "2026-06-14", "snapshot days window end")
     assert_equal(ZERO_PLAY_VIEW_THRESHOLD, 150, "zero play warning threshold")
 
     report_text = daily_feishu_report_text({

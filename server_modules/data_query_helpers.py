@@ -1,5 +1,7 @@
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
+
+from server_modules.time_windows import rolling_business_days_utc_window, rolling_snapshot_date_window
 
 
 def query_value(query, key, default=""):
@@ -30,13 +32,7 @@ def query_days_window(query):
         days = 0
     if days <= 0:
         return "", ""
-    days = min(days, 366)
-    beijing = timezone(timedelta(hours=8))
-    current = datetime.now(timezone.utc).astimezone(beijing)
-    today_start_local = datetime(current.year, current.month, current.day, tzinfo=beijing)
-    start_local = today_start_local - timedelta(days=days)
-    end_local = today_start_local
-    return start_local.astimezone(timezone.utc).isoformat(), end_local.astimezone(timezone.utc).isoformat()
+    return rolling_business_days_utc_window(days)
 
 
 def query_days_snapshot_window(query):
@@ -46,10 +42,7 @@ def query_days_snapshot_window(query):
         days = 0
     if days <= 0:
         return "", ""
-    days = min(days, 366)
-    end = datetime.now(timezone.utc).date()
-    start = end - timedelta(days=days - 1)
-    return start.isoformat(), end.isoformat()
+    return rolling_snapshot_date_window(days)
 
 
 def post_datetime_bound(value, end=False, *, business_material_day_window):

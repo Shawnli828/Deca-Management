@@ -8,7 +8,6 @@ from api.routes.auth import router as auth_router
 from api.routes.data import router as data_router
 from api.routes.feishu_callbacks import router as feishu_callbacks_router
 from api.routes.geelark import router as geelark_router
-from api.routes.publish_check import router as publish_check_router
 from api.routes.reelfarm import router as reelfarm_router
 from api.routes.reports import router as reports_router
 from api.routes.shared import json_error
@@ -20,7 +19,7 @@ from server_modules.app_runtime import BASE_DIR
 
 app = FastAPI(
     title="Deca Growth API",
-    description="API for Deca Growth dashboard data, ReelFarm synced materials, publish checks, and dashboard-managed API keys.",
+    description="API for Deca Growth dashboard data, ReelFarm synced materials, and dashboard-managed API keys.",
     version="1.0.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
@@ -54,7 +53,6 @@ app.include_router(data_router)
 app.include_router(feishu_callbacks_router)
 app.include_router(tags_router)
 app.include_router(geelark_router)
-app.include_router(publish_check_router)
 app.include_router(reports_router)
 app.include_router(reelfarm_router)
 app.include_router(api_keys_router)

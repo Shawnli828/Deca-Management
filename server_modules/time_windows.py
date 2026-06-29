@@ -60,6 +60,28 @@ def previous_complete_windows(now_utc=None):
     }
 
 
+def rolling_business_days_utc_window(days, now_utc=None, tz=None):
+    tz = tz or BUSINESS_TIMEZONE
+    day_count = max(1, min(366, int(days or 1)))
+    current_local = (now_utc or datetime.now(timezone.utc)).astimezone(tz)
+    today_start_local = datetime(current_local.year, current_local.month, current_local.day, tzinfo=tz)
+    start_local = today_start_local - timedelta(days=day_count)
+    return start_local.astimezone(timezone.utc).isoformat(), today_start_local.astimezone(timezone.utc).isoformat()
+
+
+def rolling_snapshot_date_window(days, today_utc=None):
+    day_count = max(1, min(366, int(days or 1)))
+    if isinstance(today_utc, datetime):
+        end = today_utc.astimezone(timezone.utc).date()
+    elif today_utc:
+        parsed = parse_iso_datetime(today_utc)
+        end = parsed.astimezone(timezone.utc).date() if parsed else datetime.now(timezone.utc).date()
+    else:
+        end = datetime.now(timezone.utc).date()
+    start = end - timedelta(days=day_count - 1)
+    return start.isoformat(), end.isoformat()
+
+
 def named_timezone(name, fallback):
     if ZoneInfo:
         try:

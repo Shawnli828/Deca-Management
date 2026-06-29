@@ -5,7 +5,6 @@ import { databaseApi } from './database';
 import { dataQueryApi } from './dataQuery';
 import { growthApi } from './growth';
 import { geelarkApi } from './geelark';
-import { publishCheckApi } from './publishCheck';
 import { reportsApi } from './reports';
 import { syncApi } from './sync';
 import { tagsApi } from './tags';
@@ -20,7 +19,6 @@ export const api = {
   ...geelarkApi,
   ...reportsApi,
   ...syncApi,
-  ...publishCheckApi,
   ...tagsApi,
   ...databaseApi,
   ...automationCoverageApi

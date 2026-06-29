@@ -1,11 +1,6 @@
 #!/usr/bin/env python3
-import json
 import os
 import re
-import socket
-import sys
-import time
-import webbrowser
 from datetime import datetime, timedelta, timezone
 
 from server_modules.time_windows import (
@@ -36,16 +31,6 @@ from server_modules.growth_report_service import (
     growth_dashboard_payload as growth_dashboard_payload_impl,
 )
 from server_modules.services.daily_feishu_service import DailyFeishuReportService
-from server_modules.services.publish_check_service import (
-    beijing_day_window as beijing_day_window_impl,
-    publish_check_reminder_text as publish_check_reminder_text_impl,
-)
-from server_modules.services.publish_check_runtime import (
-    product_country_lookup as publish_check_product_country_lookup_runtime,
-    publish_check_accounts as publish_check_accounts_runtime,
-    run as run_publish_check_runtime,
-    send_reminder as send_publish_check_reminder_runtime,
-)
 from server_modules.sync_status import (
     SYNC_RUN_SOURCE_LABELS,
     compact_sync_run_meta,
@@ -121,7 +106,6 @@ from server_modules.app_runtime import (
     DB_PATH,
     DATABASE_URL,
     EXTERNAL_API_KEYS_KEY,
-    PUBLISH_CHECK_STATE_KEY,
     REELFARM_API_KEY,
     SEED_DATA_PATH,
     SESSION_COOKIE,
@@ -139,13 +123,11 @@ from server_modules.app_runtime import (
     initial_data,
     load_app_value,
     load_data,
-    load_publish_check_state,
     make_auth_token as make_auth_token_runtime,
     make_ssl_context,
     reset_schema_init_cache,
     save_app_value,
     save_data,
-    save_publish_check_state,
     strip_reelfarm_state,
     using_postgres,
     valid_auth_token as valid_auth_token_runtime,
@@ -1128,26 +1110,6 @@ def query_accounts(query):
     return query_reelfarm_accounts(query)
 
 
-def beijing_day_window(now=None):
-    return beijing_day_window_impl(now)
-
-
-def product_country_lookup():
-    return publish_check_product_country_lookup_runtime()
-
-
-def publish_check_accounts(product_code, country_code, utc_start, utc_end):
-    return publish_check_accounts_runtime(product_code, country_code, utc_start, utc_end)
-
-
-def run_publish_check():
-    return run_publish_check_runtime()
-
-
-def publish_check_reminder_text(result):
-    return publish_check_reminder_text_impl(result)
-
-
 def daily_feishu_service():
     return daily_feishu_runtime.daily_feishu_service()
 
@@ -1170,10 +1132,6 @@ def daily_feishu_report_card(report_date="", report=None):
 
 def send_daily_feishu_report(report_date="", require_synced=False, mode="template"):
     return daily_feishu_service().send_report(report_date, require_synced=require_synced, mode=mode)
-
-
-def send_publish_check_reminder():
-    return send_publish_check_reminder_runtime()
 
 
 def detailed_select():

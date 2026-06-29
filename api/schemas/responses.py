@@ -78,10 +78,6 @@ class ApiKeyMutationResponse(OkResponse):
     record: dict[str, Any] = Field(default_factory=dict)
 
 
-class PublishCheckStateResponse(OkResponse):
-    state: dict[str, Any] = Field(default_factory=dict)
-
-
 class FeishuPreviewResponse(OkResponse):
     report: dict[str, Any] = Field(default_factory=dict)
     message: str

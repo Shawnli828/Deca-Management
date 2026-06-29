@@ -22,10 +22,6 @@ class GrowthSyncProductsRequest(BaseModel):
     days: int = 30
 
 
-class PublishCheckStateRequest(BaseModel):
-    state: dict[str, Any] | None = None
-
-
 class ReelfarmConfigRequest(BaseModel):
     api_key: str = ""
 
