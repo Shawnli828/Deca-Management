@@ -14,7 +14,7 @@ import type {
 } from '@/lib/types';
 import type { SyncResultResponse } from '@/lib/api/types';
 
-const MIXPANEL_SYNC_PRODUCT_CODES = ['DB', 'DM', 'DL'] as const;
+const FALLBACK_MIXPANEL_SYNC_PRODUCT_CODES = ['DB', 'DM', 'DL', 'DU'] as const;
 const MIXPANEL_SYNC_DAYS = 30;
 
 export type FeishuGrowthSyncResult = {
@@ -54,6 +54,13 @@ export function useFeishuReport() {
 
   const totals = useMemo(() => reportTotals(payload?.report), [payload]);
   const products = payload?.report?.products || [];
+  const mixpanelSyncProductCodes = useMemo(() => {
+    const codes = products
+      .map(product => String(product.product_code || '').trim().toUpperCase())
+      .filter(Boolean);
+    const uniqueCodes = Array.from(new Set(codes));
+    return uniqueCodes.length ? uniqueCodes : [...FALLBACK_MIXPANEL_SYNC_PRODUCT_CODES];
+  }, [products]);
   const downloadRate = ratio(totals.download_rate);
 
   const loadPreview = useCallback(async (nextDate = reportDate, nextMode = sendMode) => {
@@ -97,7 +104,7 @@ export function useFeishuReport() {
     setSendResult(null);
     setGrowthSyncResult(null);
     try {
-      const result = await api.syncProductsGrowth(MIXPANEL_SYNC_PRODUCT_CODES, MIXPANEL_SYNC_DAYS);
+      const result = await api.syncProductsGrowth(mixpanelSyncProductCodes, MIXPANEL_SYNC_DAYS);
       const products = (result.records || []).map(item => ({
         productCode: item.product_code || '',
         count: item.count || 0
@@ -122,7 +129,7 @@ export function useFeishuReport() {
     } finally {
       setSyncingGrowth(false);
     }
-  }, [loadPreview, reportDate, sendMode]);
+  }, [loadPreview, mixpanelSyncProductCodes, reportDate, sendMode]);
 
   const syncReelfarmAndMuseon = useCallback(async () => {
     setSyncingSources(true);
