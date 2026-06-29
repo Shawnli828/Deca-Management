@@ -6,7 +6,6 @@ import { BusinessMaterialReport } from '@/components/BusinessMaterialReport';
 import { CloudPhoneMap } from '@/components/cloudPhone/CloudPhoneMap';
 import { FeishuReportPage } from '@/components/feishuReport/FeishuReportPage';
 import { GrowthDashboard } from '@/components/GrowthDashboard';
-import { PublishCheckBoard } from '@/components/publishCheck/PublishCheckBoard';
 import { CloneSlideshowToolPanel, SlideshowToolPanel } from '@/components/SlideshowToolPanels';
 import { DashboardToolSection } from '@/components/dashboard/DashboardToolSection';
 import type { SyncStatusResponse } from '@/lib/api/types';
@@ -15,7 +14,6 @@ import type {
   ExternalApiKey,
   Product,
   ProductKpis,
-  PublishCheckState,
   ReelFarmCard,
   ReelFarmResult
 } from '@/lib/types';
@@ -28,7 +26,6 @@ export type DashboardTool =
   | 'cloneSlideshow'
   | 'cloudPhones'
   | 'automationCoverage'
-  | 'publishCheck'
   | 'apiKeys';
 
 export type DashboardPageState = 'products' | 'product' | 'country';
@@ -55,9 +52,6 @@ type DashboardRoutesProps = {
   productTags: Record<string, string[]>;
   syncStatus: SyncStatusResponse | null;
   syncStatusLoading: boolean;
-  publishCheck: PublishCheckState | null;
-  publishCheckRunning: boolean;
-  publishReminderSending: boolean;
   apiKeys: ExternalApiKey[];
   generatedKey: string;
   setPage: (page: DashboardPageState) => void;
@@ -76,9 +70,6 @@ type DashboardRoutesProps = {
   addCardTag: (card: ReelFarmCard, tag: string) => void | Promise<void>;
   removeCardTag: (card: ReelFarmCard, tag: string) => void | Promise<void>;
   loadSyncStatus: () => void | Promise<unknown>;
-  savePublishCheck: (state: PublishCheckState) => Promise<void>;
-  runPublishCheckNow: () => Promise<void>;
-  sendPublishReminderNow: () => Promise<void>;
   createKey: (name: string) => Promise<void>;
   revokeKey: (id: string) => void;
   copy: (value: string) => void;
@@ -106,9 +97,6 @@ export function DashboardRoutes({
   productTags,
   syncStatus,
   syncStatusLoading,
-  publishCheck,
-  publishCheckRunning,
-  publishReminderSending,
   apiKeys,
   generatedKey,
   setPage,
@@ -127,9 +115,6 @@ export function DashboardRoutes({
   addCardTag,
   removeCardTag,
   loadSyncStatus,
-  savePublishCheck,
-  runPublishCheckNow,
-  sendPublishReminderNow,
   createKey,
   revokeKey,
   copy
@@ -214,24 +199,6 @@ export function DashboardRoutes({
           onCreateKey={createKey}
           onRevokeKey={revokeKey}
           onCopy={copy}
-        />
-      </DashboardToolSection>
-      <DashboardToolSection active={tool === 'publishCheck'}>
-        <header className="topbar">
-          <div>
-            <h1>发布检查</h1>
-            <p className="subtitle">按负责人检查产品国家下的 TikTok account 今日是否发布。</p>
-          </div>
-          <div className="top-actions"><span className="status-pill">北京时间 23:00 自动检查</span></div>
-        </header>
-        <PublishCheckBoard
-          products={products}
-          state={publishCheck}
-          running={publishCheckRunning}
-          sendingReminder={publishReminderSending}
-          onSave={savePublishCheck}
-          onRun={runPublishCheckNow}
-          onSendReminder={sendPublishReminderNow}
         />
       </DashboardToolSection>
     </main>

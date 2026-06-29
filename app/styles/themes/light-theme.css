@@ -3347,6 +3347,12 @@
 
         /* Stable report toolbar and KPI sizing.
            These pages share data states, so their empty and loaded states must occupy the same frame. */
+        .business-report-page {
+            align-content: start !important;
+            grid-auto-rows: max-content !important;
+            min-height: auto !important;
+        }
+
         @media (min-width: 981px) {
             .business-report-head,
             .feishu-report-hero {

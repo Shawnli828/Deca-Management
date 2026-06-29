@@ -5,7 +5,6 @@ import type { DashboardPageState, DashboardTool } from '@/components/DashboardRo
 import { useDatabaseAccess } from '@/hooks/useDatabaseAccess';
 import { useProductCatalog } from '@/hooks/useProductCatalog';
 import { useProductMetrics } from '@/hooks/useProductMetrics';
-import { usePublishCheck } from '@/hooks/usePublishCheck';
 import { useReelFarmDashboard } from '@/hooks/useReelFarmDashboard';
 import { useReelFarmSync } from '@/hooks/useReelFarmSync';
 import { api } from '@/lib/api';
@@ -33,8 +32,6 @@ export function useDashboardApp() {
   });
 
   const databaseAccess = useDatabaseAccess({ onStatus: reportStatus });
-
-  const publishCheckState = usePublishCheck({ onStatus: reportStatus });
 
   const productMetrics = useProductMetrics({
     products: productCatalog.products,
@@ -86,7 +83,6 @@ export function useDashboardApp() {
     void Promise.all(data.map(product => productMetrics.loadProductKpis(product)));
     void reelFarmSync.loadSyncStatus().catch(() => {});
     reportStatus('已连接数据库');
-    await publishCheckState.loadPublishCheck();
   }
 
   async function login(username: string, password: string) {
@@ -144,7 +140,6 @@ export function useDashboardApp() {
     resetDemo,
     ...productCatalog,
     ...databaseAccess,
-    ...publishCheckState,
     ...productMetrics,
     ...reelFarmDashboard,
     ...reelFarmSync

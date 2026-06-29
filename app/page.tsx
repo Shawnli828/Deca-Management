@@ -44,9 +44,6 @@ export default function DashboardPage() {
           productTags={dashboard.productTags}
           syncStatus={dashboard.syncStatus}
           syncStatusLoading={dashboard.syncStatusLoading}
-          publishCheck={dashboard.publishCheck}
-          publishCheckRunning={dashboard.publishCheckRunning}
-          publishReminderSending={dashboard.publishReminderSending}
           apiKeys={dashboard.apiKeys}
           generatedKey={dashboard.generatedKey}
           setPage={dashboard.setPage}
@@ -65,9 +62,6 @@ export default function DashboardPage() {
           addCardTag={dashboard.addCardTag}
           removeCardTag={dashboard.removeCardTag}
           loadSyncStatus={dashboard.loadSyncStatus}
-          savePublishCheck={dashboard.savePublishCheck}
-          runPublishCheckNow={dashboard.runPublishCheckNow}
-          sendPublishReminderNow={dashboard.sendPublishReminderNow}
           createKey={dashboard.createKey}
           revokeKey={dashboard.revokeKey}
           copy={dashboard.copy}

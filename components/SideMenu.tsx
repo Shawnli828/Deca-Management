@@ -7,7 +7,7 @@ export function SideMenu({
   onToggle
 }: {
   tool: string;
-  setTool: (tool: 'growth' | 'businessReport' | 'feishuReport' | 'slideshow' | 'cloneSlideshow' | 'cloudPhones' | 'automationCoverage' | 'publishCheck' | 'apiKeys') => void;
+  setTool: (tool: 'growth' | 'businessReport' | 'feishuReport' | 'slideshow' | 'cloneSlideshow' | 'cloudPhones' | 'automationCoverage' | 'apiKeys') => void;
   collapsed: boolean;
   onToggle: () => void;
 }) {
@@ -19,7 +19,6 @@ export function SideMenu({
     { id: 'cloneSlideshow' as const, title: 'Clone Slide Show', meta: 'Museon', icon: 'C' },
     { id: 'cloudPhones' as const, title: '云手机管理图', meta: 'GeeLark Map', icon: 'M' },
     { id: 'automationCoverage' as const, title: '自动化覆盖', meta: 'Expansion Plan', icon: 'A' },
-    { id: 'publishCheck' as const, title: '发布检查', meta: 'Daily Check', icon: 'P' },
     { id: 'apiKeys' as const, title: 'API Key', meta: 'Access Tokens', icon: 'K' }
   ];
 
