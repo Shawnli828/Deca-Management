@@ -1,5 +1,6 @@
 'use client';
 
+import { ABTestPage } from '@/components/abTests/ABTestPage';
 import { ApiKeyPage } from '@/components/ApiKeyPage';
 import { AutomationCoveragePage } from '@/components/automationCoverage/AutomationCoveragePage';
 import { BusinessMaterialReport } from '@/components/BusinessMaterialReport';
@@ -21,6 +22,7 @@ import type {
 export type DashboardTool =
   | 'growth'
   | 'businessReport'
+  | 'abTests'
   | 'feishuReport'
   | 'slideshow'
   | 'cloneSlideshow'
@@ -126,6 +128,9 @@ export function DashboardRoutes({
       </DashboardToolSection>
       <DashboardToolSection active={tool === 'businessReport'}>
         <BusinessMaterialReport products={products} />
+      </DashboardToolSection>
+      <DashboardToolSection active={tool === 'abTests'}>
+        <ABTestPage active={tool === 'abTests'} products={products} />
       </DashboardToolSection>
       <DashboardToolSection active={tool === 'feishuReport'}>
         <FeishuReportPage />

@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse
 
+from api.routes.ab_tests import router as ab_tests_router
 from api.routes.automation_coverage import router as automation_coverage_router
 from api.routes.api_keys import router as api_keys_router
 from api.routes.auth import router as auth_router
@@ -58,6 +59,7 @@ app.include_router(reelfarm_router)
 app.include_router(api_keys_router)
 app.include_router(sync_router)
 app.include_router(automation_coverage_router)
+app.include_router(ab_tests_router)
 
 
 def static_file_response(asset_path: str):

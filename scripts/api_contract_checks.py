@@ -51,6 +51,10 @@ def assert_openapi_response_schemas(client):
         ("get", "/api/data/query"),
         ("get", "/api/growth"),
         ("get", "/api/business-material-report"),
+        ("get", "/api/ab-tests"),
+        ("post", "/api/ab-tests"),
+        ("get", "/api/ab-tests/{test_id}"),
+        ("patch", "/api/ab-tests/{test_id}"),
         ("get", "/api/reports/daily-feishu-preview"),
         ("get", "/api/account-tags"),
         ("post", "/api/account-tags"),
@@ -349,6 +353,63 @@ def main():
                 "download_rate",
             ],
             "business material row contract",
+        )
+
+        ab_test = client.post("/api/ab-tests", json={
+            "name": "Contract AB",
+            "product_code": "DM",
+            "country_code": "GE",
+            "start_date": "2026-06-18",
+            "duration_days": 3,
+            "variable": "Hook",
+            "hypothesis": "Compare one business window against the prior same-length window.",
+        })
+        assert_status(ab_test, 200, "create AB test")
+        ab_body = ab_test.json()
+        created_test = ab_body.get("test") or {}
+        assert_has_keys(
+            created_test,
+            ["id", "name", "product_code", "country_code", "periods", "comparison", "status"],
+            "AB test create contract",
+        )
+        comparison = created_test.get("comparison") or {}
+        assert_has_keys(comparison, ["control", "test", "delta", "meta"], "AB test comparison contract")
+        assert_true(
+            (comparison.get("control") or {}).get("totals", {}).get("total_posts") == 1,
+            "AB test control should use prior same-length business material window",
+        )
+        assert_true(
+            (comparison.get("test") or {}).get("totals", {}).get("total_posts") == 1,
+            "AB test period should use selected business material window",
+        )
+        assert_true(
+            (comparison.get("test") or {}).get("totals", {}).get("total_views") == 200,
+            "AB test should compute seeded test views from material-date rows",
+        )
+
+        ab_list = client.get("/api/ab-tests")
+        assert_status(ab_list, 200, "list AB tests")
+        assert_true(
+            any(item.get("id") == created_test.get("id") for item in ab_list.json().get("tests", [])),
+            "AB test list should include created test",
+        )
+
+        ab_detail = client.get(f"/api/ab-tests/{created_test.get('id')}")
+        assert_status(ab_detail, 200, "get AB test")
+        assert_true(
+            (ab_detail.json().get("test") or {}).get("comparison", {}).get("delta", {}).get("total_views", {}).get("absolute") == -1034,
+            "AB test detail should expose total view delta",
+        )
+
+        ab_update = client.patch(f"/api/ab-tests/{created_test.get('id')}", json={
+            "note": "Reviewed in contract check.",
+            "conclusion": "Keep testing.",
+            "conclusion_status": "inconclusive",
+        })
+        assert_status(ab_update, 200, "update AB test")
+        assert_true(
+            (ab_update.json().get("test") or {}).get("status") == "completed",
+            "AB test with conclusion should be completed",
         )
 
         ai_materials = client.get("/api/ai/materials", headers={"Authorization": "Bearer contract-ai-key"})

@@ -7,18 +7,19 @@ export function SideMenu({
   onToggle
 }: {
   tool: string;
-  setTool: (tool: 'growth' | 'businessReport' | 'feishuReport' | 'slideshow' | 'cloneSlideshow' | 'cloudPhones' | 'automationCoverage' | 'apiKeys') => void;
+  setTool: (tool: 'growth' | 'businessReport' | 'abTests' | 'feishuReport' | 'slideshow' | 'cloneSlideshow' | 'cloudPhones' | 'automationCoverage' | 'apiKeys') => void;
   collapsed: boolean;
   onToggle: () => void;
 }) {
   const items = [
     { id: 'growth' as const, title: 'Growth 情况', meta: 'Business Delta', icon: 'G' },
     { id: 'businessReport' as const, title: 'Daily Metric', meta: 'Business Day', icon: 'D' },
+    { id: 'abTests' as const, title: 'AB Test', meta: 'Experiments', icon: 'A' },
     { id: 'feishuReport' as const, title: 'Feishu Report', meta: 'AI Daily', icon: 'F' },
     { id: 'slideshow' as const, title: 'Slide Show', meta: 'Reel Farm', icon: 'S' },
     { id: 'cloneSlideshow' as const, title: 'Clone Slide Show', meta: 'Museon', icon: 'C' },
     { id: 'cloudPhones' as const, title: '云手机管理图', meta: 'GeeLark Map', icon: 'M' },
-    { id: 'automationCoverage' as const, title: '自动化覆盖', meta: 'Expansion Plan', icon: 'A' },
+    { id: 'automationCoverage' as const, title: '自动化覆盖', meta: 'Expansion Plan', icon: 'V' },
     { id: 'apiKeys' as const, title: 'API Key', meta: 'Access Tokens', icon: 'K' }
   ];
 

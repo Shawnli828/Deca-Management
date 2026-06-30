@@ -22,6 +22,19 @@ class GrowthSyncProductsRequest(BaseModel):
     days: int = 30
 
 
+class ABTestRequest(BaseModel):
+    name: str = ""
+    product_code: str = ""
+    country_code: str = ""
+    start_date: str = ""
+    duration_days: int = 7
+    variable: str = ""
+    hypothesis: str = ""
+    note: str = ""
+    conclusion: str = ""
+    conclusion_status: str = "undecided"
+
+
 class ReelfarmConfigRequest(BaseModel):
     api_key: str = ""
 

@@ -382,6 +382,23 @@ def init_relational_schema(conn, is_postgres=False, placeholder="?"):
         )
         """,
         """
+        CREATE TABLE IF NOT EXISTS ab_tests (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            product_code TEXT NOT NULL,
+            country_code TEXT NOT NULL,
+            start_date TEXT NOT NULL,
+            duration_days INTEGER NOT NULL DEFAULT 7,
+            variable TEXT,
+            hypothesis TEXT,
+            note TEXT,
+            conclusion TEXT,
+            conclusion_status TEXT NOT NULL DEFAULT 'undecided',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """,
+        """
         CREATE TABLE IF NOT EXISTS schema_migrations (
             version TEXT PRIMARY KEY,
             applied_at TEXT NOT NULL
@@ -423,6 +440,8 @@ def init_relational_schema(conn, is_postgres=False, placeholder="?"):
         "CREATE INDEX IF NOT EXISTS idx_automation_coverage_targets_product_country ON automation_coverage_targets(product_code, country_code)",
         "CREATE INDEX IF NOT EXISTS idx_automation_warmup_batches_product_country ON automation_warmup_batches(product_code, country_code)",
         "CREATE INDEX IF NOT EXISTS idx_automation_warmup_batches_status ON automation_warmup_batches(status)",
+        "CREATE INDEX IF NOT EXISTS idx_ab_tests_product_country ON ab_tests(product_code, country_code)",
+        "CREATE INDEX IF NOT EXISTS idx_ab_tests_start_date ON ab_tests(start_date)",
         "CREATE INDEX IF NOT EXISTS idx_sync_runs_source_finished_at ON sync_runs(source, finished_at)",
         "CREATE INDEX IF NOT EXISTS idx_sync_runs_product_source_finished_at ON sync_runs(product_code, source, finished_at)",
     ]
