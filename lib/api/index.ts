@@ -1,4 +1,5 @@
 import { automationCoverageApi } from './automationCoverage';
+import { abTestsApi } from './abTests';
 import { authApi } from './auth';
 import { catalogApi } from './catalog';
 import { databaseApi } from './database';
@@ -12,6 +13,7 @@ import { tagsApi } from './tags';
 export { apiFetch, getErrorMessage, jsonPostInit, parseApiResponse, withQuery } from './client';
 
 export const api = {
+  ...abTestsApi,
   ...authApi,
   ...catalogApi,
   ...dataQueryApi,

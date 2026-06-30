@@ -211,3 +211,48 @@ def mixpanel_event_user_unique_query_count(
         if distinct_id:
             unique_ids.add(distinct_id)
     return len(unique_ids)
+
+
+def mixpanel_event_user_unique_filtered_count(
+    config,
+    event_name,
+    utc_start,
+    utc_end,
+    property_filter,
+    *,
+    default_region,
+    mixpanel_timezone,
+    source_dates_for_utc_window,
+    make_ssl_context,
+):
+    payload = _mixpanel_export_payload(
+        config,
+        event_name,
+        utc_start,
+        utc_end,
+        default_region=default_region,
+        mixpanel_timezone=mixpanel_timezone,
+        source_dates_for_utc_window=source_dates_for_utc_window,
+        make_ssl_context=make_ssl_context,
+        error_prefix="Mixpanel Export API failed",
+    )
+    if payload is None:
+        return {"count": None, "filter_supported": False, "scanned": 0}
+
+    unique_ids = set()
+    filter_supported = False
+    scanned = 0
+    for event, properties, _event_datetime in _iter_mixpanel_events(payload, event_name, utc_start, utc_end):
+        scanned += 1
+        filter_result = property_filter(properties)
+        if isinstance(filter_result, tuple):
+            matched, supported = filter_result
+        else:
+            matched, supported = bool(filter_result), bool(filter_result)
+        filter_supported = filter_supported or bool(supported)
+        if not matched:
+            continue
+        distinct_id = mixpanel_distinct_id(event, properties)
+        if distinct_id:
+            unique_ids.add(distinct_id)
+    return {"count": len(unique_ids), "filter_supported": filter_supported, "scanned": scanned}

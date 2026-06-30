@@ -223,6 +223,92 @@ export type BusinessMaterialReportPayload = {
   generated_at?: string;
 };
 
+export type ABTestMetricTotals = {
+  reelfarm_posts?: number;
+  clone_posts?: number;
+  total_posts?: number;
+  reelfarm_views?: number;
+  clone_views?: number;
+  total_views?: number;
+  avg_views?: number | null;
+  onboarding_unique?: number | null;
+  conversion_rate?: number | null;
+  onboarding_filter_supported?: boolean;
+  onboarding_scope?: string;
+};
+
+export type ABTestDailyRow = {
+  report_date: string;
+  business_window_local?: { start?: string; end?: string };
+  reelfarm_posts?: number;
+  clone_posts?: number;
+  total_posts?: number;
+  reelfarm_views?: number;
+  clone_views?: number;
+  total_views?: number;
+  avg_views?: number | null;
+};
+
+export type ABTestPeriodResult = {
+  date_from: string;
+  date_to: string;
+  rows: ABTestDailyRow[];
+  totals: ABTestMetricTotals;
+};
+
+export type ABTestDeltaValue = {
+  absolute?: number | null;
+  percent?: number | null;
+};
+
+export type ABTestRecord = {
+  id: string;
+  name: string;
+  product_code: string;
+  product_name?: string;
+  country_code: string;
+  country_name?: string;
+  start_date: string;
+  duration_days: number;
+  variable?: string;
+  hypothesis?: string;
+  note?: string;
+  conclusion?: string;
+  conclusion_status?: string;
+  status?: 'draft' | 'running' | 'ready' | 'completed' | string;
+  created_at?: string;
+  updated_at?: string;
+  periods?: {
+    duration_days?: number;
+    test?: { date_from: string; date_to: string };
+    control?: { date_from: string; date_to: string };
+  };
+  comparison?: {
+    periods?: ABTestRecord['periods'];
+    control: ABTestPeriodResult;
+    test: ABTestPeriodResult;
+    delta: Record<string, ABTestDeltaValue>;
+    meta?: {
+      product_name?: string;
+      country_name?: string;
+      report_timezone?: string;
+      source_timezone?: string;
+    };
+  };
+};
+
+export type ABTestsPayload = {
+  ok: boolean;
+  tests: ABTestRecord[];
+  generated_at?: string;
+};
+
+export type ABTestDetailPayload = {
+  ok: boolean;
+  test: ABTestRecord;
+  generated_at?: string;
+};
+
 export type DailyFeishuTotals = {
   reelfarm_views?: number;
   clone_views?: number;
