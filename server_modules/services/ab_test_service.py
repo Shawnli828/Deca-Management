@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import json
 import re
 
 from server_modules.app_runtime import load_data, make_ssl_context
@@ -21,6 +22,7 @@ from server_modules.time_windows import (
 
 
 COUNTRY_PROPERTY_KEYS = (
+    "mp_country_code",
     "country_code",
     "countryCode",
     "country",
@@ -34,6 +36,45 @@ COUNTRY_PROPERTY_KEYS = (
     "geo_country",
     "geoCountry",
     "region",
+)
+
+MIXPANEL_COUNTRY_CODES_BY_NAME = {
+    "australia": "AU",
+    "brazil": "BR",
+    "canada": "CA",
+    "china": "CN",
+    "france": "FR",
+    "germany": "DE",
+    "india": "IN",
+    "italy": "IT",
+    "japan": "JP",
+    "southkorea": "KR",
+    "unitedkingdom": "GB",
+    "unitedstates": "US",
+}
+
+MIXPANEL_COUNTRY_CODES_BY_BUSINESS_CODE = {
+    "GE": "DE",
+    "UK": "GB",
+}
+
+WHERE_COUNTRY_CODE_KEYS = (
+    "mp_country_code",
+    "country_code",
+    "countryCode",
+    "$country_code",
+    "market_code",
+    "marketCode",
+    "market",
+    "Market",
+    "geo_country",
+    "geoCountry",
+)
+
+WHERE_COUNTRY_NAME_KEYS = (
+    "country",
+    "Country",
+    "$country",
 )
 
 
@@ -55,6 +96,34 @@ def _safe_int(value, default=0):
 
 def _normalize_key(value):
     return re.sub(r"[^a-z0-9]+", "", str(value or "").strip().lower())
+
+
+def _mixpanel_country_codes(country_code, country_name):
+    codes = []
+    business_code = str(country_code or "").strip().upper()
+    if business_code:
+        codes.append(business_code)
+    mixpanel_code = (
+        MIXPANEL_COUNTRY_CODES_BY_BUSINESS_CODE.get(business_code)
+        or MIXPANEL_COUNTRY_CODES_BY_NAME.get(_normalize_key(country_name))
+    )
+    if mixpanel_code and mixpanel_code not in codes:
+        codes.append(mixpanel_code)
+    return codes
+
+
+def _mixpanel_country_where_expression(country_code, country_name):
+    terms = []
+    for value in _mixpanel_country_codes(country_code, country_name):
+        for key in WHERE_COUNTRY_CODE_KEYS:
+            terms.append(f'properties[{json.dumps(key)}] == {json.dumps(value)}')
+    for value in (country_name, country_code):
+        clean = str(value or "").strip()
+        if not clean:
+            continue
+        for key in WHERE_COUNTRY_NAME_KEYS:
+            terms.append(f'properties[{json.dumps(key)}] == {json.dumps(clean)}')
+    return " or ".join(f"({term})" for term in terms)
 
 
 def _status_for(test):
@@ -127,6 +196,7 @@ def _summarize_stats(rows, onboarding):
 
 def _country_matches(properties, country_code, country_name=""):
     expected = {_normalize_key(country_code), _normalize_key(country_name)}
+    expected.update(_normalize_key(code) for code in _mixpanel_country_codes(country_code, country_name))
     expected.discard("")
     supported = False
     for key in COUNTRY_PROPERTY_KEYS:
@@ -174,6 +244,7 @@ def _onboarding_count(product_code, country_code, country_name, date_from, date_
         mixpanel_timezone=mixpanel_timezone,
         source_dates_for_utc_window=source_dates_for_utc_window,
         make_ssl_context=make_ssl_context,
+        where_expression=_mixpanel_country_where_expression(country_code, country_name),
     )
 
 

@@ -29,6 +29,7 @@ def _mixpanel_export_payload(
     source_dates_for_utc_window,
     make_ssl_context,
     error_prefix,
+    where_expression=None,
 ):
     project_id, username, secret, region = _mixpanel_config_values(config, default_region)
     if not project_id or not username or not secret or not event_name:
@@ -43,12 +44,15 @@ def _mixpanel_export_payload(
     if not source_date_from or source_date_from > source_date_to:
         return ""
 
-    params = urlencode({
+    params_payload = {
         "project_id": project_id,
         "event": json.dumps([event_name], ensure_ascii=False),
         "from_date": source_date_from,
         "to_date": source_date_to,
-    })
+    }
+    if where_expression:
+        params_payload["where"] = where_expression
+    params = urlencode(params_payload)
     credentials = f"{username}:{secret}".encode("utf-8")
     request = Request(
         f"{mixpanel_export_base_url(region)}?{params}",
@@ -224,6 +228,7 @@ def mixpanel_event_user_unique_filtered_count(
     mixpanel_timezone,
     source_dates_for_utc_window,
     make_ssl_context,
+    where_expression=None,
 ):
     payload = _mixpanel_export_payload(
         config,
@@ -235,9 +240,41 @@ def mixpanel_event_user_unique_filtered_count(
         source_dates_for_utc_window=source_dates_for_utc_window,
         make_ssl_context=make_ssl_context,
         error_prefix="Mixpanel Export API failed",
+        where_expression=where_expression,
     )
     if payload is None:
-        return {"count": None, "filter_supported": False, "scanned": 0}
+        return {"count": None, "filter_supported": False, "scanned": 0, "filter_method": "none"}
+
+    if where_expression:
+        unique_ids = set()
+        scanned = 0
+        for event, properties, _event_datetime in _iter_mixpanel_events(payload, event_name, utc_start, utc_end):
+            scanned += 1
+            distinct_id = mixpanel_distinct_id(event, properties)
+            if distinct_id:
+                unique_ids.add(distinct_id)
+        if scanned:
+            return {
+                "count": len(unique_ids),
+                "filter_supported": True,
+                "scanned": scanned,
+                "filter_method": "export_where",
+            }
+
+        # A zero-row server-side filter can mean either a true zero or that the
+        # project uses a different country property. Fall back to a local scan so
+        # the caller can still distinguish unsupported filters from zero counts.
+        payload = _mixpanel_export_payload(
+            config,
+            event_name,
+            utc_start,
+            utc_end,
+            default_region=default_region,
+            mixpanel_timezone=mixpanel_timezone,
+            source_dates_for_utc_window=source_dates_for_utc_window,
+            make_ssl_context=make_ssl_context,
+            error_prefix="Mixpanel Export API failed",
+        )
 
     unique_ids = set()
     filter_supported = False
@@ -255,4 +292,9 @@ def mixpanel_event_user_unique_filtered_count(
         distinct_id = mixpanel_distinct_id(event, properties)
         if distinct_id:
             unique_ids.add(distinct_id)
-    return {"count": len(unique_ids), "filter_supported": filter_supported, "scanned": scanned}
+    return {
+        "count": len(unique_ids),
+        "filter_supported": filter_supported,
+        "scanned": scanned,
+        "filter_method": "local_scan",
+    }
