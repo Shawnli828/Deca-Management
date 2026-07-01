@@ -7,6 +7,10 @@ export type ABTestInput = {
   country_code?: string;
   start_date?: string;
   duration_days?: number;
+  control_start_date?: string;
+  control_end_date?: string;
+  test_start_date?: string;
+  test_end_date?: string;
   variable?: string;
   hypothesis?: string;
   note?: string;

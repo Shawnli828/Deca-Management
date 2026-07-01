@@ -88,6 +88,10 @@ def _clean_date(value):
     return text
 
 
+def _date_value(value):
+    return datetime.strptime(_clean_date(value), "%Y-%m-%d").date()
+
+
 def _safe_int(value, default=0):
     try:
         return int(value)
@@ -130,8 +134,9 @@ def _mixpanel_country_where_expression(country_code, country_name):
 def _status_for(test):
     if str(test.get("conclusion") or "").strip():
         return "completed"
-    start_date = datetime.strptime(test["start_date"], "%Y-%m-%d").date()
-    end_date = start_date + timedelta(days=max(1, _safe_int(test.get("duration_days"), 7)) - 1)
+    periods = _periods_for_record(test)
+    start_date = _date_value(periods["test"]["date_from"])
+    end_date = _date_value(periods["test"]["date_to"])
     today = datetime.now(timezone.utc).astimezone(report_timezone()).date()
     if today < start_date:
         return "draft"
@@ -140,8 +145,17 @@ def _status_for(test):
     return "ready"
 
 
-def _periods(start_date, duration_days):
-    start = datetime.strptime(_clean_date(start_date), "%Y-%m-%d").date()
+def _inclusive_days(start, end):
+    if end < start:
+        raise ValueError("date range end must be on or after start.")
+    days = (end - start).days + 1
+    if days > 90:
+        raise ValueError("date range cannot exceed 90 days.")
+    return days
+
+
+def _legacy_periods(start_date, duration_days):
+    start = _date_value(start_date)
     duration = max(1, min(90, _safe_int(duration_days, 7)))
     test_end = start + timedelta(days=duration - 1)
     control_end = start - timedelta(days=1)
@@ -151,6 +165,54 @@ def _periods(start_date, duration_days):
         "test": {"date_from": start.isoformat(), "date_to": test_end.isoformat()},
         "control": {"date_from": control_start.isoformat(), "date_to": control_end.isoformat()},
     }
+
+
+def _manual_periods(control_start_date, control_end_date, test_start_date, test_end_date):
+    control_start = _date_value(control_start_date)
+    control_end = _date_value(control_end_date)
+    test_start = _date_value(test_start_date)
+    test_end = _date_value(test_end_date)
+    control_duration = _inclusive_days(control_start, control_end)
+    test_duration = _inclusive_days(test_start, test_end)
+    return {
+        "mode": "manual",
+        "duration_days": test_duration,
+        "control_duration_days": control_duration,
+        "test_duration_days": test_duration,
+        "test": {"date_from": test_start.isoformat(), "date_to": test_end.isoformat()},
+        "control": {"date_from": control_start.isoformat(), "date_to": control_end.isoformat()},
+    }
+
+
+def _periods_for_record(record):
+    manual_keys = ("control_start_date", "control_end_date", "test_start_date", "test_end_date")
+    manual_values = [str(record.get(key) or "").strip() for key in manual_keys]
+    if all(manual_values):
+        return _manual_periods(*manual_values)
+    if any(manual_values):
+        raise ValueError("control_start_date, control_end_date, test_start_date and test_end_date must be provided together.")
+    periods = _legacy_periods(record.get("start_date"), record.get("duration_days"))
+    periods["mode"] = "auto"
+    periods["control_duration_days"] = periods["duration_days"]
+    periods["test_duration_days"] = periods["duration_days"]
+    return periods
+
+
+def _period_storage_fields(record):
+    periods = _periods_for_record(record)
+    return {
+        "start_date": periods["test"]["date_from"],
+        "duration_days": periods["test_duration_days"],
+        "control_start_date": periods["control"]["date_from"],
+        "control_end_date": periods["control"]["date_to"],
+        "test_start_date": periods["test"]["date_from"],
+        "test_end_date": periods["test"]["date_to"],
+    }
+
+
+def _future_report_date(report_date):
+    today = datetime.now(timezone.utc).astimezone(report_timezone()).date()
+    return _date_value(report_date) > today
 
 
 def _window_range(date_from, date_to):
@@ -268,6 +330,27 @@ def _period_stats(product_code, country_code, country_name, date_from, date_to):
     onboarding_daily = onboarding.get("counts") or {}
     normalized_rows = []
     for window in windows:
+        if _future_report_date(window["report_date"]):
+            normalized_rows.append({
+                "report_date": window["report_date"],
+                "business_window_local": {
+                    "start": window["start_local"].isoformat(),
+                    "end": window["end_local"].isoformat(),
+                },
+                "reelfarm_posts": None,
+                "clone_posts": None,
+                "total_posts": None,
+                "reelfarm_views": None,
+                "clone_views": None,
+                "total_views": None,
+                "avg_views": None,
+                "onboarding_unique": None,
+                "conversion_rate": None,
+                "onboarding_filter_supported": onboarding_supported,
+                "onboarding_scope": "country" if onboarding_supported else "unavailable",
+                "is_future": True,
+            })
+            continue
         item = daily.get(window["report_date"], {})
         reelfarm_posts = _safe_int(item.get("reelfarm_posts"))
         clone_posts = _safe_int(item.get("clone_posts"))
@@ -293,6 +376,7 @@ def _period_stats(product_code, country_code, country_name, date_from, date_to):
             "conversion_rate": onboarding_unique / total_views * 100 if onboarding_unique is not None and total_views else None,
             "onboarding_filter_supported": onboarding_supported,
             "onboarding_scope": "country" if onboarding_supported else "unavailable",
+            "is_future": False,
         })
     return {
         "date_from": windows[0]["report_date"],
@@ -314,7 +398,7 @@ def _comparison(test):
     product_code = str(test.get("product_code") or "").strip().upper()
     country_code = str(test.get("country_code") or "").strip().upper()
     product_name, country_name = _product_country_names(product_code, country_code)
-    periods = _periods(test.get("start_date"), test.get("duration_days"))
+    periods = _periods_for_record(test)
     control = _period_stats(product_code, country_code, country_name, **periods["control"])
     experiment = _period_stats(product_code, country_code, country_name, **periods["test"])
     return {
@@ -341,14 +425,16 @@ def _normalize_test(record, include_comparison=False):
     if not record:
         return {}
     item = dict(record)
-    item["duration_days"] = max(1, _safe_int(item.get("duration_days"), 7))
     item["product_code"] = str(item.get("product_code") or "").upper()
     item["country_code"] = str(item.get("country_code") or "").upper()
+    periods = _periods_for_record(item)
+    item.update(_period_storage_fields(item))
+    item["duration_days"] = periods["test_duration_days"]
     item["status"] = _status_for(item)
     product_name, country_name = _product_country_names(item["product_code"], item["country_code"])
     item["product_name"] = product_name
     item["country_name"] = country_name
-    item["periods"] = _periods(item["start_date"], item["duration_days"])
+    item["periods"] = periods
     if include_comparison:
         item["comparison"] = _comparison(item)
     return item
@@ -379,15 +465,13 @@ def create_test(payload):
     country_code = str(payload.get("country_code") or "").strip().upper()
     if not product_code or not country_code:
         raise ValueError("product_code and country_code are required.")
-    start_date = _clean_date(payload.get("start_date"))
-    duration_days = max(1, min(90, _safe_int(payload.get("duration_days"), 7)))
+    period_fields = _period_storage_fields(payload)
     record = {
         "id": generate_id(),
         "name": str(payload.get("name") or f"{product_code}-{country_code} AB Test").strip(),
         "product_code": product_code,
         "country_code": country_code,
-        "start_date": start_date,
-        "duration_days": duration_days,
+        **period_fields,
         "variable": str(payload.get("variable") or "").strip(),
         "hypothesis": str(payload.get("hypothesis") or "").strip(),
         "note": str(payload.get("note") or "").strip(),
@@ -404,12 +488,24 @@ def update_test(test_id, payload):
     if not existing:
         raise ValueError("AB test not found.")
     updates = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    period_keys = {
+        "start_date",
+        "duration_days",
+        "control_start_date",
+        "control_end_date",
+        "test_start_date",
+        "test_end_date",
+    }
     for key in (
         "name",
         "product_code",
         "country_code",
         "start_date",
         "duration_days",
+        "control_start_date",
+        "control_end_date",
+        "test_start_date",
+        "test_end_date",
         "variable",
         "hypothesis",
         "note",
@@ -421,13 +517,16 @@ def update_test(test_id, payload):
         value = payload.get(key)
         if key in {"product_code", "country_code"}:
             value = str(value or "").strip().upper()
-        elif key == "start_date":
+        elif key in {"start_date", "control_start_date", "control_end_date", "test_start_date", "test_end_date"}:
             value = _clean_date(value)
         elif key == "duration_days":
             value = max(1, min(90, _safe_int(value, 7)))
         else:
             value = str(value or "").strip()
         updates[key] = value
+    if period_keys.intersection(updates):
+        merged = {**existing, **updates}
+        updates.update(_period_storage_fields(merged))
     return {"ok": True, "test": _normalize_test(ab_test_repository.update_ab_test(test_id, updates), include_comparison=True)}
 
 

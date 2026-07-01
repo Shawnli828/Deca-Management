@@ -251,6 +251,7 @@ export type ABTestDailyRow = {
   conversion_rate?: number | null;
   onboarding_filter_supported?: boolean;
   onboarding_scope?: string;
+  is_future?: boolean;
 };
 
 export type ABTestPeriodResult = {
@@ -274,6 +275,10 @@ export type ABTestRecord = {
   country_name?: string;
   start_date: string;
   duration_days: number;
+  control_start_date?: string;
+  control_end_date?: string;
+  test_start_date?: string;
+  test_end_date?: string;
   variable?: string;
   hypothesis?: string;
   note?: string;
@@ -283,7 +288,10 @@ export type ABTestRecord = {
   created_at?: string;
   updated_at?: string;
   periods?: {
+    mode?: string;
     duration_days?: number;
+    control_duration_days?: number;
+    test_duration_days?: number;
     test?: { date_from: string; date_to: string };
     control?: { date_from: string; date_to: string };
   };

@@ -14,7 +14,7 @@ def list_ab_tests():
             """
             SELECT *
             FROM ab_tests
-            ORDER BY start_date DESC, created_at DESC
+            ORDER BY COALESCE(test_start_date, start_date) DESC, created_at DESC
             """
         ).fetchall()
     return [row_dict(row) for row in rows]
@@ -48,6 +48,10 @@ def update_ab_test(test_id, updates):
         "country_code",
         "start_date",
         "duration_days",
+        "control_start_date",
+        "control_end_date",
+        "test_start_date",
+        "test_end_date",
         "variable",
         "hypothesis",
         "note",

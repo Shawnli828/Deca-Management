@@ -19,6 +19,10 @@ type ABTestForm = {
   countryId: string;
   startDate: string;
   durationDays: number;
+  controlStartDate: string;
+  controlEndDate: string;
+  testStartDate: string;
+  testEndDate: string;
   variable: string;
   hypothesis: string;
   note: string;
@@ -61,6 +65,48 @@ function compactDate(value?: string) {
   return String(value || '').slice(5, 10) || '—';
 }
 
+function parseBusinessDate(value?: string) {
+  const text = String(value || '').slice(0, 10);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  if (!match) return null;
+  return new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+}
+
+function isoFromDate(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function addDays(value: string, days: number) {
+  const date = parseBusinessDate(value);
+  if (!date) return value;
+  date.setUTCDate(date.getUTCDate() + days);
+  return isoFromDate(date);
+}
+
+function inclusiveDays(startDate?: string, endDate?: string) {
+  const start = parseBusinessDate(startDate);
+  const end = parseBusinessDate(endDate);
+  if (!start || !end || end < start) return null;
+  return Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
+}
+
+function derivedRanges(startDate: string, durationDays: number) {
+  const duration = Math.max(1, Math.min(90, Number(durationDays) || 7));
+  const testStartDate = startDate;
+  const testEndDate = addDays(testStartDate, duration - 1);
+  const controlEndDate = addDays(testStartDate, -1);
+  const controlStartDate = addDays(testStartDate, -duration);
+  return { controlStartDate, controlEndDate, testStartDate, testEndDate };
+}
+
+function todayLocalIso() {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function productOptions(products: Product[]) {
   return products.filter(product => normalizeProductFolder(product) !== '乙方');
 }
@@ -82,10 +128,11 @@ function abTestCountryCode(test: ABTestRecord) {
 function compareTests(left: ABTestRecord, right: ABTestRecord) {
   const statusDelta = (STATUS_SORT[left.status || 'draft'] ?? 9) - (STATUS_SORT[right.status || 'draft'] ?? 9);
   if (statusDelta) return statusDelta;
-  return String(right.start_date || '').localeCompare(String(left.start_date || ''));
+  return String(right.test_start_date || right.start_date || '').localeCompare(String(left.test_start_date || left.start_date || ''));
 }
 
 function dailyOnboardingText(row: ABTestDailyRow) {
+  if (row.is_future) return '—';
   if (row.onboarding_scope === 'unavailable' || row.onboarding_filter_supported === false) return '—';
   return numberMetric(row.onboarding_unique ?? 0);
 }
@@ -98,12 +145,15 @@ function dailyConversionText(row: ABTestDailyRow) {
 function emptyForm(products: Product[]): ABTestForm {
   const candidates = productOptions(products);
   const firstProduct = candidates[0] || products[0];
+  const startDate = businessIsoDate();
+  const ranges = derivedRanges(startDate, 7);
   return {
     name: '',
     productId: firstProduct?.id || '',
     countryId: firstProduct?.countries?.[0]?.id || '',
-    startDate: businessIsoDate(),
+    startDate,
     durationDays: 7,
+    ...ranges,
     variable: '',
     hypothesis: '',
     note: ''
@@ -130,6 +180,31 @@ function metricCard(label: string, control: unknown, test: unknown, delta: unkno
 function onboardingText(totals?: ABTestMetricTotals) {
   if (totals?.onboarding_scope === 'unavailable') return '无国家字段';
   return numberMetric(totals?.onboarding_unique);
+}
+
+function progressText(test?: ABTestRecord | null) {
+  const range = test?.periods?.test;
+  if (!range) return '';
+  const start = parseBusinessDate(range.date_from);
+  const end = parseBusinessDate(range.date_to);
+  if (!start || !end) return '';
+  const today = parseBusinessDate(todayLocalIso());
+  const duration = test.periods?.test_duration_days || inclusiveDays(range.date_from, range.date_to) || 0;
+  if (!today || !duration) return '';
+  if (today < start) return `未开始 · 共 ${duration} 天`;
+  if (today > end) return `已结束 · 共 ${duration} 天`;
+  const elapsed = Math.min(duration, Math.max(1, Math.round((today.getTime() - start.getTime()) / 86_400_000) + 1));
+  return `进行中 · 第 ${elapsed} / ${duration} 天`;
+}
+
+function formRangeError(form: ABTestForm) {
+  const hasAllDates = form.controlStartDate && form.controlEndDate && form.testStartDate && form.testEndDate;
+  if (!hasAllDates) return '请填写完整的对照区间和测试区间。';
+  const controlDays = inclusiveDays(form.controlStartDate, form.controlEndDate);
+  const testDays = inclusiveDays(form.testStartDate, form.testEndDate);
+  if (!controlDays || !testDays) return '区间结束日期不能早于开始日期。';
+  if (controlDays > 90 || testDays > 90) return '单个区间最多支持 90 天。';
+  return '';
 }
 
 export function ABTestPage({ active, products }: ABTestPageProps) {
@@ -274,19 +349,37 @@ export function ABTestPage({ active, products }: ABTestPageProps) {
     setForm(current => ({ ...current, ...partial }));
   }
 
+  function applyQuickRange(nextStartDate = form.startDate, nextDurationDays = form.durationDays) {
+    updateForm({
+      startDate: nextStartDate,
+      durationDays: nextDurationDays,
+      ...derivedRanges(nextStartDate, nextDurationDays)
+    });
+  }
+
   async function createTest() {
     if (!selectedFormProduct || !selectedFormCountry) return;
+    const periodError = formRangeError(form);
+    if (periodError) {
+      setError(periodError);
+      return;
+    }
     setSaving(true);
     setError('');
     try {
       const productCode = getProductReelFarmCode(selectedFormProduct);
       const countryCode = getCountryReelFarmCode(selectedFormCountry);
+      const testDurationDays = inclusiveDays(form.testStartDate, form.testEndDate) || form.durationDays;
       const payload = await api.createAbTest({
         name: form.name || `${selectedFormProduct.name} ${selectedFormCountry.name} AB Test`,
         product_code: productCode,
         country_code: countryCode,
-        start_date: form.startDate,
-        duration_days: form.durationDays,
+        start_date: form.testStartDate,
+        duration_days: testDurationDays,
+        control_start_date: form.controlStartDate,
+        control_end_date: form.controlEndDate,
+        test_start_date: form.testStartDate,
+        test_end_date: form.testEndDate,
         variable: form.variable,
         hypothesis: form.hypothesis,
         note: form.note
@@ -326,6 +419,7 @@ export function ABTestPage({ active, products }: ABTestPageProps) {
   const controlTotals = comparison?.control?.totals || {};
   const testTotals = comparison?.test?.totals || {};
   const delta = comparison?.delta || {};
+  const rangeError = formRangeError(form);
   const cards = [
     metricCard('Total Posts', controlTotals.total_posts, testTotals.total_posts, delta.total_posts?.absolute, delta.total_posts?.percent),
     metricCard('Total View', controlTotals.total_views, testTotals.total_views, delta.total_views?.absolute, delta.total_views?.percent),
@@ -340,7 +434,7 @@ export function ABTestPage({ active, products }: ABTestPageProps) {
         className="business-report-head"
         kicker="AB Test"
         title="AB Test"
-        description="按产品和国家创建实验，自动对比测试区间与前置同周期业务日表现。"
+        description="按产品和国家记录实验，手动选择对照区间和测试区间，跟踪进行中实验并沉淀历史复盘。"
         actions={(
           <div className="ab-test-actions">
             <button type="button" onClick={() => void loadTests()} disabled={loading}>{loading ? '刷新中...' : '刷新'}</button>
@@ -377,18 +471,37 @@ export function ABTestPage({ active, products }: ABTestPageProps) {
               </select>
             </label>
             <label>
-              开始业务日
-              <input type="date" value={form.startDate} onChange={event => updateForm({ startDate: event.target.value })} />
+              快捷测试开始
+              <input type="date" value={form.startDate} onChange={event => applyQuickRange(event.target.value, form.durationDays)} />
             </label>
             <label>
               持续天数
-              <input type="number" min={1} max={90} value={form.durationDays} onChange={event => updateForm({ durationDays: Number(event.target.value) || 7 })} />
+              <input type="number" min={1} max={90} value={form.durationDays} onChange={event => applyQuickRange(form.startDate, Number(event.target.value) || 7)} />
             </label>
             <label>
               测试变量
               <input value={form.variable} placeholder="Hook / CTA / 素材风格 / 批次" onChange={event => updateForm({ variable: event.target.value })} />
             </label>
           </div>
+          <div className="ab-test-period-grid">
+            <label>
+              对照开始
+              <input type="date" value={form.controlStartDate} onChange={event => updateForm({ controlStartDate: event.target.value })} />
+            </label>
+            <label>
+              对照结束
+              <input type="date" value={form.controlEndDate} onChange={event => updateForm({ controlEndDate: event.target.value })} />
+            </label>
+            <label>
+              测试开始
+              <input type="date" value={form.testStartDate} onChange={event => updateForm({ testStartDate: event.target.value, startDate: event.target.value })} />
+            </label>
+            <label>
+              测试结束
+              <input type="date" value={form.testEndDate} onChange={event => updateForm({ testEndDate: event.target.value })} />
+            </label>
+          </div>
+          {rangeError ? <div className="ab-test-form-warning">{rangeError}</div> : null}
           <div className="ab-test-notes-grid">
             <label>
               测试假设
@@ -400,8 +513,13 @@ export function ABTestPage({ active, products }: ABTestPageProps) {
             </label>
           </div>
           <div className="ab-test-create-footer">
-            <span>对照区间会自动取测试开始前相同天数。</span>
-            <button type="button" onClick={createTest} disabled={saving || !selectedFormCountry}>{saving ? '创建中...' : '创建并计算'}</button>
+            <span>可手动选择两个区间；快捷填充会用测试开始日前同等天数作为对照。</span>
+            <div className="ab-test-create-footer-actions">
+              <button type="button" className="secondary" onClick={() => applyQuickRange()}>
+                按开始日填充
+              </button>
+              <button type="button" onClick={createTest} disabled={saving || !selectedFormCountry || Boolean(rangeError)}>{saving ? '创建中...' : '创建并计算'}</button>
+            </div>
           </div>
         </section>
       ) : null}
@@ -464,6 +582,7 @@ export function ABTestPage({ active, products }: ABTestPageProps) {
                   <span className={`ab-test-status ${statusClass(detail.status)}`}>{STATUS_LABELS[detail.status || 'draft'] || detail.status}</span>
                   <h2>{detail.name}</h2>
                   <p>{detail.product_name || detail.product_code} · {detail.country_name || detail.country_code}</p>
+                  {progressText(detail) ? <p className="ab-test-progress-text">{progressText(detail)}</p> : null}
                 </div>
                 <div className="ab-test-periods">
                   <span>对照 {rangeText(detail, 'control')}</span>

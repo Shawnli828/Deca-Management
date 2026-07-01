@@ -28,6 +28,10 @@ class ABTestRequest(BaseModel):
     country_code: str = ""
     start_date: str = ""
     duration_days: int = 7
+    control_start_date: str = ""
+    control_end_date: str = ""
+    test_start_date: str = ""
+    test_end_date: str = ""
     variable: str = ""
     hypothesis: str = ""
     note: str = ""

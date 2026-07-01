@@ -3520,6 +3520,16 @@
             gap: 12px;
         }
 
+        .ab-test-period-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 12px;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 12px;
+            background: #ffffff;
+        }
+
         .ab-test-notes-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3571,6 +3581,29 @@
             font-weight: 560;
         }
 
+        .ab-test-form-warning {
+            border: 1px solid #fed7aa;
+            border-radius: 10px;
+            padding: 10px 12px;
+            background: #fffbeb;
+            color: #92400e;
+            font-size: 12px;
+            font-weight: 650;
+        }
+
+        .ab-test-create-footer-actions {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .ab-test-create-footer button.secondary {
+            border: 1px solid var(--line);
+            background: #ffffff;
+            color: var(--text);
+            box-shadow: none;
+        }
+
         .ab-test-layout {
             display: grid;
             grid-template-columns: minmax(340px, 0.34fr) minmax(680px, 0.66fr);
@@ -3608,6 +3641,11 @@
             color: var(--muted);
             font-size: 12px;
             font-weight: 560;
+        }
+
+        .ab-test-detail-head p.ab-test-progress-text {
+            color: var(--blue);
+            font-weight: 700;
         }
 
         .ab-test-list-items,
@@ -4002,7 +4040,8 @@
             }
 
             .ab-test-comparison-grid,
-            .ab-test-create-grid {
+            .ab-test-create-grid,
+            .ab-test-period-grid {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
         }
@@ -4010,18 +4049,21 @@
         @media (max-width: 760px) {
             .ab-test-actions,
             .ab-test-create-footer,
+            .ab-test-create-footer-actions,
             .ab-test-detail-head {
                 align-items: stretch;
                 flex-direction: column;
             }
 
             .ab-test-actions button,
+            .ab-test-create-footer-actions,
             .ab-test-create-footer button {
                 width: 100%;
             }
 
             .ab-test-create-grid,
             .ab-test-notes-grid,
+            .ab-test-period-grid,
             .ab-test-comparison-grid {
                 grid-template-columns: 1fr;
             }

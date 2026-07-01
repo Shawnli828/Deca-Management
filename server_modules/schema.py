@@ -389,6 +389,10 @@ def init_relational_schema(conn, is_postgres=False, placeholder="?"):
             country_code TEXT NOT NULL,
             start_date TEXT NOT NULL,
             duration_days INTEGER NOT NULL DEFAULT 7,
+            control_start_date TEXT,
+            control_end_date TEXT,
+            test_start_date TEXT,
+            test_end_date TEXT,
             variable TEXT,
             hypothesis TEXT,
             note TEXT,
@@ -452,6 +456,11 @@ def init_relational_schema(conn, is_postgres=False, placeholder="?"):
     ensure_column(conn, "automations", "sync_status", "TEXT", is_postgres, placeholder)
     ensure_column(conn, "automations", "last_seen_at", "TEXT", is_postgres, placeholder)
     ensure_column(conn, "automations", "deleted_at", "TEXT", is_postgres, placeholder)
+    ensure_column(conn, "ab_tests", "control_start_date", "TEXT", is_postgres, placeholder)
+    ensure_column(conn, "ab_tests", "control_end_date", "TEXT", is_postgres, placeholder)
+    ensure_column(conn, "ab_tests", "test_start_date", "TEXT", is_postgres, placeholder)
+    ensure_column(conn, "ab_tests", "test_end_date", "TEXT", is_postgres, placeholder)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ab_tests_test_start_date ON ab_tests(test_start_date)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_automations_sync_status ON automations(sync_status)")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_automations_pmc_sync_status ON automations(product_market_channel_id, sync_status)"
