@@ -13,6 +13,8 @@ from server_modules.museon_utils import (
 
 
 _CAMPAIGN_CACHE = {"loaded_at": 0, "campaigns": []}
+_CLONE_CAMPAIGN_TYPE = "CLONE"
+_DECAFARM_CAMPAIGN_TYPE = "DECAFARM"
 
 
 def museon_request(path, params=None, *, api_key, base_url, user_agent, make_ssl_context):
@@ -70,27 +72,52 @@ def museon_campaigns(*, request_fn, workspace_id, force=False):
     return campaigns
 
 
+def _campaign_name_variants(product_code, country_code, campaign_type):
+    campaign_type = str(campaign_type or "").strip().upper()
+    return {
+        f"{country_code}-{product_code}-{campaign_type}",
+        f"{product_code}-{country_code}-{campaign_type}",
+        f"{country_code}_{product_code}_{campaign_type}",
+        f"{product_code}_{country_code}_{campaign_type}",
+        f"{country_code} {product_code} {campaign_type}",
+        f"{product_code} {country_code} {campaign_type}",
+    }
+
+
+def _campaign_has_type(tokens, campaign_type):
+    campaign_type = str(campaign_type or "").strip().upper()
+    if campaign_type == _DECAFARM_CAMPAIGN_TYPE:
+        return _DECAFARM_CAMPAIGN_TYPE in tokens or {"DECA", "FARM"}.issubset(tokens)
+    return campaign_type in tokens
+
+
 def museon_clone_campaign(product_code, country_code, *, campaigns_fn):
     product_code = str(product_code or "").strip().upper()
     country_code = str(country_code or "").strip().upper()
     if not product_code or not country_code:
         return None
-    exact_names = {
-        f"{country_code}-{product_code}-CLONE",
-        f"{product_code}-{country_code}-CLONE",
-        f"{country_code}_{product_code}_CLONE",
-        f"{product_code}_{country_code}_CLONE",
-    }
-    fallback = None
+    clone_exact_names = _campaign_name_variants(product_code, country_code, _CLONE_CAMPAIGN_TYPE)
+    decafarm_exact_names = _campaign_name_variants(product_code, country_code, _DECAFARM_CAMPAIGN_TYPE)
+    exact_clone = None
+    exact_decafarm = None
+    fallback_clone = None
+    fallback_decafarm = None
     for campaign in campaigns_fn():
         name = str(campaign.get("name") or campaign.get("title") or "").strip()
         upper_name = name.upper()
         tokens = {token for token in re.split(r"[^A-Z0-9]+", upper_name) if token}
-        if upper_name in exact_names:
-            return campaign
-        if "CLONE" in tokens and product_code in tokens and country_code in tokens:
-            fallback = fallback or campaign
-    return fallback
+        if upper_name in clone_exact_names:
+            exact_clone = exact_clone or campaign
+            continue
+        if upper_name in decafarm_exact_names:
+            exact_decafarm = exact_decafarm or campaign
+            continue
+        if product_code in tokens and country_code in tokens:
+            if _campaign_has_type(tokens, _CLONE_CAMPAIGN_TYPE):
+                fallback_clone = fallback_clone or campaign
+            elif _campaign_has_type(tokens, _DECAFARM_CAMPAIGN_TYPE):
+                fallback_decafarm = fallback_decafarm or campaign
+    return exact_clone or exact_decafarm or fallback_clone or fallback_decafarm
 
 
 def museon_clone_campaigns_for_product(
