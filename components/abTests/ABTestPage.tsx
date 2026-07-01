@@ -5,7 +5,7 @@ import { WorkspaceHeader } from '@/components/dashboard/WorkspaceHeader';
 import { businessIsoDate } from '@/hooks/useBusinessMaterialReport';
 import { api, getErrorMessage } from '@/lib/api';
 import type { ABTestDailyRow, ABTestRecord, ABTestMetricTotals, Product } from '@/lib/types';
-import { getCountryReelFarmCode, getProductReelFarmCode, normalizeProductFolder } from '@/lib/utils';
+import { countryFlag, getCountryReelFarmCode, getProductReelFarmCode, normalizeProductFolder } from '@/lib/utils';
 import { metric, percent } from '@/lib/businessReportFormatters';
 
 type ABTestPageProps = {
@@ -38,6 +38,9 @@ const CONCLUSION_OPTIONS = [
   { value: 'inconclusive', label: '不确定' }
 ];
 
+const CONCLUSION_LABELS = Object.fromEntries(CONCLUSION_OPTIONS.map(option => [option.value, option.label]));
+const STATUS_SORT: Record<string, number> = { running: 0, ready: 1, draft: 2, completed: 3 };
+
 function numberMetric(value: unknown) {
   return metric(value);
 }
@@ -60,6 +63,36 @@ function compactDate(value?: string) {
 
 function productOptions(products: Product[]) {
   return products.filter(product => normalizeProductFolder(product) !== '乙方');
+}
+
+function initials(value?: string) {
+  const text = String(value || '').trim();
+  if (!text) return 'APP';
+  return text.split(/\s+/).map(part => part[0]).join('').slice(0, 3).toUpperCase();
+}
+
+function abTestProductCode(test: ABTestRecord) {
+  return String(test.product_code || '').trim().toUpperCase();
+}
+
+function abTestCountryCode(test: ABTestRecord) {
+  return String(test.country_code || '').trim().toUpperCase();
+}
+
+function compareTests(left: ABTestRecord, right: ABTestRecord) {
+  const statusDelta = (STATUS_SORT[left.status || 'draft'] ?? 9) - (STATUS_SORT[right.status || 'draft'] ?? 9);
+  if (statusDelta) return statusDelta;
+  return String(right.start_date || '').localeCompare(String(left.start_date || ''));
+}
+
+function dailyOnboardingText(row: ABTestDailyRow) {
+  if (row.onboarding_scope === 'unavailable' || row.onboarding_filter_supported === false) return '—';
+  return numberMetric(row.onboarding_unique ?? 0);
+}
+
+function dailyConversionText(row: ABTestDailyRow) {
+  if (row.conversion_rate === null || row.conversion_rate === undefined) return '—';
+  return percent(row.conversion_rate);
 }
 
 function emptyForm(products: Product[]): ABTestForm {
@@ -122,6 +155,71 @@ export function ABTestPage({ active, products }: ABTestPageProps) {
     () => selectedFormProduct?.countries?.find(country => country.id === form.countryId) || selectedFormProduct?.countries?.[0] || null,
     [selectedFormProduct, form.countryId]
   );
+  const groupedTests = useMemo(() => {
+    const productOrder = new Map(visibleProducts.map((product, index) => [getProductReelFarmCode(product), index]));
+    const productByCode = new Map(visibleProducts.map(product => [getProductReelFarmCode(product), product]));
+    const groups = new Map<string, {
+      key: string;
+      product?: Product;
+      productName: string;
+      tests: ABTestRecord[];
+      countries: Map<string, {
+        key: string;
+        countryName: string;
+        countryFlag: string;
+        tests: ABTestRecord[];
+      }>;
+    }>();
+
+    for (const test of tests) {
+      const productCode = abTestProductCode(test);
+      const countryCode = abTestCountryCode(test);
+      const product = productByCode.get(productCode);
+      const productKey = productCode || test.product_name || 'unknown';
+      const productGroup = groups.get(productKey) || {
+        key: productKey,
+        product,
+        productName: product?.name || test.product_name || productCode || 'Unknown Product',
+        tests: [],
+        countries: new Map()
+      };
+      const country = product?.countries?.find(item => getCountryReelFarmCode(item) === countryCode);
+      const countryKey = countryCode || test.country_name || 'unknown';
+      const countryGroup = productGroup.countries.get(countryKey) || {
+        key: countryKey,
+        countryName: country?.name || test.country_name || countryCode || 'Unknown Country',
+        countryFlag: countryFlag(country || { id: countryKey, name: test.country_name || countryKey, reelFarmCode: countryCode }),
+        tests: []
+      };
+      productGroup.tests.push(test);
+      countryGroup.tests.push(test);
+      productGroup.countries.set(countryKey, countryGroup);
+      groups.set(productKey, productGroup);
+    }
+
+    return Array.from(groups.values())
+      .sort((left, right) => {
+        const leftIndex = productOrder.get(left.key) ?? 999;
+        const rightIndex = productOrder.get(right.key) ?? 999;
+        return leftIndex - rightIndex || left.productName.localeCompare(right.productName);
+      })
+      .map(group => {
+        const countryOrder = new Map((group.product?.countries || []).map((country, index) => [getCountryReelFarmCode(country), index]));
+        return {
+          ...group,
+          countries: Array.from(group.countries.values())
+            .sort((left, right) => {
+              const leftIndex = countryOrder.get(left.key) ?? 999;
+              const rightIndex = countryOrder.get(right.key) ?? 999;
+              return leftIndex - rightIndex || left.countryName.localeCompare(right.countryName);
+            })
+            .map(countryGroup => ({
+              ...countryGroup,
+              tests: [...countryGroup.tests].sort(compareTests)
+            }))
+        };
+      });
+  }, [tests, visibleProducts]);
 
   async function loadTests() {
     setLoading(true);
@@ -314,19 +412,43 @@ export function ABTestPage({ active, products }: ABTestPageProps) {
             <h2>实验列表</h2>
             <p>{tests.length} 个测试</p>
           </div>
-          <div className="ab-test-list-items">
-            {tests.length ? tests.map(test => (
-              <button
-                type="button"
-                className={`ab-test-list-item ${selectedId === test.id ? 'active' : ''}`}
-                onClick={() => setSelectedId(test.id)}
-                key={test.id}
-              >
-                <span className={`ab-test-status ${statusClass(test.status)}`}>{STATUS_LABELS[test.status || 'draft'] || test.status}</span>
-                <strong>{test.name}</strong>
-                <small>{test.product_name || test.product_code} · {test.country_name || test.country_code}</small>
-                <em>{rangeText(test, 'test')}</em>
-              </button>
+          <div className="ab-test-grouped-list">
+            {groupedTests.length ? groupedTests.map(group => (
+              <div className="ab-test-product-group" key={group.key}>
+                <div className="ab-test-product-head">
+                  <ProductBadge product={group.product} name={group.productName} />
+                  <div>
+                    <strong>{group.productName}</strong>
+                    <span>{group.countries.length} 个国家 · {group.tests.length} 个测试</span>
+                  </div>
+                </div>
+                <div className="ab-test-country-groups">
+                  {group.countries.map(countryGroup => (
+                    <div className="ab-test-country-group" key={`${group.key}-${countryGroup.key}`}>
+                      <div className="ab-test-country-head">
+                        <span>{countryGroup.countryFlag}</span>
+                        <strong>{countryGroup.countryName}</strong>
+                        <em>{countryGroup.tests.length}</em>
+                      </div>
+                      <div className="ab-test-history-list">
+                        {countryGroup.tests.map(test => (
+                          <button
+                            type="button"
+                            className={`ab-test-history-row ${selectedId === test.id ? 'active' : ''}`}
+                            onClick={() => setSelectedId(test.id)}
+                            key={test.id}
+                          >
+                            <span className={`ab-test-status ${statusClass(test.status)}`}>{STATUS_LABELS[test.status || 'draft'] || test.status}</span>
+                            <strong>{test.name}</strong>
+                            <small>{rangeText(test, 'test')}</small>
+                            <em>{CONCLUSION_LABELS[test.conclusion_status || 'undecided'] || '未判断'}</em>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )) : (
               <div className="ab-test-empty">还没有 AB Test。先新建一个测试。</div>
             )}
@@ -419,6 +541,8 @@ function ABTestDailyTable({ rows }: { rows: ABTestDailyRow[] }) {
             <th>Posts</th>
             <th>View</th>
             <th>Avg</th>
+            <th>Onboarding</th>
+            <th>转化</th>
           </tr>
         </thead>
         <tbody>
@@ -428,12 +552,21 @@ function ABTestDailyTable({ rows }: { rows: ABTestDailyRow[] }) {
               <td>{numberMetric(row.total_posts)}</td>
               <td>{numberMetric(row.total_views)}</td>
               <td>{numberMetric(row.avg_views)}</td>
+              <td>{dailyOnboardingText(row)}</td>
+              <td>{dailyConversionText(row)}</td>
             </tr>
           )) : (
-            <tr><td colSpan={4}>暂无数据</td></tr>
+            <tr><td colSpan={6}>暂无数据</td></tr>
           )}
         </tbody>
       </table>
     </div>
   );
+}
+
+function ProductBadge({ product, name }: { product?: Product; name: string }) {
+  if (product?.logo) {
+    return <img className="ab-test-product-logo" src={product.logo} alt="" />;
+  }
+  return <span className="ab-test-product-logo fallback">{initials(name)}</span>;
 }

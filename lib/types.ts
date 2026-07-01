@@ -247,6 +247,10 @@ export type ABTestDailyRow = {
   clone_views?: number;
   total_views?: number;
   avg_views?: number | null;
+  onboarding_unique?: number | null;
+  conversion_rate?: number | null;
+  onboarding_filter_supported?: boolean;
+  onboarding_scope?: string;
 };
 
 export type ABTestPeriodResult = {

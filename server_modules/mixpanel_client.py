@@ -298,3 +298,96 @@ def mixpanel_event_user_unique_filtered_count(
         "scanned": scanned,
         "filter_method": "local_scan",
     }
+
+
+def mixpanel_event_user_unique_filtered_daily_counts(
+    config,
+    event_name,
+    utc_start,
+    utc_end,
+    property_filter,
+    date_mapper,
+    *,
+    default_region,
+    mixpanel_timezone,
+    source_dates_for_utc_window,
+    make_ssl_context,
+    where_expression=None,
+):
+    payload = _mixpanel_export_payload(
+        config,
+        event_name,
+        utc_start,
+        utc_end,
+        default_region=default_region,
+        mixpanel_timezone=mixpanel_timezone,
+        source_dates_for_utc_window=source_dates_for_utc_window,
+        make_ssl_context=make_ssl_context,
+        error_prefix="Mixpanel Export API failed",
+        where_expression=where_expression,
+    )
+    if payload is None:
+        return {"count": None, "counts": {}, "filter_supported": False, "scanned": 0, "filter_method": "none"}
+
+    if where_expression:
+        unique_ids = set()
+        daily_unique_ids = {}
+        scanned = 0
+        for event, properties, event_datetime in _iter_mixpanel_events(payload, event_name, utc_start, utc_end):
+            scanned += 1
+            distinct_id = mixpanel_distinct_id(event, properties)
+            if not distinct_id:
+                continue
+            unique_ids.add(distinct_id)
+            report_date = date_mapper(event_datetime)
+            if report_date:
+                daily_unique_ids.setdefault(report_date, set()).add(distinct_id)
+        if scanned:
+            return {
+                "count": len(unique_ids),
+                "counts": {report_date: len(ids) for report_date, ids in daily_unique_ids.items()},
+                "filter_supported": True,
+                "scanned": scanned,
+                "filter_method": "export_where",
+            }
+
+        payload = _mixpanel_export_payload(
+            config,
+            event_name,
+            utc_start,
+            utc_end,
+            default_region=default_region,
+            mixpanel_timezone=mixpanel_timezone,
+            source_dates_for_utc_window=source_dates_for_utc_window,
+            make_ssl_context=make_ssl_context,
+            error_prefix="Mixpanel Export API failed",
+        )
+
+    unique_ids = set()
+    daily_unique_ids = {}
+    filter_supported = False
+    scanned = 0
+    for event, properties, event_datetime in _iter_mixpanel_events(payload, event_name, utc_start, utc_end):
+        scanned += 1
+        filter_result = property_filter(properties)
+        if isinstance(filter_result, tuple):
+            matched, supported = filter_result
+        else:
+            matched, supported = bool(filter_result), bool(filter_result)
+        filter_supported = filter_supported or bool(supported)
+        if not matched:
+            continue
+        distinct_id = mixpanel_distinct_id(event, properties)
+        if not distinct_id:
+            continue
+        unique_ids.add(distinct_id)
+        report_date = date_mapper(event_datetime)
+        if report_date:
+            daily_unique_ids.setdefault(report_date, set()).add(distinct_id)
+    return {
+        "count": len(unique_ids),
+        "counts": {report_date: len(ids) for report_date, ids in daily_unique_ids.items()},
+        "filter_supported": filter_supported,
+        "scanned": scanned,
+        "filter_method": "local_scan",
+    }

@@ -5,7 +5,7 @@ import re
 from server_modules.app_runtime import load_data, make_ssl_context
 from server_modules.common import generate_id
 from server_modules.domain.growth import material_daily_stats_from_rows
-from server_modules.mixpanel_client import mixpanel_event_user_unique_filtered_count
+from server_modules.mixpanel_client import mixpanel_event_user_unique_filtered_daily_counts
 from server_modules.mixpanel_utils import product_mixpanel_config, product_mixpanel_event_name
 from server_modules.product_config import country_code_for, product_code_for
 from server_modules.repositories import ab_test_repository
@@ -14,6 +14,7 @@ from server_modules.time_windows import (
     business_material_date_for_utc_datetime,
     business_material_report_windows,
     mixpanel_timezone,
+    onboarding_date_for_utc_datetime,
     onboarding_day_window,
     parse_iso_datetime,
     report_timezone,
@@ -228,18 +229,19 @@ def _product_country_names(product_code, country_code):
     return product_name, country_name
 
 
-def _onboarding_count(product_code, country_code, country_name, date_from, date_to):
+def _onboarding_counts(product_code, country_code, country_name, date_from, date_to):
     windows = _window_range(date_from, date_to)
     onboarding_start = onboarding_day_window(windows[0]["report_date"])["utc_start"]
     onboarding_end = onboarding_day_window(windows[-1]["report_date"])["utc_end"]
     config = product_mixpanel_config(product_code)
     event_name = product_mixpanel_event_name(product_code, "ONBOARDING")
-    return mixpanel_event_user_unique_filtered_count(
+    return mixpanel_event_user_unique_filtered_daily_counts(
         config,
         event_name,
         onboarding_start,
         onboarding_end,
         lambda properties: _country_matches(properties, country_code, country_name),
+        onboarding_date_for_utc_datetime,
         default_region=MIXPANEL_REGION,
         mixpanel_timezone=mixpanel_timezone,
         source_dates_for_utc_window=source_dates_for_utc_window,
@@ -261,6 +263,9 @@ def _period_stats(product_code, country_code, country_name, date_from, date_to):
         parse_iso_datetime,
         business_material_date_for_utc_datetime,
     )
+    onboarding = _onboarding_counts(product_code, country_code, country_name, date_from, date_to)
+    onboarding_supported = bool(onboarding.get("filter_supported"))
+    onboarding_daily = onboarding.get("counts") or {}
     normalized_rows = []
     for window in windows:
         item = daily.get(window["report_date"], {})
@@ -270,6 +275,7 @@ def _period_stats(product_code, country_code, country_name, date_from, date_to):
         reelfarm_views = _safe_int(item.get("reelfarm_views"))
         clone_views = _safe_int(item.get("clone_views"))
         total_views = reelfarm_views + clone_views
+        onboarding_unique = _safe_int(onboarding_daily.get(window["report_date"])) if onboarding_supported else None
         normalized_rows.append({
             "report_date": window["report_date"],
             "business_window_local": {
@@ -283,8 +289,11 @@ def _period_stats(product_code, country_code, country_name, date_from, date_to):
             "clone_views": clone_views,
             "total_views": total_views,
             "avg_views": total_views / total_posts if total_posts else None,
+            "onboarding_unique": onboarding_unique,
+            "conversion_rate": onboarding_unique / total_views * 100 if onboarding_unique is not None and total_views else None,
+            "onboarding_filter_supported": onboarding_supported,
+            "onboarding_scope": "country" if onboarding_supported else "unavailable",
         })
-    onboarding = _onboarding_count(product_code, country_code, country_name, date_from, date_to)
     return {
         "date_from": windows[0]["report_date"],
         "date_to": windows[-1]["report_date"],
